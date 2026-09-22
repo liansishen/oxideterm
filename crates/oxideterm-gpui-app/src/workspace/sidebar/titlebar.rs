@@ -254,8 +254,13 @@ impl WorkspaceApp {
     }
 
     fn chrome_shortcut_cluster_width(&self) -> f32 {
-        let count = super::activity::chrome_shortcut_items().len() as f32;
         let metrics = &self.tokens.metrics;
+        // The cluster always carries the sidebar toggle next to the rail shortcuts.
+        let shortcuts = super::activity::chrome_shortcut_row_items(
+            self.settings_store.settings().sidebar_ui.show_activity_bar,
+        )
+        .count() as f32;
+        let count = shortcuts + 1.0;
         count * metrics.activity_icon_size + (count - 1.0) * metrics.activity_icon_gap
     }
     pub(in crate::workspace) fn window_titlebar_visible(&self, window: &Window) -> bool {

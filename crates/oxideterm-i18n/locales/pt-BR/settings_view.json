@@ -694,7 +694,6 @@
       "show_window_titlebar": "Mostrar barra de título da janela",
       "show_window_titlebar_hint": "Somente Linux. Desative em compositores lado a lado e use os atalhos do compositor para mover, redimensionar ou fechar a janela.",
       "show_activity_bar": "Mostrar a barra de ferramentas esquerda",
-      "show_activity_bar_hint": "Oculta completamente a barra de ícones à esquerda. O botão de recolher a barra lateral passa para o cabeçalho dela.",
       "merge_tab_bar_into_titlebar": "Unir a barra de abas à barra de título",
       "merge_tab_bar_into_titlebar_hint": "Mostra os botões da janela e as abas em uma única linha, economizando uma linha de altura. Desative para manter a barra de título separada.",
       "window_opacity": "Opacidade da janela",

@@ -6,6 +6,10 @@ use super::*;
 
 use gpui::StatefulInteractiveElement;
 
+/// Space kept before the first tab when nothing precedes the strip, so it does not start
+/// flush against the window edge.
+const TABBAR_LEADING_INSET: f32 = 8.0;
+
 #[derive(Clone, Copy)]
 enum WelcomeToolAction {
     NewConnection,
@@ -77,8 +81,16 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let theme = self.tokens.ui;
+        // The rail and a visible sidebar both keep the strip off the window edge, so the
+        // inset only applies when neither is there.
+        let leading_inset = if self.activity_bar_width() == 0.0 && !self.sidebar_rendered {
+            TABBAR_LEADING_INSET
+        } else {
+            0.0
+        };
         let bar = div()
             .h(px(self.tokens.metrics.tabbar_height))
+            .pl(px(leading_inset))
             .when(
                 self.settings_store
                     .settings()

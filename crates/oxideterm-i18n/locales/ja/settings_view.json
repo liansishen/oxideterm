@@ -694,7 +694,6 @@
       "show_window_titlebar": "ウィンドウタイトルバーを表示",
       "show_window_titlebar_hint": "Linux のみ。タイル型コンポジターでは無効にし、移動・サイズ変更・終了にはコンポジターのショートカットを使用してください。",
       "show_activity_bar": "左ツールバーを表示",
-      "show_activity_bar_hint": "オフにすると左側のアイコンバーを完全に非表示にします。サイドバーの折りたたみボタンはサイドバーのヘッダーに移動します。",
       "merge_tab_bar_into_titlebar": "タブバーをタイトルバーに統合",
       "merge_tab_bar_into_titlebar_hint": "タブとウィンドウボタンを同じ行にまとめ、縦方向の領域を節約します。オフにすると独立したタイトルバーを維持します。",
       "window_opacity": "ウィンドウの不透明度",

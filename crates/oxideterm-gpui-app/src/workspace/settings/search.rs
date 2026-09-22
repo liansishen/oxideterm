@@ -808,6 +808,12 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
             "settings_view.local_terminal.oh_my_posh",
         ],
     ));
+    specs.push(settings_search_entry(
+        SettingsTab::Appearance,
+        1,
+        "settings_view.appearance.layout",
+        &["settings_view.appearance.show_activity_bar"],
+    ));
     #[cfg(target_os = "linux")]
     specs.push(settings_search_entry(
         SettingsTab::Appearance,

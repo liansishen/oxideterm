@@ -134,6 +134,10 @@ fn default_show_app_lock_icon() -> bool {
     true
 }
 
+fn default_show_activity_bar() -> bool {
+    true
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionSortOrder {
@@ -159,6 +163,8 @@ pub struct SidebarUiState {
     pub zen_mode: bool,
     #[serde(default = "default_show_app_lock_icon")]
     pub show_app_lock_icon: bool,
+    #[serde(default = "default_show_activity_bar")]
+    pub show_activity_bar: bool,
     #[serde(flatten)]
     pub extra: ExtraFields,
 }
@@ -175,6 +181,7 @@ impl Default for SidebarUiState {
             ai_sidebar_width: AI_SIDEBAR_DEFAULT_WIDTH,
             zen_mode: false,
             show_app_lock_icon: true,
+            show_activity_bar: true,
             extra: ExtraFields::new(),
         }
     }

@@ -527,6 +527,15 @@ impl WorkspaceApp {
                     cx,
                 ));
         }
+        // The activity rail owns the collapse toggle. When the rail is hidden the
+        // header keeps a matching control so collapsing stays reachable with a mouse.
+        if !self.settings_store.settings().sidebar_ui.show_activity_bar {
+            header = header.child(self.render_sidebar_action(
+                LucideIcon::PanelLeftClose,
+                SidebarActionKind::ToggleSidebar,
+                cx,
+            ));
+        }
         header.into_any_element()
     }
 
@@ -543,6 +552,13 @@ impl WorkspaceApp {
                 ActiveSessionSidebarViewMode::Focus => self.i18n.t("sidebar.tooltips.switch_tree"),
             },
             SidebarActionKind::NewConnection => self.i18n.t("sidebar.tooltips.new_connection"),
+            SidebarActionKind::ToggleSidebar => {
+                if self.sidebar_collapsed {
+                    self.i18n.t("sidebar.actions.expand")
+                } else {
+                    self.i18n.t("sidebar.actions.collapse")
+                }
+            }
         };
 
         let toggle_focus_active = action == SidebarActionKind::ToggleSessionView
@@ -577,6 +593,7 @@ impl WorkspaceApp {
                         SidebarActionKind::NewConnection => {
                             this.open_new_connection_form(window, cx)
                         }
+                        SidebarActionKind::ToggleSidebar => this.toggle_sidebar(cx),
                     }
                     cx.stop_propagation();
                 }),
@@ -1618,6 +1635,7 @@ pub(in crate::workspace) fn notification_sidebar_row_signatures(
 pub(in crate::workspace) enum SidebarActionKind {
     ToggleSessionView,
     NewConnection,
+    ToggleSidebar,
 }
 
 #[cfg(test)]

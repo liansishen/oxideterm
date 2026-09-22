@@ -237,10 +237,14 @@ impl WorkspaceApp {
         cx.notify();
     }
 
-    /// Width reserved by the left activity rail. Hidden rails report zero so every
+    /// Width reserved by the left activity rail. Hiding the rail reports zero so every
     /// width computation keeps a single source of truth.
     pub(in crate::workspace) fn activity_bar_width(&self) -> f32 {
-        self.tokens.metrics.activity_bar_width
+        if self.settings_store.settings().sidebar_ui.show_activity_bar {
+            self.tokens.metrics.activity_bar_width
+        } else {
+            0.0
+        }
     }
 
     pub(in crate::workspace) fn sidebar_panel_width(&self) -> f32 {

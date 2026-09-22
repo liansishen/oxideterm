@@ -190,7 +190,6 @@ impl WorkspaceApp {
             .flex()
             .flex_row()
             .items_center()
-            .justify_between()
             .when(cfg!(target_os = "linux"), |overlay| {
                 overlay.child(self.render_client_titlebar_controls(
                     button_layout.left,
@@ -201,6 +200,9 @@ impl WorkspaceApp {
                     cx,
                 ))
             })
+            // A flexible spacer pins the shortcuts and controls to the right edge even
+            // when the platform draws no left-hand controls (Windows, macOS).
+            .child(div().flex_1().min_w(px(0.0)))
             .child(
                 div()
                     .flex()

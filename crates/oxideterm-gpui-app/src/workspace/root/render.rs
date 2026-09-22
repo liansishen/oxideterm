@@ -992,9 +992,6 @@ impl WorkspaceApp {
                 // Window scope paints exactly one absolute image behind all persistent chrome.
                 root.child(background)
             })
-            .when(titlebar_visible && merged_titlebar, |root| {
-                root.child(self.render_merged_chrome_overlay(window, cx))
-            })
             .when(titlebar_visible && !merged_titlebar, |root| {
                 root.child(self.render_title_bar(window, cx))
             })
@@ -1051,6 +1048,11 @@ impl WorkspaceApp {
                 root.child(
                     self.render_context_right_sidebar_resize_hotzone(effective_titlebar_height, cx),
                 )
+            })
+            // Painted after the chrome cells so the floating window controls and
+            // rail shortcuts sit above the tab strip and sidebar headers.
+            .when(titlebar_visible && merged_titlebar, |root| {
+                root.child(self.render_merged_chrome_overlay(window, cx))
             })
             .when(sidebar_resize_cursor_active, |root| {
                 root.child(

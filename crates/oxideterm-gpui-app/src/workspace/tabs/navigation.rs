@@ -1248,7 +1248,7 @@ impl WorkspaceApp {
     fn tabbar_outer_width(&self, window: &Window, cx: &App) -> f32 {
         let window_width = f32::from(window.inner_window_bounds().get_bounds().size.width);
         let sidebar_width = if self.sidebar_collapsed {
-            self.tokens.metrics.activity_bar_width
+            self.activity_bar_width()
         } else {
             self.sidebar_width
         };
@@ -1274,7 +1274,7 @@ impl WorkspaceApp {
 
     pub(in crate::workspace) fn tabbar_left_x(&self) -> f32 {
         if self.sidebar_collapsed {
-            self.tokens.metrics.activity_bar_width
+            self.activity_bar_width()
         } else {
             self.sidebar_width
         }

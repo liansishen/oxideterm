@@ -29,7 +29,7 @@ impl WorkspaceApp {
             (SidebarSection::Settings, LucideIcon::Settings),
         ];
         let mut bar = div()
-            .w(px(self.tokens.metrics.activity_bar_width))
+            .w(px(self.activity_bar_width()))
             .h_full()
             .flex()
             .flex_col()

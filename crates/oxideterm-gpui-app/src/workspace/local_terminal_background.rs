@@ -275,7 +275,7 @@ impl WorkspaceApp {
 
         let popover = div()
             .absolute()
-            .left(px(self.tokens.metrics.activity_bar_width))
+            .left(px(self.activity_bar_width()))
             .bottom(px(4.0))
             .w(px(DETACHED_TERMINAL_POPOVER_WIDTH))
             .overflow_hidden()

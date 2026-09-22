@@ -991,6 +991,7 @@ impl WorkspaceOverlayEntity {
         mono_font_family: SharedString,
         native_update: Option<ToastView>,
         show_connection_cards: bool,
+        chrome_bottom: f32,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let mut layers = Vec::new();
@@ -1012,7 +1013,9 @@ impl WorkspaceOverlayEntity {
         }
         // Connection cards use a deferred layer and must yield while the MFA dialog owns input.
         if show_connection_cards {
-            if let Some(connection_cards) = self.render_connection_cards(tokens, i18n, cx) {
+            if let Some(connection_cards) =
+                self.render_connection_cards(tokens, i18n, chrome_bottom, cx)
+            {
                 layers.push(connection_cards);
             }
         }
@@ -1100,6 +1103,7 @@ impl WorkspaceOverlayEntity {
         &self,
         tokens: &ThemeTokens,
         i18n: &I18n,
+        chrome_bottom: f32,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let overlay = cx.entity();
@@ -1127,9 +1131,7 @@ impl WorkspaceOverlayEntity {
             deferred(
                 div()
                     .absolute()
-                    .top(px(
-                        tokens.metrics.titlebar_height + tokens.metrics.tabbar_height
-                    ))
+                    .top(px(chrome_bottom))
                     .right_0()
                     .flex()
                     .flex_col()
@@ -1930,7 +1932,8 @@ mod tests {
             let mut tokens = oxideterm_theme::default_tokens();
             tokens.apply_motion(oxideterm_theme::UiMotionProfile::Off);
             let cards = self.overlay.update(cx, |overlay, cx| {
-                overlay.render_connection_cards(&tokens, &I18n::default(), cx)
+                let chrome_bottom = tokens.metrics.titlebar_height + tokens.metrics.tabbar_height;
+                overlay.render_connection_cards(&tokens, &I18n::default(), chrome_bottom, cx)
             });
             div().size_full().children(cards)
         }

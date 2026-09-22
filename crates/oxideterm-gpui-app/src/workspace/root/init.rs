@@ -689,7 +689,7 @@ impl WorkspaceApp {
                 if settings.sidebar_ui.collapsed {
                     0.0
                 } else {
-                    initial_sidebar_width - tokens.metrics.activity_bar_width
+                    sidebar_panel_width(initial_sidebar_width, tokens.metrics.activity_bar_width)
                 },
             ),
             sidebar_width: initial_sidebar_width,

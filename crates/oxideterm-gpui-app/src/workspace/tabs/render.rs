@@ -1014,7 +1014,7 @@ impl WorkspaceApp {
         let settings = self.settings_store.settings();
         let mut available_width = f32::from(window.viewport_size().width);
         if !settings.sidebar_ui.zen_mode {
-            available_width -= self.tokens.metrics.activity_bar_width;
+            available_width -= self.activity_bar_width();
             if !self.sidebar_collapsed {
                 available_width -= self.sidebar_panel_width();
             }

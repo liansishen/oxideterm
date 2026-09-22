@@ -139,7 +139,6 @@ impl WorkspaceApp {
     pub(in crate::workspace) fn update_main_window_tabbar_drop_bounds(
         &mut self,
         window: &Window,
-        titlebar_visible: bool,
         zen_mode: bool,
         cx: &App,
     ) {
@@ -149,13 +148,9 @@ impl WorkspaceApp {
         }
 
         let window_bounds = window.bounds();
-        let titlebar_height = if titlebar_visible {
-            self.tokens.metrics.titlebar_height
-        } else {
-            0.0
-        };
+        let (band_top, band_height) = self.tabbar_band(window);
         let left_offset = if self.sidebar_collapsed {
-            self.tokens.metrics.activity_bar_width
+            self.activity_bar_width()
         } else {
             self.sidebar_width
         };
@@ -168,9 +163,9 @@ impl WorkspaceApp {
         self.main_window_tabbar_drop_bounds = Some(Bounds::new(
             gpui::point(
                 window_bounds.origin.x + px(left_offset),
-                window_bounds.origin.y + px(titlebar_height),
+                window_bounds.origin.y + px(band_top),
             ),
-            gpui::size(px(width), px(self.tokens.metrics.tabbar_height)),
+            gpui::size(px(width), px(band_height)),
         ));
     }
 
@@ -576,9 +571,7 @@ impl WorkspaceApp {
             drag.current_y,
             f32::from(window.viewport_size().width),
             None,
-            self.window_titlebar_height(window)
-                + self.tokens.metrics.tabbar_height
-                + TAB_HANDOFF_VIEWPORT_MARGIN,
+            self.body_top(window) + TAB_HANDOFF_VIEWPORT_MARGIN,
             drag.tab_widths
                 .get(drag.from_index)
                 .copied()
@@ -976,6 +969,7 @@ impl WorkspaceApp {
             .filter(|candidate| !outside_main_tabs.contains(&candidate.id))
             .map(|candidate| self.tab_visual_width(candidate))
             .sum::<f32>();
+        let (band_top, band_height) = self.tabbar_band(window);
         let target = TabWindowHandoffRect {
             left: self.tabbar_left_x() + self.tokens.metrics.tabbar_leading_offset
                 - self.tabbar_effective_scroll_x(window, cx)
@@ -983,9 +977,9 @@ impl WorkspaceApp {
             top: self
                 .main_window_tabbar_drop_bounds
                 .map(|bounds| f32::from(bounds.origin.y - window_bounds.origin.y))
-                .unwrap_or_else(|| self.window_titlebar_height(window)),
+                .unwrap_or(band_top),
             width: self.tab_visual_width(tab),
-            height: self.tokens.metrics.tabbar_height,
+            height: band_height,
         };
         Some(self.render_tab_window_handoff_surface(
             (
@@ -1021,9 +1015,7 @@ impl WorkspaceApp {
             drag.current_y,
             f32::from(window.viewport_size().width),
             None,
-            self.window_titlebar_height(window)
-                + self.tokens.metrics.tabbar_height
-                + TAB_HANDOFF_VIEWPORT_MARGIN,
+            self.body_top(window) + TAB_HANDOFF_VIEWPORT_MARGIN,
             drag.tab_widths
                 .get(drag.from_index)
                 .copied()

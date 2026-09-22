@@ -2076,7 +2076,7 @@ impl WorkspaceApp {
             KnowledgeWorkspaceLayout::MainWindow => knowledge_workspace_available_width(
                 viewport_width,
                 self.settings_store.settings().sidebar_ui.zen_mode,
-                self.tokens.metrics.activity_bar_width,
+                self.activity_bar_width(),
                 self.sidebar_collapsed,
                 self.sidebar_panel_width(),
                 self.context_sidebar_visible(),

@@ -275,7 +275,7 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let theme = self.tokens.ui;
-        let activity_width = self.tokens.metrics.activity_bar_width;
+        let activity_width = self.activity_bar_width();
         let hotzone = sidebar_resize_hotzone_chrome(
             "workspace-left-sidebar-resize-hotzone",
             if self.sidebar_resizing {

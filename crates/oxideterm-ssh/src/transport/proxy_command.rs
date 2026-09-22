@@ -1,5 +1,10 @@
 const PROXY_COMMAND_BUFFER_BYTES: usize = 64 * 1024;
 
+// The SSH transport owns this child through stdio pipes, so a Windows GUI launch
+// must not allocate a visible console for console-subsystem ProxyCommand helpers.
+#[cfg(windows)]
+const PROXY_COMMAND_CREATE_NO_WINDOW: u32 = 0x08000000;
+
 pub(super) struct ProxyCommandStream {
     stream: tokio::io::DuplexStream,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
@@ -73,6 +78,10 @@ pub(super) async fn dial_proxy_command(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true);
+    #[cfg(windows)]
+    {
+        command.creation_flags(PROXY_COMMAND_CREATE_NO_WINDOW);
+    }
     let mut child = command.spawn().map_err(|_| {
         // Never include the executable, arguments, or child stderr in an error because
         // ProxyCommand values may contain credentials supplied by external tooling.

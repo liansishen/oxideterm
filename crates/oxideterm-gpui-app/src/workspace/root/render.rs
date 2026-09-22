@@ -298,6 +298,11 @@ impl WorkspaceApp {
         };
         let zen_mode = self.settings_store.settings().sidebar_ui.zen_mode;
         let show_activity_bar = self.settings_store.settings().sidebar_ui.show_activity_bar;
+        let merged_titlebar = self
+            .settings_store
+            .settings()
+            .appearance
+            .merge_tab_bar_into_titlebar;
         let titlebar_visible = self.window_titlebar_visible(window);
         let effective_titlebar_height = self.window_titlebar_height(window);
         let resize_hotzone_visible =
@@ -987,7 +992,10 @@ impl WorkspaceApp {
                 // Window scope paints exactly one absolute image behind all persistent chrome.
                 root.child(background)
             })
-            .when(titlebar_visible, |root| {
+            .when(titlebar_visible && merged_titlebar, |root| {
+                root.child(self.render_merged_chrome_overlay(window, cx))
+            })
+            .when(titlebar_visible && !merged_titlebar, |root| {
                 root.child(self.render_title_bar(window, cx))
             })
             .child(

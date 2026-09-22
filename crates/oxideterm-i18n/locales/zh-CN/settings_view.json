@@ -695,6 +695,8 @@
       "show_window_titlebar_hint": "仅限 Linux。平铺式合成器可关闭此项；移动、缩放或关闭窗口时请使用合成器快捷键。",
       "show_activity_bar": "显示左侧工具栏",
       "show_activity_bar_hint": "关闭后完全隐藏左侧图标栏；折叠侧边栏的按钮会移到侧边栏标题栏。",
+      "merge_tab_bar_into_titlebar": "标签页栏与标题栏合并",
+      "merge_tab_bar_into_titlebar_hint": "标签页与窗口按钮共用一行，省下一行高度。关闭后保留独立的标题栏。",
       "window_opacity": "窗口透明度",
       "window_opacity_hint": "调节整个应用窗口的透明度。降低后文字也会变淡；部分 Linux 桌面环境可能不支持。",
       "animation": "动画速度",

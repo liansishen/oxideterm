@@ -171,6 +171,13 @@ impl WorkspaceApp {
                             .justify_between()
                             .gap(px(8.0))
                             .px_3()
+                            .when(
+                                self.settings_store
+                                    .settings()
+                                    .appearance
+                                    .merge_tab_bar_into_titlebar,
+                                |header| header.pr(px(self.chrome_right_overlay_width(cx))),
+                            )
                             // Match the center tab bar's chrome opacity instead
                             // of inheriting the more transparent sidebar body.
                             .bg(self.workspace_chrome_background(theme.bg))
@@ -484,6 +491,19 @@ impl WorkspaceApp {
             .border_b_1()
             .border_color(self.workspace_chrome_divider())
             .px_2()
+            .when(
+                self.settings_store
+                    .settings()
+                    .appearance
+                    .merge_tab_bar_into_titlebar,
+                |header| {
+                    // The rail's chrome cell covers part of the left window chrome, so
+                    // only the uncovered remainder has to push the title aside.
+                    let inset =
+                        (self.chrome_left_chrome_width(cx) - self.activity_bar_width()).max(0.0);
+                    header.pl(px(inset))
+                },
+            )
             .child(
                 self.render_window_drag_content_region(
                     "sidebar-header-title-drag-region",
@@ -529,7 +549,13 @@ impl WorkspaceApp {
         }
         // The activity rail owns the collapse toggle. When the rail is hidden the
         // header keeps a matching control so collapsing stays reachable with a mouse.
-        if !self.settings_store.settings().sidebar_ui.show_activity_bar {
+        if !self.settings_store.settings().sidebar_ui.show_activity_bar
+            || self
+                .settings_store
+                .settings()
+                .appearance
+                .merge_tab_bar_into_titlebar
+        {
             header = header.child(self.render_sidebar_action(
                 LucideIcon::PanelLeftClose,
                 SidebarActionKind::ToggleSidebar,

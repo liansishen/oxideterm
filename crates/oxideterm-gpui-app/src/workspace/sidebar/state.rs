@@ -34,6 +34,20 @@ pub(in crate::workspace) fn sidebar_panel_width(
     (sidebar_width - activity_bar_width).max(0.0)
 }
 
+/// The merged layout drops the separate title bar row, so the tab strip row becomes
+/// the topmost chrome and the content body starts right below it.
+pub(in crate::workspace) fn chrome_body_top(
+    merged: bool,
+    titlebar_height: f32,
+    chrome_row_height: f32,
+) -> f32 {
+    if merged {
+        chrome_row_height
+    } else {
+        titlebar_height + chrome_row_height
+    }
+}
+
 pub(in crate::workspace) fn clamp_responsive_sidebar_width(
     width: f32,
     viewport_width: f32,
@@ -259,7 +273,14 @@ impl WorkspaceApp {
 
     /// Vertical offset where the main content body starts, below all window chrome.
     pub(in crate::workspace) fn body_top(&self, window: &Window) -> f32 {
-        self.window_titlebar_height(window) + self.chrome_row_height()
+        chrome_body_top(
+            self.settings_store
+                .settings()
+                .appearance
+                .merge_tab_bar_into_titlebar,
+            self.window_titlebar_height(window),
+            self.chrome_row_height(),
+        )
     }
 
     /// Vertical band occupied by the tab strip inside the window.

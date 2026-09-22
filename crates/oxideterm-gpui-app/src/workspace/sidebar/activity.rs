@@ -5,7 +5,33 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+/// Rail shortcuts that the merged chrome row renders next to the window controls.
+pub(in crate::workspace) fn chrome_shortcut_items() -> [(SidebarSection, LucideIcon); 4] {
+    [
+        (SidebarSection::Workspace, LucideIcon::Square),
+        (SidebarSection::Files, LucideIcon::FolderOpen),
+        (SidebarSection::Notifications, LucideIcon::Bell),
+        (SidebarSection::Settings, LucideIcon::Settings),
+    ]
+}
+
 impl WorkspaceApp {
+    /// The rail shortcuts as a horizontal cluster for the merged chrome row.
+    pub(in crate::workspace) fn render_chrome_shortcut_icons(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .children(
+                chrome_shortcut_items()
+                    .into_iter()
+                    .map(|(section, icon)| self.render_activity_icon(section, icon, true, cx)),
+            )
+            .into_any_element()
+    }
     pub(in crate::workspace) fn render_activity_bar(
         &mut self,
         cx: &mut Context<Self>,
@@ -22,12 +48,7 @@ impl WorkspaceApp {
             (SidebarSection::Assistant, LucideIcon::Sparkles),
             (SidebarSection::HostTools, LucideIcon::Wrench),
         ];
-        let bottom_items = [
-            (SidebarSection::Workspace, LucideIcon::Square),
-            (SidebarSection::Files, LucideIcon::FolderOpen),
-            (SidebarSection::Notifications, LucideIcon::Bell),
-            (SidebarSection::Settings, LucideIcon::Settings),
-        ];
+        let bottom_items = chrome_shortcut_items();
         let mut bar = div()
             .w(px(self.activity_bar_width()))
             .h_full()
@@ -112,11 +133,13 @@ impl WorkspaceApp {
             .flex_col()
             .items_center();
         for (section, icon) in top_items_before_plugins {
-            primary_items = primary_items.child(self.render_activity_icon(section, icon, cx));
+            primary_items =
+                primary_items.child(self.render_activity_icon(section, icon, false, cx));
         }
         primary_items = primary_items.child(self.render_activity_icon(
             SidebarSection::Extensions,
             LucideIcon::Puzzle,
+            false,
             cx,
         ));
         let plugin_activity_items = self
@@ -145,7 +168,8 @@ impl WorkspaceApp {
             primary_items = primary_items.child(self.render_plugin_activity_action_icon(item, cx));
         }
         for (section, icon) in top_items_after_plugins {
-            primary_items = primary_items.child(self.render_activity_icon(section, icon, cx));
+            primary_items =
+                primary_items.child(self.render_activity_icon(section, icon, false, cx));
         }
         // The sessions footer owns the lock action while visible. Keep the rail
         // entry reachable when that footer is hidden or another panel is selected.
@@ -171,11 +195,20 @@ impl WorkspaceApp {
         {
             bottom = bottom.child(self.render_plugin_activity_action_icon(item, cx));
         }
-        bottom = bottom.children(
-            bottom_items
-                .into_iter()
-                .map(|(section, icon)| self.render_activity_icon(section, icon, cx)),
-        );
+        // The merged chrome row owns these shortcuts; the rail keeps them only when
+        // the tab strip still has its own row.
+        if !self
+            .settings_store
+            .settings()
+            .appearance
+            .merge_tab_bar_into_titlebar
+        {
+            bottom = bottom.children(
+                bottom_items
+                    .into_iter()
+                    .map(|(section, icon)| self.render_activity_icon(section, icon, false, cx)),
+            );
+        }
         if let Some(popover) = self.render_detached_local_terminals_popover(cx) {
             bottom = bottom.child(popover);
         }
@@ -202,6 +235,7 @@ impl WorkspaceApp {
         &self,
         section: SidebarSection,
         icon: LucideIcon,
+        horizontal: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let theme = self.tokens.ui;
@@ -313,7 +347,12 @@ impl WorkspaceApp {
         button
             .id(("activity-icon", section as u64))
             .relative()
-            .mb(px(self.tokens.metrics.activity_icon_gap))
+            .when(horizontal, |el| {
+                el.mr(px(self.tokens.metrics.activity_icon_gap))
+            })
+            .when(!horizontal, |el| {
+                el.mb(px(self.tokens.metrics.activity_icon_gap))
+            })
             .when(badge_count > 0, |icon_el| {
                 icon_el.child(
                     div()

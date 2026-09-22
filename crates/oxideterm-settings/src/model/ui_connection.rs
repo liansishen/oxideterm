@@ -51,6 +51,8 @@ pub struct AppearanceSettings {
     pub ui_font_family: String,
     #[serde(default = "default_show_window_titlebar")]
     pub show_window_titlebar: bool,
+    #[serde(default = "default_merge_tab_bar_into_titlebar")]
+    pub merge_tab_bar_into_titlebar: bool,
     #[serde(default = "default_window_opacity")]
     pub window_opacity: f64,
     pub animation_speed: AnimationSpeed,
@@ -70,6 +72,7 @@ impl Default for AppearanceSettings {
             ui_font_size: default_ui_font_size(),
             ui_font_family: String::new(),
             show_window_titlebar: true,
+            merge_tab_bar_into_titlebar: true,
             window_opacity: DEFAULT_WINDOW_OPACITY,
             animation_speed: AnimationSpeed::Normal,
             frosted_glass: FrostedGlassMode::Off,
@@ -89,6 +92,10 @@ fn default_ui_font_size() -> i64 {
 }
 
 fn default_show_window_titlebar() -> bool {
+    true
+}
+
+fn default_merge_tab_bar_into_titlebar() -> bool {
     true
 }
 

@@ -79,6 +79,15 @@ impl WorkspaceApp {
         let theme = self.tokens.ui;
         let bar = div()
             .h(px(self.tokens.metrics.tabbar_height))
+            .when(
+                self.settings_store
+                    .settings()
+                    .appearance
+                    .merge_tab_bar_into_titlebar,
+                // The merged chrome row floats rail shortcuts and window controls over
+                // this strip, so reserve the room they cover.
+                |bar| bar.pr(px(self.chrome_right_overlay_width(cx))),
+            )
             .flex()
             .flex_row()
             .items_center()

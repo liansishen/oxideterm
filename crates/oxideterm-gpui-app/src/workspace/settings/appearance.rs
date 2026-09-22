@@ -174,6 +174,28 @@ impl WorkspaceApp {
                     )
                     .into_any_element(),
                 ),
+                self.appearance_row(
+                    "settings_view.appearance.merge_tab_bar_into_titlebar",
+                    "settings_view.appearance.merge_tab_bar_into_titlebar_hint",
+                    checkbox(
+                        &self.tokens,
+                        String::new(),
+                        settings.appearance.merge_tab_bar_into_titlebar,
+                    )
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, _event, _window, cx| {
+                            this.edit_settings(
+                                |settings| {
+                                    settings.appearance.merge_tab_bar_into_titlebar =
+                                        !settings.appearance.merge_tab_bar_into_titlebar;
+                                },
+                                cx,
+                            );
+                        }),
+                    )
+                    .into_any_element(),
+                ),
             ]
             .into_iter()
             .chain(cfg!(target_os = "linux").then(|| {

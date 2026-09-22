@@ -695,6 +695,8 @@
       "show_window_titlebar_hint": "Nur Linux. Für Kachel-Kompositoren deaktivieren; zum Verschieben, Ändern der Größe oder Schließen die Kompositor-Kürzel verwenden.",
       "show_activity_bar": "Linke Werkzeugleiste anzeigen",
       "show_activity_bar_hint": "Blendet die linke Symbolleiste vollständig aus. Die Schaltfläche zum Einklappen der Seitenleiste wandert in die Kopfzeile der Seitenleiste.",
+      "merge_tab_bar_into_titlebar": "Tab-Leiste in die Titelleiste integrieren",
+      "merge_tab_bar_into_titlebar_hint": "Zeigt Fensterknöpfe und Tabs in einer Zeile und spart so eine Zeile Höhe. Ausschalten behält die separate Titelleiste bei.",
       "window_opacity": "Fensterdeckkraft",
       "window_opacity_hint": "Passt die Deckkraft des gesamten Anwendungsfensters an. Niedrigere Werte blenden auch Text aus; einige Linux-Desktopumgebungen unterstützen dies möglicherweise nicht.",
       "animation": "Animationsgeschwindigkeit",

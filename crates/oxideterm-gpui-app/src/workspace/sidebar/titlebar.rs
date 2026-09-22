@@ -152,6 +152,110 @@ impl ClientTitlebarIcon {
 }
 
 impl WorkspaceApp {
+    /// Client titlebar buttons are fixed-width; the merged chrome overlay reserves the
+    /// same value instead of deriving control widths from button contents.
+    const TITLEBAR_CONTROL_WIDTH: f32 = 46.0;
+
+    /// Space between the rail shortcuts and the window controls in the merged row.
+    const MERGED_CHROME_ACTION_GAP: f32 = 8.0;
+
+    /// The merged layout drops the separate title bar row: the window controls and the
+    /// rail shortcuts float over the tab strip row at the window corners. Only the
+    /// buttons themselves take clicks, so the cells below keep their hit targets.
+    pub(in crate::workspace) fn render_merged_chrome_overlay(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let chrome_height = self.chrome_row_height();
+        let theme = self.tokens.ui;
+        let titlebar_bg = theme.bg;
+        let text_color = readable_color(titlebar_bg, theme.text_muted, theme.text);
+        let button_layout = client_titlebar_button_layout(cx);
+        let supported_controls = window.window_controls();
+
+        // Native macOS traffic lights must stay centered in the merged row height.
+        #[cfg(target_os = "macos")]
+        window.set_traffic_light_position(gpui::point(
+            px(self.tokens.metrics.traffic_light_x),
+            px(((chrome_height - self.tokens.metrics.traffic_light_diameter) / 2.0).max(0.0)),
+        ));
+
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .h(px(chrome_height))
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .when(cfg!(target_os = "linux"), |overlay| {
+                overlay.child(self.render_client_titlebar_controls(
+                    button_layout.left,
+                    supported_controls,
+                    titlebar_bg,
+                    text_color,
+                    window.is_maximized(),
+                    cx,
+                ))
+            })
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .child(self.render_chrome_shortcut_icons(cx))
+                    .when(
+                        cfg!(any(target_os = "windows", target_os = "linux")),
+                        |group| {
+                            group
+                                .child(div().flex_none().w(px(Self::MERGED_CHROME_ACTION_GAP)))
+                                .child(self.render_client_titlebar_controls(
+                                    button_layout.right,
+                                    supported_controls,
+                                    titlebar_bg,
+                                    text_color,
+                                    window.is_maximized(),
+                                    cx,
+                                ))
+                        },
+                    ),
+            )
+            .into_any_element()
+    }
+
+    /// Width of the platform chrome at the window's left edge in the merged row.
+    pub(in crate::workspace) fn chrome_left_chrome_width(&self, cx: &App) -> f32 {
+        if cfg!(target_os = "macos") {
+            self.tokens.metrics.titlebar_label_x()
+        } else if cfg!(target_os = "linux") {
+            let layout = client_titlebar_button_layout(cx);
+            layout.left.iter().flatten().count() as f32 * Self::TITLEBAR_CONTROL_WIDTH
+        } else {
+            0.0
+        }
+    }
+
+    /// Width the merged right overlay reserves: rail shortcuts plus platform controls.
+    pub(in crate::workspace) fn chrome_right_overlay_width(&self, cx: &App) -> f32 {
+        let shortcuts = self.chrome_shortcut_cluster_width();
+        if cfg!(any(target_os = "windows", target_os = "linux")) {
+            let layout = client_titlebar_button_layout(cx);
+            shortcuts
+                + Self::MERGED_CHROME_ACTION_GAP
+                + layout.right.iter().flatten().count() as f32 * Self::TITLEBAR_CONTROL_WIDTH
+        } else {
+            shortcuts
+        }
+    }
+
+    fn chrome_shortcut_cluster_width(&self) -> f32 {
+        let count = super::activity::chrome_shortcut_items().len() as f32;
+        let metrics = &self.tokens.metrics;
+        count * metrics.activity_icon_size + (count - 1.0) * metrics.activity_icon_gap
+    }
     pub(in crate::workspace) fn window_titlebar_visible(&self, window: &Window) -> bool {
         window_titlebar_visibility(
             cfg!(target_os = "linux"),
@@ -361,7 +465,7 @@ impl WorkspaceApp {
             .role(gpui::Role::Button)
             .aria_label(accessibility_label)
             .occlude()
-            .w(px(46.0))
+            .w(px(Self::TITLEBAR_CONTROL_WIDTH))
             .h_full()
             .flex()
             .items_center()

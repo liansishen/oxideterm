@@ -695,6 +695,8 @@
       "show_window_titlebar_hint": "Solo Linux. Disattivala con compositor tiling; usa le scorciatoie del compositor per spostare, ridimensionare o chiudere la finestra.",
       "show_activity_bar": "Mostra la barra degli strumenti sinistra",
       "show_activity_bar_hint": "Nasconde completamente la barra delle icone a sinistra. Il pulsante per comprimere la barra laterale si sposta nell'intestazione.",
+      "merge_tab_bar_into_titlebar": "Unisci la barra delle schede alla barra del titolo",
+      "merge_tab_bar_into_titlebar_hint": "Mostra i pulsanti della finestra e le schede su una sola riga, risparmiando una riga di altezza. Disattiva per mantenere la barra del titolo separata.",
       "window_opacity": "Opacità della finestra",
       "window_opacity_hint": "Regola l’opacità dell’intera finestra dell’applicazione. I valori bassi attenuano anche il testo; alcuni ambienti desktop Linux potrebbero non supportarla.",
       "animation": "Velocità animazione",

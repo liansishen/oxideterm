@@ -220,6 +220,14 @@ mod sidebar_persistence_tests {
     }
 
     #[test]
+    fn chrome_body_top_follows_the_merged_layout() {
+        assert_eq!(super::state::chrome_body_top(true, 30.0, 36.0), 36.0);
+        assert_eq!(super::state::chrome_body_top(false, 30.0, 36.0), 66.0);
+        assert_eq!(super::state::chrome_body_top(false, 0.0, 36.0), 36.0);
+        assert_eq!(super::state::chrome_body_top(true, 0.0, 36.0), 36.0);
+    }
+
+    #[test]
     fn sidebar_sections_roundtrip_persisted_settings_keys() {
         let sections = [
             SidebarSection::Sessions,

@@ -695,6 +695,8 @@
       "show_window_titlebar_hint": "Solo Linux. Desactívala en compositores en mosaico; usa sus atajos para mover, redimensionar o cerrar la ventana.",
       "show_activity_bar": "Mostrar la barra de herramientas izquierda",
       "show_activity_bar_hint": "Oculta por completo la barra de iconos izquierda. El botón para contraer la barra lateral se mueve a su encabezado.",
+      "merge_tab_bar_into_titlebar": "Combinar la barra de pestañas con la barra de título",
+      "merge_tab_bar_into_titlebar_hint": "Muestra los botones de ventana y las pestañas en una sola fila y ahorra una fila de altura. Desactívalo para mantener la barra de título separada.",
       "window_opacity": "Opacidad de la ventana",
       "window_opacity_hint": "Ajusta la opacidad de toda la ventana de la aplicación. Los valores bajos también atenúan el texto; algunos escritorios Linux pueden no admitirlo.",
       "animation": "Velocidad de animación",

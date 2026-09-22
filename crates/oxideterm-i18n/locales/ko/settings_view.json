@@ -695,6 +695,8 @@
       "show_window_titlebar_hint": "Linux 전용입니다. 타일링 컴포지터에서는 끄고 이동, 크기 조절, 닫기에 컴포지터 단축키를 사용하세요.",
       "show_activity_bar": "왼쪽 도구 모음 표시",
       "show_activity_bar_hint": "끄면 왼쪽 아이콘 막대를 완전히 숨깁니다. 사이드바 접기 버튼은 사이드바 헤더로 이동합니다.",
+      "merge_tab_bar_into_titlebar": "탭 표시줄을 제목 표시줄에 통합",
+      "merge_tab_bar_into_titlebar_hint": "탭과 창 버튼을 한 줄로 합쳐 세로 공간을 절약합니다. 끄면 별도의 제목 표시줄을 유지합니다.",
       "window_opacity": "창 불투명도",
       "window_opacity_hint": "애플리케이션 창 전체의 불투명도를 조절합니다. 값을 낮추면 글자도 흐려지며 일부 Linux 데스크톱 환경에서는 지원되지 않을 수 있습니다.",
       "animation": "애니메이션 속도",

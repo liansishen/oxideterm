@@ -15,7 +15,62 @@ pub(in crate::workspace) fn chrome_shortcut_items() -> [(SidebarSection, LucideI
     ]
 }
 
+/// Shortcuts the merged chrome row renders for the given activity-rail visibility.
+/// Hiding the rail removes its session-manager entry, so the row keeps that panel
+/// reachable beside the rail shortcuts.
+pub(in crate::workspace) fn chrome_shortcut_row_items(
+    activity_bar_visible: bool,
+) -> impl Iterator<Item = (SidebarSection, LucideIcon)> {
+    (!activity_bar_visible)
+        .then_some((SidebarSection::Connections, LucideIcon::LayoutList))
+        .into_iter()
+        .chain(chrome_shortcut_items())
+}
+
 impl WorkspaceApp {
+    /// Always-present toggle for the left activity rail, rendered in the merged chrome
+    /// row. The rail no longer has an appearance setting, so this is its only control.
+    pub(in crate::workspace) fn render_chrome_activity_bar_toggle(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let theme = self.tokens.ui;
+        let metrics = &self.tokens.metrics;
+        let icon = if self.settings_store.settings().sidebar_ui.show_activity_bar {
+            LucideIcon::PanelLeftClose
+        } else {
+            LucideIcon::PanelLeft
+        };
+        div()
+            .mr(px(metrics.activity_icon_gap))
+            .child(self.workspace_tooltip_icon_button(
+                icon,
+                metrics.activity_icon_glyph_size,
+                rgb(theme.text),
+                oxideterm_gpui_ui::button::IconButtonOptions {
+                    radius: oxideterm_gpui_ui::button::ButtonRadius::Md,
+                    hover_background: Some(rgb(theme.bg_hover)),
+                    idle_opacity: 1.0,
+                    ..oxideterm_gpui_ui::button::IconButtonOptions::compact(
+                        metrics.activity_icon_size,
+                    )
+                },
+                self.i18n.t("settings_view.appearance.show_activity_bar"),
+                "chrome-activity-bar-toggle",
+                false,
+                cx.listener(|this, _event, _window, cx| {
+                    this.edit_settings(
+                        |settings| {
+                            settings.sidebar_ui.show_activity_bar =
+                                !settings.sidebar_ui.show_activity_bar;
+                        },
+                        cx,
+                    );
+                }),
+                cx.entity(),
+            ))
+            .into_any_element()
+    }
     /// The rail shortcuts as a horizontal cluster for the merged chrome row.
     pub(in crate::workspace) fn render_chrome_shortcut_icons(
         &self,
@@ -25,10 +80,12 @@ impl WorkspaceApp {
             .flex()
             .flex_row()
             .items_center()
+            .child(self.render_chrome_activity_bar_toggle(cx))
             .children(
-                chrome_shortcut_items()
-                    .into_iter()
-                    .map(|(section, icon)| self.render_activity_icon(section, icon, true, cx)),
+                chrome_shortcut_row_items(
+                    self.settings_store.settings().sidebar_ui.show_activity_bar,
+                )
+                .map(|(section, icon)| self.render_activity_icon(section, icon, true, cx)),
             )
             .into_any_element()
     }
@@ -273,6 +330,17 @@ impl WorkspaceApp {
                 self.context_sidebar_visible()
                     && self.active_context_sidebar_panel == ContextSidebarPanel::HostTools
             }
+            SidebarSection::Connections => {
+                // The rail entry selects the Sessions panel. The merged chrome shortcut
+                // launches the Session Manager tab, so it lights up with that tab and
+                // returns to the default colour once another tab takes over.
+                if horizontal {
+                    self.active_tab(cx)
+                        .is_some_and(|tab| tab.kind == TabKind::SessionManager)
+                } else {
+                    self.active_sidebar_section == section
+                }
+            }
             _ => self.active_sidebar_section == section,
         };
         let tooltip = self.activity_icon_tooltip(section);
@@ -359,9 +427,11 @@ impl WorkspaceApp {
                         .absolute()
                         // Tauri badges sit outside the `h-9 w-9` Button
                         // (`-top-1 -right-1`) so the active button chrome and
-                        // numeric pill do not visually collide.
+                        // numeric pill do not visually collide. The merged chrome row
+                        // is flush with the window's top edge, so the badge stays inside
+                        // the row instead of clipping against the border.
                         .right(px(-4.0))
-                        .top(px(-4.0))
+                        .top(px(if horizontal { 0.0 } else { -4.0 }))
                         .min_w(px(14.0))
                         .h(px(14.0))
                         .px(px(3.0))
@@ -401,7 +471,13 @@ impl WorkspaceApp {
                     if section == SidebarSection::Settings {
                         this.open_settings(window, cx);
                     } else if section == SidebarSection::Connections {
-                        this.open_session_manager_tab(window, cx);
+                        // The rail entry is a panel selector that reveals the Sessions
+                        // sidebar; the merged chrome shortcut only launches the tab.
+                        if horizontal {
+                            this.open_session_manager_tab_without_sidebar(window, cx);
+                        } else {
+                            this.open_session_manager_tab(window, cx);
+                        }
                     } else if section == SidebarSection::Terminal {
                         this.open_connection_runtime_tab(
                             ConnectionRuntimeSection::Overview,
@@ -703,4 +779,23 @@ pub(in crate::workspace) fn native_plugin_activity_bar_item_id(
     item.plugin_id.hash(&mut hasher);
     item.item_id.hash(&mut hasher);
     hasher.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merged_chrome_shortcuts_gain_the_session_manager_without_the_activity_rail() {
+        let rail_visible: Vec<_> = chrome_shortcut_row_items(true)
+            .map(|(section, _)| section)
+            .collect();
+        let rail_hidden: Vec<_> = chrome_shortcut_row_items(false)
+            .map(|(section, _)| section)
+            .collect();
+
+        assert_eq!(rail_visible.first(), Some(&SidebarSection::Workspace));
+        assert_eq!(rail_hidden.first(), Some(&SidebarSection::Connections));
+        assert_eq!(rail_hidden[1..], rail_visible[..]);
+    }
 }

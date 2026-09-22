@@ -3992,6 +3992,12 @@ impl TerminalPane {
         TERMINAL_CONTENT_PADDING + self.timestamp_gutter_width() + self.command_mark_gutter_width()
     }
 
+    /// Left inset of the grid element. The scrollbar reserves a strip on the right, so the
+    /// same strip stays free on the left and terminal text is never flush to the pane edge.
+    fn terminal_grid_inset_x(&self) -> f32 {
+        self.preferences.padding_horizontal + SCROLLBAR_RESERVED_WIDTH
+    }
+
     fn terminal_horizontal_scroll_limit(&self) -> Pixels {
         px(self.timestamp_gutter_width())
     }
@@ -4012,7 +4018,7 @@ impl TerminalPane {
         // cell metrics. Expose pane-local facts rather than making workspace
         // code duplicate terminal layout math.
         Some(TerminalCursorAnchor {
-            x: self.preferences.padding_horizontal
+            x: self.terminal_grid_inset_x()
                 + f32::from(cursor_bounds.origin.x)
                 + self.terminal_content_padding_x()
                 - f32::from(self.horizontal_scroll_offset_px),
@@ -4022,7 +4028,8 @@ impl TerminalPane {
             line_height: self.metrics.line_height_f32(),
             char_width: self.metrics.cell_width_f32(),
             container_width: f32::from(bounds.size.width)
-                + self.preferences.padding_horizontal * 2.0,
+                + self.terminal_grid_inset_x()
+                + self.preferences.padding_horizontal,
             container_height: f32::from(bounds.size.height)
                 + self.preferences.padding_vertical * 2.0,
         })
@@ -4436,17 +4443,25 @@ mod tests {
 
             pane.update(cx, |pane, cx| {
                 let bounds = pane.bounds.expect("rendered terminal viewport");
-                assert_eq!(bounds.origin, gpui::point(px(horizontal), px(vertical)));
+                // The grid keeps the scrollbar strip free on both sides, so the element
+                // starts one strip further right than the user padding alone.
+                assert_eq!(
+                    bounds.origin,
+                    gpui::point(px(horizontal + SCROLLBAR_RESERVED_WIDTH), px(vertical))
+                );
                 assert_eq!(
                     bounds.size,
-                    gpui::size(px(640.0 - horizontal * 2.0), px(320.0 - vertical * 2.0))
+                    gpui::size(
+                        px(640.0 - horizontal * 2.0 - SCROLLBAR_RESERVED_WIDTH),
+                        px(320.0 - vertical * 2.0)
+                    )
                 );
                 pane.flush_pending_pty_resize(pane.pty_resize_generation, cx);
                 let cell_width = pane.metrics.cell_width_f32();
                 let line_height = pane.metrics.line_height_f32();
                 // Font advances may round just below an integer cell count.
                 // The resized grid must fit, with less than one cell left over.
-                let available_width = 640.0 - horizontal * 2.0 - SCROLLBAR_RESERVED_WIDTH;
+                let available_width = 640.0 - horizontal * 2.0 - SCROLLBAR_RESERVED_WIDTH * 2.0;
                 let available_height = 320.0 - vertical * 2.0;
                 let remaining_width = available_width - pane.snapshot.cols as f32 * cell_width;
                 let remaining_height = available_height - pane.snapshot.rows as f32 * line_height;
@@ -4481,7 +4496,9 @@ mod tests {
                 let anchor = pane.cursor_anchor().expect("cursor anchor");
                 assert_eq!(
                     anchor.x,
-                    horizontal + pane.snapshot.cursor_col as f32 * cell_width
+                    horizontal
+                        + SCROLLBAR_RESERVED_WIDTH
+                        + pane.snapshot.cursor_col as f32 * cell_width
                 );
                 assert_eq!(
                     anchor.y,

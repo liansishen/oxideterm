@@ -694,7 +694,6 @@
       "show_window_titlebar": "Hiện thanh tiêu đề cửa sổ",
       "show_window_titlebar_hint": "Chỉ dành cho Linux. Tắt khi dùng trình tổng hợp xếp ô; dùng phím tắt của trình tổng hợp để di chuyển, đổi kích thước hoặc đóng cửa sổ.",
       "show_activity_bar": "Hiện thanh công cụ bên trái",
-      "show_activity_bar_hint": "Ẩn hoàn toàn thanh biểu tượng bên trái. Nút thu gọn thanh bên sẽ chuyển vào tiêu đề thanh bên.",
       "merge_tab_bar_into_titlebar": "Gộp thanh thẻ vào thanh tiêu đề",
       "merge_tab_bar_into_titlebar_hint": "Hiển thị nút cửa sổ và thẻ trên cùng một hàng, tiết kiệm một hàng chiều cao. Tắt để giữ thanh tiêu đề riêng.",
       "window_opacity": "Độ mờ cửa sổ",

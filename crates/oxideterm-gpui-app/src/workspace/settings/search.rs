@@ -812,10 +812,7 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
         SettingsTab::Appearance,
         1,
         "settings_view.appearance.layout",
-        &[
-            "settings_view.appearance.show_activity_bar",
-            "settings_view.appearance.merge_tab_bar_into_titlebar",
-        ],
+        &["settings_view.appearance.merge_tab_bar_into_titlebar"],
     ));
     #[cfg(target_os = "linux")]
     specs.push(settings_search_entry(

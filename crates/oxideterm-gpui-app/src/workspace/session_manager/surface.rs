@@ -397,11 +397,9 @@ impl WorkspaceApp {
         }
     }
 
-    pub(in crate::workspace) fn open_session_manager_tab(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    /// Ensures the Session Manager tab exists and activates it. Returns `false` when a
+    /// detached window owns the tab, which took focus instead.
+    fn ensure_session_manager_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         self.refresh_session_manager_ssh_config_hosts(cx);
         let tab_id = if let Some(tab) = self
             .tabs(cx)
@@ -425,19 +423,42 @@ impl WorkspaceApp {
             tab_id
         };
         if self.focus_detached_tab_window(tab_id, cx) {
-            return;
+            return false;
         }
         self.set_main_window_active_tab(Some(tab_id), cx);
         self.active_surface = ActiveSurface::Terminal;
-        self.active_sidebar_section = SidebarSection::Connections;
         self.needs_active_pane_focus = false;
+        window.focus(&self.focus_handle, cx);
+        self.reveal_active_tab(window, cx);
+        cx.notify();
+        true
+    }
+
+    /// Launches the Session Manager without touching the sidebar layout, so the merged
+    /// chrome shortcut stays independent from the sidebar's visibility and panel.
+    pub(in crate::workspace) fn open_session_manager_tab_without_sidebar(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let _ = self.ensure_session_manager_tab(window, cx);
+    }
+
+    /// Launches the Session Manager and reveals its companion Sessions panel, which the
+    /// activity rail entry and the command palette entries expect.
+    pub(in crate::workspace) fn open_session_manager_tab(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.ensure_session_manager_tab(window, cx) {
+            return;
+        }
+        self.active_sidebar_section = SidebarSection::Connections;
         if self.sidebar_collapsed {
             self.set_sidebar_collapsed_with_motion(false, cx);
         }
-        window.focus(&self.focus_handle, cx);
-        self.reveal_active_tab(window, cx);
         self.persist_sidebar_settings(cx);
-        cx.notify();
     }
 
     pub(in crate::workspace) fn refresh_session_manager_ssh_config_hosts(

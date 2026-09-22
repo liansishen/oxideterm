@@ -694,7 +694,6 @@
       "show_window_titlebar": "Afficher la barre de titre de la fenêtre",
       "show_window_titlebar_hint": "Linux uniquement. Désactivez-la avec un compositeur en mosaïque et utilisez ses raccourcis pour déplacer, redimensionner ou fermer la fenêtre.",
       "show_activity_bar": "Afficher la barre d'outils de gauche",
-      "show_activity_bar_hint": "Masque entièrement la barre d'icônes de gauche. Le bouton de réduction de la barre latérale passe dans son en-tête.",
       "merge_tab_bar_into_titlebar": "Fusionner la barre d'onglets avec la barre de titre",
       "merge_tab_bar_into_titlebar_hint": "Affiche les boutons de fenêtre et les onglets sur une seule ligne et économise une ligne de hauteur. Désactivez pour conserver la barre de titre séparée.",
       "window_opacity": "Opacité de la fenêtre",

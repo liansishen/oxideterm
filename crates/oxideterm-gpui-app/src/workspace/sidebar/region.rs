@@ -498,10 +498,16 @@ impl WorkspaceApp {
                     .merge_tab_bar_into_titlebar,
                 |header| {
                     // The rail's chrome cell covers part of the left window chrome, so
-                    // only the uncovered remainder has to push the title aside.
+                    // only the uncovered remainder has to push the title aside. Without
+                    // platform chrome to clear, the base padding stays, otherwise the
+                    // title would sit against the window edge.
                     let inset =
                         (self.chrome_left_chrome_width(cx) - self.activity_bar_width()).max(0.0);
-                    header.pl(px(inset))
+                    if inset > 0.0 {
+                        header.pl(px(inset))
+                    } else {
+                        header
+                    }
                 },
             )
             .child(
@@ -547,15 +553,9 @@ impl WorkspaceApp {
                     cx,
                 ));
         }
-        // The activity rail owns the collapse toggle. When the rail is hidden the
-        // header keeps a matching control so collapsing stays reachable with a mouse.
-        if !self.settings_store.settings().sidebar_ui.show_activity_bar
-            || self
-                .settings_store
-                .settings()
-                .appearance
-                .merge_tab_bar_into_titlebar
-        {
+        // The activity rail owns the sidebar collapse toggle, and its button disappears with
+        // the rail, so the header keeps a matching control while the rail is hidden.
+        if !self.settings_store.settings().sidebar_ui.show_activity_bar {
             header = header.child(self.render_sidebar_action(
                 LucideIcon::PanelLeftClose,
                 SidebarActionKind::ToggleSidebar,

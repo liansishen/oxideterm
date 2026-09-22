@@ -694,7 +694,6 @@
       "show_window_titlebar": "顯示視窗標題列",
       "show_window_titlebar_hint": "僅限 Linux。平鋪式合成器可關閉此項；移動、縮放或關閉視窗時請使用合成器快捷鍵。",
       "show_activity_bar": "顯示左側工具列",
-      "show_activity_bar_hint": "關閉後完全隱藏左側圖示列；折疊側邊欄的按鈕會移到側邊欄標題列。",
       "merge_tab_bar_into_titlebar": "分頁列與標題列合併",
       "merge_tab_bar_into_titlebar_hint": "分頁與視窗按鈕共用一列，省下一列高度。關閉後保留獨立的標題列。",
       "window_opacity": "視窗透明度",

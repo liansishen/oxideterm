@@ -153,28 +153,6 @@ impl WorkspaceApp {
                     ),
                 ),
                 self.appearance_row(
-                    "settings_view.appearance.show_activity_bar",
-                    "settings_view.appearance.show_activity_bar_hint",
-                    checkbox(
-                        &self.tokens,
-                        String::new(),
-                        settings.sidebar_ui.show_activity_bar,
-                    )
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _event, _window, cx| {
-                            this.edit_settings(
-                                |settings| {
-                                    settings.sidebar_ui.show_activity_bar =
-                                        !settings.sidebar_ui.show_activity_bar;
-                                },
-                                cx,
-                            );
-                        }),
-                    )
-                    .into_any_element(),
-                ),
-                self.appearance_row(
                     "settings_view.appearance.merge_tab_bar_into_titlebar",
                     "settings_view.appearance.merge_tab_bar_into_titlebar_hint",
                     checkbox(

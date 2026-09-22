@@ -1036,14 +1036,9 @@ impl WorkspaceApp {
                         layout.child(self.render_animated_context_sidebar_frame(cx))
                     }),
             )
-            .when(
-                !zen_mode && (!self.sidebar_collapsed || !show_activity_bar),
-                |root| {
-                    root.child(
-                        self.render_left_sidebar_resize_hotzone(effective_titlebar_height, cx),
-                    )
-                },
-            )
+            .when(!zen_mode && !self.sidebar_collapsed, |root| {
+                root.child(self.render_left_sidebar_resize_hotzone(effective_titlebar_height, cx))
+            })
             .when(!zen_mode && self.context_sidebar_visible(), |root| {
                 root.child(
                     self.render_context_right_sidebar_resize_hotzone(effective_titlebar_height, cx),

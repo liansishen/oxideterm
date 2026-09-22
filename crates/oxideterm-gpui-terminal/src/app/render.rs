@@ -515,7 +515,10 @@ impl Render for TerminalPane {
                     .absolute()
                     // The element's inset bounds are shared by painting, hit testing and PTY sizing.
                     .top(px(terminal_top + self.preferences.padding_vertical))
-                    .left(px(self.preferences.padding_horizontal))
+                    // The grid stops SCROLLBAR_RESERVED_WIDTH short of the right edge so the
+                    // scrollbar keeps its own strip there; the element viewport keeps the same
+                    // strip free on the left so text is never flush against the pane edge.
+                    .left(px(self.terminal_grid_inset_x()))
                     .right(px(self.preferences.padding_horizontal))
                     .bottom(px(self.preferences.padding_vertical))
                     .overflow_hidden()

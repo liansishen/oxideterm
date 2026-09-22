@@ -17,6 +17,17 @@ on:
         required: false
         default: false
         type: boolean
+  # Packaging runs when a merged pull request lands on main. A direct push to main
+  # still creates a run, but the source-merge gate skips every job. Publishing always
+  # requires a manual dispatch with upload_release.
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/release/**'
+      - '.github/workflows/native-package.yml'
 
 permissions:
   contents: read
@@ -26,8 +37,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  source_merge:
+    name: Require a merged pull request
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      merged: ${{ steps.check.outputs.merged }}
+    steps:
+      - name: Check whether the pushed commit came from a merged pull request
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT}" != "push" ]; then
+            echo "merged=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          merged_count="$(gh api "repos/${REPO}/commits/${SHA}/pulls" --jq '[.[] | select(.merged_at != null)] | length')"
+          if [ "${merged_count}" -gt 0 ]; then
+            echo "merged=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "merged=false" >> "${GITHUB_OUTPUT}"
+          fi
+
   validate-release-request:
     name: Validate release request
+    needs: source_merge
+    if: needs.source_merge.outputs.merged == 'true'
     runs-on: ubuntu-latest
     outputs:
       raw_version: ${{ steps.release_request.outputs.raw_version }}
@@ -109,7 +152,7 @@ jobs:
           echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-  # ── Six-platform matrix (macOS / Linux / Windows, arm64 + x64) ─────────
+  # ── Release packaging target: Windows x64 ──────────────────────────────
   package:
     name: Package ${{ matrix.label }}
     needs: validate-release-request
@@ -121,28 +164,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: macos-arm64
-            os: macos-14
-            target: aarch64-apple-darwin
-          - label: macos-x64
-            # Use an Intel runner so Cargo build scripts run on the same host
-            # architecture as the x86_64 release target.
-            os: macos-15-intel
-            target: x86_64-apple-darwin
-          - label: linux-x64
-            os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-          - label: linux-arm64
-            # Keep the Linux release baseline at glibc 2.35 for distributions
-            # such as Kylin V11, matching the existing x64 package baseline.
-            os: ubuntu-22.04-arm
-            target: aarch64-unknown-linux-gnu
           - label: windows-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-          - label: windows-arm64
-            os: windows-latest
-            target: aarch64-pc-windows-msvc
 
     steps:
       - name: Checkout repository
@@ -616,76 +640,6 @@ jobs:
               }
             }
 
-            if (isStable) {
-              await addAsset(
-                ['darwin-aarch64', 'darwin-aarch64-app', 'macos-aarch64', 'aarch64-apple-darwin'],
-                `OxideTerm_${version}_macos_arm64.app.tar.gz`,
-              );
-            } else {
-              await addAsset(
-                ['darwin-aarch64', 'darwin-aarch64-app', 'macos-aarch64', 'aarch64-apple-darwin'],
-                `OxideTerm_${version}_macos_arm64.app.zip`,
-              );
-            }
-            await addAsset(
-              ['darwin-aarch64-portable', 'macos-aarch64-portable', 'aarch64-apple-darwin-portable'],
-              `OxideTerm_${version}_macos_arm64_portable.tar.gz`,
-            );
-            if (isStable) {
-              await addAsset(
-                ['darwin-x86_64', 'darwin-x86_64-app', 'macos-x86_64', 'x86_64-apple-darwin'],
-                `OxideTerm_${version}_macos_x64.app.tar.gz`,
-              );
-            } else {
-              await addAsset(
-                ['darwin-x86_64', 'darwin-x86_64-app', 'macos-x86_64', 'x86_64-apple-darwin'],
-                `OxideTerm_${version}_macos_x64.app.zip`,
-              );
-            }
-            await addAsset(
-              ['darwin-x86_64-portable', 'macos-x86_64-portable', 'x86_64-apple-darwin-portable'],
-              `OxideTerm_${version}_macos_x64_portable.tar.gz`,
-            );
-            await addAsset(
-              ['linux-aarch64', 'linux-aarch64-appimage', 'aarch64-unknown-linux-gnu'],
-              `OxideTerm_${version}_linux_arm64.AppImage`,
-            );
-            await addAsset(
-              ['linux-x86_64', 'linux-x86_64-appimage', 'x86_64-unknown-linux-gnu'],
-              `OxideTerm_${version}_linux_x64.AppImage`,
-            );
-            await addAsset(
-              ['linux-aarch64-portable'],
-              `OxideTerm_${version}_linux_arm64_portable.tar.gz`,
-            );
-            await addAsset(
-              ['linux-x86_64-portable'],
-              `OxideTerm_${version}_linux_x64_portable.tar.gz`,
-            );
-            await addAsset(
-              ['linux-aarch64-deb'],
-              `OxideTerm_${version}_linux_arm64.deb`,
-            );
-            await addAsset(
-              ['linux-x86_64-deb'],
-              `OxideTerm_${version}_linux_x64.deb`,
-            );
-            await addAsset(
-              ['linux-aarch64-rpm'],
-              `OxideTerm_${version}_linux_arm64.rpm`,
-            );
-            await addAsset(
-              ['linux-x86_64-rpm'],
-              `OxideTerm_${version}_linux_x64.rpm`,
-            );
-            await addAsset(
-              ['windows-aarch64', 'windows-aarch64-nsis', 'aarch64-pc-windows-msvc', 'aarch64-pc-windows-msvc-nsis'],
-              `OxideTerm_${version}_windows_arm64-setup.exe`,
-            );
-            await addAsset(
-              ['windows-aarch64-portable'],
-              `OxideTerm_${version}_windows_arm64_portable.zip`,
-            );
             await addAsset(
               ['windows-x86_64', 'windows-x86_64-nsis', 'x86_64-pc-windows-msvc', 'x86_64-pc-windows-msvc-nsis'],
               `OxideTerm_${version}_windows_x64-setup.exe`,
@@ -699,15 +653,6 @@ jobs:
               // OxideTerm 1.x follows the Latest release and probes these
               // installer-specific Tauri keys before their generic fallbacks.
               const tauriCompatibilitySuffixes = new Map([
-                ['darwin-aarch64-app', '.app.tar.gz'],
-                ['darwin-x86_64-app', '.app.tar.gz'],
-                ['linux-aarch64-appimage', '.AppImage'],
-                ['linux-x86_64-appimage', '.AppImage'],
-                ['linux-aarch64-deb', '.deb'],
-                ['linux-x86_64-deb', '.deb'],
-                ['linux-aarch64-rpm', '.rpm'],
-                ['linux-x86_64-rpm', '.rpm'],
-                ['windows-aarch64-nsis', '.exe'],
                 ['windows-x86_64-nsis', '.exe'],
               ]);
               for (const [platformKey, expectedSuffix] of tauriCompatibilitySuffixes) {
@@ -754,87 +699,6 @@ jobs:
             });
 
             core.info(`Uploaded latest.json for ${tag} with ${Object.keys(platforms).length} platform key(s).`);
-
-  publish-gpui-preview-updater:
-    name: Publish GPUI preview updater manifest
-    needs:
-      - release
-      - publish-updater
-    runs-on: ubuntu-latest
-    if: needs.release.outputs.prerelease == 'true' && (startsWith(needs.release.outputs.tag, 'gpui-v') || contains(needs.release.outputs.version, 'gpui-preview') || contains(needs.release.outputs.version, 'native-preview') || contains(needs.release.outputs.version, 'rustnative-preview'))
-    permissions:
-      contents: write
-    steps:
-      - name: Upload latest.json to updater-gpui-preview release
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          RELEASE_TAG: ${{ needs.release.outputs.tag }}
-        with:
-          script: |
-            const sourceTag = process.env.RELEASE_TAG;
-            const channelTag = 'updater-gpui-preview';
-
-            const { data: sourceRelease } = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag: sourceTag,
-            });
-
-            const latestAsset = sourceRelease.assets.find((asset) => asset.name === 'latest.json');
-            if (!latestAsset) {
-              throw new Error(`No latest.json found on ${sourceTag}`);
-            }
-
-            const manifestResponse = await fetch(latestAsset.browser_download_url);
-            if (!manifestResponse.ok) {
-              throw new Error(`failed to download latest.json: HTTP ${manifestResponse.status}`);
-            }
-            const content = await manifestResponse.text();
-
-            let channelRelease;
-            try {
-              const { data } = await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag: channelTag,
-              });
-              channelRelease = data;
-            } catch (error) {
-              if (error.status !== 404) throw error;
-              const { data } = await github.rest.repos.createRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag_name: channelTag,
-                name: 'GPUI Preview Updater Manifest',
-                body: 'This release hosts latest.json for the GPUI preview update channel. Do not delete.',
-                prerelease: true,
-                draft: false,
-              });
-              channelRelease = data;
-            }
-
-            const existing = channelRelease.assets.find((asset) => asset.name === 'latest.json');
-            if (existing) {
-              await github.rest.repos.deleteReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                asset_id: existing.id,
-              });
-            }
-
-            await github.rest.repos.uploadReleaseAsset({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: channelRelease.id,
-              name: 'latest.json',
-              data: content,
-              headers: {
-                'content-type': 'application/json',
-                'content-length': Buffer.byteLength(content),
-              },
-            });
-
-            core.info(`Uploaded ${sourceTag} latest.json to ${channelTag}.`);
 
   cleanup-sigs:
     name: Remove signature helper assets
@@ -907,31 +771,9 @@ jobs:
             const expected = [
               'latest.json',
               'sha256sums.txt',
-              `OxideTerm_${version}_macos_arm64.app.zip`,
-              `OxideTerm_${version}_macos_arm64.dmg`,
-              `OxideTerm_${version}_macos_arm64_portable.tar.gz`,
-              `OxideTerm_${version}_macos_x64.app.zip`,
-              `OxideTerm_${version}_macos_x64.dmg`,
-              `OxideTerm_${version}_macos_x64_portable.tar.gz`,
-              `OxideTerm_${version}_linux_arm64.AppImage`,
-              `OxideTerm_${version}_linux_arm64.deb`,
-              `OxideTerm_${version}_linux_arm64.rpm`,
-              `OxideTerm_${version}_linux_arm64_portable.tar.gz`,
-              `OxideTerm_${version}_linux_x64.AppImage`,
-              `OxideTerm_${version}_linux_x64.deb`,
-              `OxideTerm_${version}_linux_x64.rpm`,
-              `OxideTerm_${version}_linux_x64_portable.tar.gz`,
-              `OxideTerm_${version}_windows_arm64-setup.exe`,
-              `OxideTerm_${version}_windows_arm64_portable.zip`,
               `OxideTerm_${version}_windows_x64-setup.exe`,
               `OxideTerm_${version}_windows_x64_portable.zip`,
             ];
-            if (!isGpuiPreview && !version.includes('-')) {
-              expected.push(
-                `OxideTerm_${version}_macos_arm64.app.tar.gz`,
-                `OxideTerm_${version}_macos_x64.app.tar.gz`,
-              );
-            }
 
             const missing = expected.filter((name) => !names.has(name));
             if (missing.length > 0) {

@@ -693,6 +693,8 @@
       "ui_font_size_hint": "Adjust text size throughout the application interface",
       "show_window_titlebar": "Show window titlebar",
       "show_window_titlebar_hint": "Linux only. Disable for tiling compositors; use compositor shortcuts to move, resize, or close the window.",
+      "show_activity_bar": "Show left toolbar",
+      "show_activity_bar_hint": "Hides the left icon rail completely. The sidebar collapse button moves into the sidebar header.",
       "window_opacity": "Window Opacity",
       "window_opacity_hint": "Adjust the opacity of the entire application window. Lower values also fade text; some Linux desktop environments may not support it.",
       "animation": "Animation Speed",

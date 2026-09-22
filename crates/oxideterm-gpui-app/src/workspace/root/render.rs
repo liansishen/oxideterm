@@ -297,6 +297,7 @@ impl WorkspaceApp {
             })
         };
         let zen_mode = self.settings_store.settings().sidebar_ui.zen_mode;
+        let show_activity_bar = self.settings_store.settings().sidebar_ui.show_activity_bar;
         let titlebar_visible = self.window_titlebar_visible(window);
         let effective_titlebar_height = self.window_titlebar_height(window);
         let resize_hotzone_visible =
@@ -995,7 +996,7 @@ impl WorkspaceApp {
                     .flex()
                     .flex_row()
                     .overflow_hidden()
-                    .when(!zen_mode, |layout| {
+                    .when(!zen_mode && show_activity_bar, |layout| {
                         layout.child(self.render_activity_bar(cx))
                     })
                     .when(!zen_mode && self.sidebar_rendered, |layout| {
@@ -1030,9 +1031,14 @@ impl WorkspaceApp {
                         layout.child(self.render_animated_context_sidebar_frame(cx))
                     }),
             )
-            .when(!zen_mode && !self.sidebar_collapsed, |root| {
-                root.child(self.render_left_sidebar_resize_hotzone(effective_titlebar_height, cx))
-            })
+            .when(
+                !zen_mode && (!self.sidebar_collapsed || !show_activity_bar),
+                |root| {
+                    root.child(
+                        self.render_left_sidebar_resize_hotzone(effective_titlebar_height, cx),
+                    )
+                },
+            )
             .when(!zen_mode && self.context_sidebar_visible(), |root| {
                 root.child(
                     self.render_context_right_sidebar_resize_hotzone(effective_titlebar_height, cx),

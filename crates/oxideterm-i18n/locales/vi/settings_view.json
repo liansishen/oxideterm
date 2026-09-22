@@ -693,6 +693,8 @@
       "ui_font_size_hint": "Điều chỉnh cỡ chữ trên toàn bộ giao diện ứng dụng",
       "show_window_titlebar": "Hiện thanh tiêu đề cửa sổ",
       "show_window_titlebar_hint": "Chỉ dành cho Linux. Tắt khi dùng trình tổng hợp xếp ô; dùng phím tắt của trình tổng hợp để di chuyển, đổi kích thước hoặc đóng cửa sổ.",
+      "show_activity_bar": "Hiện thanh công cụ bên trái",
+      "show_activity_bar_hint": "Ẩn hoàn toàn thanh biểu tượng bên trái. Nút thu gọn thanh bên sẽ chuyển vào tiêu đề thanh bên.",
       "window_opacity": "Độ mờ cửa sổ",
       "window_opacity_hint": "Điều chỉnh độ mờ của toàn bộ cửa sổ ứng dụng. Giá trị thấp cũng làm chữ mờ đi; một số môi trường Linux có thể không hỗ trợ.",
       "animation": "Tốc độ hoạt ảnh",

@@ -693,6 +693,8 @@
       "ui_font_size_hint": "Ajuster la taille du texte dans toute l'interface de l'application",
       "show_window_titlebar": "Afficher la barre de titre de la fenêtre",
       "show_window_titlebar_hint": "Linux uniquement. Désactivez-la avec un compositeur en mosaïque et utilisez ses raccourcis pour déplacer, redimensionner ou fermer la fenêtre.",
+      "show_activity_bar": "Afficher la barre d'outils de gauche",
+      "show_activity_bar_hint": "Masque entièrement la barre d'icônes de gauche. Le bouton de réduction de la barre latérale passe dans son en-tête.",
       "window_opacity": "Opacité de la fenêtre",
       "window_opacity_hint": "Règle l’opacité de toute la fenêtre de l’application. Les valeurs faibles estompent aussi le texte ; certains environnements Linux peuvent ne pas la prendre en charge.",
       "animation": "Vitesse d'animation",

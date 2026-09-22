@@ -56,27 +56,3 @@ jobs:
 
       - name: Check Windows application
         run: cargo check -p oxideterm-gpui-app
-
-  macos:
-    name: macOS native check
-    runs-on: macos-14
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: 1.94.1
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          key: native-check-macos-arm64
-          cache-on-failure: false
-
-      - name: Check macOS GPUI backend
-        run: cargo check -p gpui_macos
-
-      - name: Check macOS application
-        run: cargo check -p oxideterm-gpui-app

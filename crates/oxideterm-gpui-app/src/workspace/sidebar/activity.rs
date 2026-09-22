@@ -28,10 +28,10 @@ pub(in crate::workspace) fn chrome_shortcut_row_items(
 }
 
 impl WorkspaceApp {
-    /// Always-present toggle for the left activity rail, rendered in the merged chrome
-    /// row. The rail no longer has an appearance setting, so this is its only control.
-    pub(in crate::workspace) fn render_chrome_activity_bar_toggle(
+    /// Activity-rail visibility toggle shared by the merged and separate title bars.
+    pub(in crate::workspace) fn render_activity_bar_toggle(
         &self,
+        button_size: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let theme = self.tokens.ui;
@@ -51,9 +51,7 @@ impl WorkspaceApp {
                     radius: oxideterm_gpui_ui::button::ButtonRadius::Md,
                     hover_background: Some(rgb(theme.bg_hover)),
                     idle_opacity: 1.0,
-                    ..oxideterm_gpui_ui::button::IconButtonOptions::compact(
-                        metrics.activity_icon_size,
-                    )
+                    ..oxideterm_gpui_ui::button::IconButtonOptions::compact(button_size)
                 },
                 self.i18n.t("settings_view.appearance.show_activity_bar"),
                 "chrome-activity-bar-toggle",
@@ -80,7 +78,7 @@ impl WorkspaceApp {
             .flex()
             .flex_row()
             .items_center()
-            .child(self.render_chrome_activity_bar_toggle(cx))
+            .child(self.render_activity_bar_toggle(self.tokens.metrics.activity_icon_size, cx))
             .children(
                 chrome_shortcut_row_items(
                     self.settings_store.settings().sidebar_ui.show_activity_bar,

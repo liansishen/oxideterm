@@ -383,6 +383,7 @@ impl WorkspaceApp {
                 ))
             })
             .child(self.render_window_drag_region("workspace-titlebar-drag-region", cx))
+            .child(self.render_activity_bar_toggle(self.tokens.metrics.titlebar_height, cx))
             .when(
                 cfg!(any(target_os = "windows", target_os = "linux")),
                 |bar| {

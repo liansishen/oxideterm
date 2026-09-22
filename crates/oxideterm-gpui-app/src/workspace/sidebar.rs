@@ -205,12 +205,19 @@ pub(in crate::workspace) use ai::{
 };
 use helpers::*;
 pub(in crate::workspace) use state::{
-    clamp_responsive_sidebar_width, context_sidebar_panel_visible,
+    clamp_responsive_sidebar_width, context_sidebar_panel_visible, sidebar_panel_width,
 };
 
 #[cfg(test)]
 mod sidebar_persistence_tests {
-    use super::SidebarSection;
+    use super::{SidebarSection, sidebar_panel_width};
+
+    #[test]
+    fn sidebar_panel_width_excludes_the_activity_rail_and_clamps_at_zero() {
+        assert_eq!(sidebar_panel_width(320.0, 48.0), 272.0);
+        assert_eq!(sidebar_panel_width(48.0, 48.0), 0.0);
+        assert_eq!(sidebar_panel_width(16.0, 48.0), 0.0);
+    }
 
     #[test]
     fn sidebar_sections_roundtrip_persisted_settings_keys() {

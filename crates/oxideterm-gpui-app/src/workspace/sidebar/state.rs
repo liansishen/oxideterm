@@ -25,6 +25,15 @@ pub(in crate::workspace) fn responsive_sidebar_width_bounds(
     ResponsiveSidebarWidthBounds { min, max }
 }
 
+/// Body width of the primary sidebar panel, excluding the activity rail that shares
+/// the persisted sidebar width.
+pub(in crate::workspace) fn sidebar_panel_width(
+    sidebar_width: f32,
+    activity_bar_width: f32,
+) -> f32 {
+    (sidebar_width - activity_bar_width).max(0.0)
+}
+
 pub(in crate::workspace) fn clamp_responsive_sidebar_width(
     width: f32,
     viewport_width: f32,
@@ -228,8 +237,33 @@ impl WorkspaceApp {
         cx.notify();
     }
 
+    /// Width reserved by the left activity rail. Hidden rails report zero so every
+    /// width computation keeps a single source of truth.
+    pub(in crate::workspace) fn activity_bar_width(&self) -> f32 {
+        self.tokens.metrics.activity_bar_width
+    }
+
     pub(in crate::workspace) fn sidebar_panel_width(&self) -> f32 {
-        (self.sidebar_width - self.tokens.metrics.activity_bar_width).max(0.0)
+        sidebar_panel_width(self.sidebar_width, self.activity_bar_width())
+    }
+
+    /// Height of the single row that hosts the tab strip next to the window title
+    /// bar or the client-drawn window controls.
+    pub(in crate::workspace) fn chrome_row_height(&self) -> f32 {
+        self.tokens.metrics.tabbar_height
+    }
+
+    /// Vertical offset where the main content body starts, below all window chrome.
+    pub(in crate::workspace) fn body_top(&self, window: &Window) -> f32 {
+        self.window_titlebar_height(window) + self.chrome_row_height()
+    }
+
+    /// Vertical band occupied by the tab strip inside the window.
+    pub(in crate::workspace) fn tabbar_band(&self, window: &Window) -> (f32, f32) {
+        (
+            self.body_top(window) - self.chrome_row_height(),
+            self.chrome_row_height(),
+        )
     }
 
     pub(in crate::workspace) fn set_sidebar_width(
@@ -356,7 +390,7 @@ impl WorkspaceApp {
     ) {
         // The split lives below the native/custom titlebar and the fixed
         // primary-sidebar header, so convert the window cursor into that body.
-        let body_top = self.window_titlebar_height(window) + self.tokens.metrics.tabbar_height;
+        let body_top = self.body_top(window);
         let body_height = (f32::from(window.viewport_size().height) - body_top).max(1.0);
         let fraction = ((f32::from(cursor_y) - body_top) / body_height).clamp(
             EMBEDDED_SFTP_MIN_SESSION_FRACTION,

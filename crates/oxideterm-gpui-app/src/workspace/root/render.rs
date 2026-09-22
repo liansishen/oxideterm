@@ -274,6 +274,7 @@ impl WorkspaceApp {
             .connection_flow
             .read(cx)
             .has_keyboard_interactive_challenge();
+        let chrome_bottom = self.body_top(window);
         let overlay_layers = {
             let tokens = self.tokens;
             let i18n = &self.i18n;
@@ -290,6 +291,7 @@ impl WorkspaceApp {
                     mono_font_family,
                     native_update_notification,
                     show_connection_cards,
+                    chrome_bottom,
                     cx,
                 )
             })
@@ -305,7 +307,7 @@ impl WorkspaceApp {
             || self.ai_entity.read(cx).chat_ui().sidebar_resizing;
         let embedded_sftp_resize_cursor_active = self.embedded_sftp_sidebar_resizing;
         let read_only_selection_workspace = cx.entity();
-        self.update_main_window_tabbar_drop_bounds(window, titlebar_visible, zen_mode, cx);
+        self.update_main_window_tabbar_drop_bounds(window, zen_mode, cx);
 
         div()
             .id("workspace-root")
@@ -1226,9 +1228,7 @@ impl WorkspaceApp {
                 let placement = if self.settings_store.settings().terminal.command_bar.enabled {
                     actions::TerminalBroadcastMenuPlacement::Bottom(62.0)
                 } else {
-                    actions::TerminalBroadcastMenuPlacement::Top(
-                        effective_titlebar_height + self.tokens.metrics.tabbar_height + 6.0,
-                    )
+                    actions::TerminalBroadcastMenuPlacement::Top(self.body_top(window) + 6.0)
                 };
                 root.child(self.workspace_context_menu_backdrop(
                     self.render_terminal_broadcast_menu(placement, cx),

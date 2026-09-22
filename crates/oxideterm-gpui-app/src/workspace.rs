@@ -305,7 +305,7 @@ use self::sidebar::AiStreamDeliveryEvent;
 use self::sidebar::{ActiveSessionSidebarViewMode, SidebarSection};
 use self::sidebar::{
     AiCompactionDelivery, AiCompactionDeliverySender, AiStreamDelivery, AiStreamDeliverySender,
-    ai_now_ms,
+    ai_now_ms, sidebar_panel_width,
 };
 use self::tabs::{TabRemovalTransition, TerminalLocation};
 use self::terminal_entity::{WorkspaceTerminalEntity, WorkspaceTerminalEvent};

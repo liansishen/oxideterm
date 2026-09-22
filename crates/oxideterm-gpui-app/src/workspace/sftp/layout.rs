@@ -17,7 +17,7 @@ impl WorkspaceApp {
         let zen_mode = self.settings_store.settings().sidebar_ui.zen_mode;
         let mut width = f32::from(window.viewport_size().width);
         if !zen_mode {
-            width -= self.tokens.metrics.activity_bar_width;
+            width -= self.activity_bar_width();
             if self.sidebar_rendered {
                 width -= self.sidebar_panel_width();
             }

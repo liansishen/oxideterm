@@ -23,9 +23,10 @@ pub(in crate::workspace) struct PlannedTerminalNotification {
 /// Resolve one pane notification for the notification center, or `None` when it
 /// must not reach the user.
 ///
-/// `pane_focused` drops bells from the pane the user is already reading, because
-/// the in-pane bell flash already covers that case. `window_active` keeps system
-/// toasts for when the application is in the background.
+/// Only a bell from the pane the user is actually reading stays a flash, and a
+/// backgrounded window is never being read even when its tab is active. Every
+/// other notification reaches the notification center, and `window_active`
+/// decides whether a system toast is posted as well.
 pub(in crate::workspace) fn plan_terminal_notification(
     i18n: &I18n,
     notification: TerminalNotification,
@@ -41,7 +42,8 @@ pub(in crate::workspace) fn plan_terminal_notification(
     } = notification;
     let (title, body, dedupe_key) = match source {
         TerminalNotificationSource::Bell => {
-            if pane_focused {
+            // The flash already covers a bell while the user is looking at the window.
+            if pane_focused && window_active {
                 return None;
             }
             // Programs repeat bells, so collapse them per pane; otherwise a chatty
@@ -156,7 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn bell_from_the_focused_pane_is_only_the_flash() {
+    fn bell_from_the_focused_pane_stays_a_flash_while_the_window_is_active() {
         let focused = plan_terminal_notification(
             &i18n(),
             TerminalNotification::bell(),
@@ -167,6 +169,22 @@ mod tests {
         );
 
         assert!(focused.is_none());
+    }
+
+    #[test]
+    fn bell_from_the_active_tab_notifies_while_the_window_is_backgrounded() {
+        let plan = plan_terminal_notification(
+            &i18n(),
+            TerminalNotification::bell(),
+            Some("demo - grok".to_string()),
+            "7",
+            true,
+            false,
+        )
+        .expect("a backgrounded window is not being read, even on the active tab");
+
+        assert!(plan.show_system_notification);
+        assert_eq!(plan.dedupe_key.as_deref(), Some("terminal-bell:7"));
     }
 
     #[test]

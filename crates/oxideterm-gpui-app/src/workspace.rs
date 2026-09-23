@@ -68,6 +68,7 @@ mod terminal_entity;
 mod terminal_git;
 mod terminal_notification;
 mod terminal_project;
+mod terminal_sync_groups;
 mod terminal_triggers_runtime;
 mod version_migration;
 mod virtual_list;

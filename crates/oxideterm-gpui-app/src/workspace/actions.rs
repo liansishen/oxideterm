@@ -217,12 +217,12 @@ mod terminal_search_tests {
 
 fn terminal_tab_capture_blocked_by_workspace_ui(
     active_ime_target: bool,
-    quick_commands_open: bool,
+    quick_commands_focused: bool,
 ) -> bool {
     // Text inputs, command palettes, and quick commands own Tab semantics while
     // they are active. The terminal fallback only handles the platform
     // focus-traversal path that would otherwise swallow a real terminal Tab.
-    active_ime_target || quick_commands_open
+    active_ime_target || quick_commands_focused
 }
 
 impl WorkspaceApp {
@@ -374,7 +374,7 @@ impl WorkspaceApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.close_terminal_quick_commands_popover(cx);
+        self.blur_terminal_quick_commands_input(cx);
         self.focus_search_pane(pane_id, cx);
         self.search.open(pane_id);
         window.focus(&self.focus_handle, cx);
@@ -727,12 +727,6 @@ impl WorkspaceApp {
             return true;
         }
 
-        if self.terminal.read(cx).quick_commands.is_open() {
-            self.close_terminal_quick_commands_popover(cx);
-            cx.notify();
-            return true;
-        }
-
         if self.close_terminal_cwd_picker(cx) {
             cx.notify();
             return true;
@@ -762,33 +756,68 @@ impl WorkspaceApp {
     pub(super) fn handle_terminal_command_overlay_escape(
         &mut self,
         event: &KeyDownEvent,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
         if event.keystroke.key.as_str() != "escape" || event.keystroke.modifiers.platform {
             return false;
         }
 
-        self.close_terminal_command_overlays(cx)
+        if self.close_terminal_command_overlays(cx) {
+            return true;
+        }
+        // A dock must not consume Escape from a focused shell or terminal application.
+        if self.focus_handle.is_focused(window) && self.terminal.read(cx).quick_commands.is_open() {
+            self.close_terminal_quick_commands_panel(cx);
+            self.focus_active_pane(window, cx);
+            cx.notify();
+            return true;
+        }
+        false
     }
 
     pub(super) fn toggle_terminal_broadcast(&mut self, cx: &mut Context<Self>) {
-        let (enabled, selected_group_id) = {
-            let terminal = self.terminal.read(cx);
-            (
-                terminal.broadcast_enabled(),
-                terminal.selected_broadcast_group_id(),
-            )
-        };
-        if !enabled && let Some(group_id) = selected_group_id {
-            self.select_terminal_broadcast_group(group_id, cx);
-            self.terminal.update(cx, |terminal, _cx| {
-                terminal.set_broadcast_menu_open(false);
-            });
-        } else {
-            self.terminal
-                .update(cx, |terminal, _cx| terminal.toggle_broadcast());
-        }
+        let active = self.active_pane_id(cx);
+        let member = active.and_then(|pane| self.terminal.read(cx).sync_groups().member(pane));
+        self.terminal.update(cx, |terminal, _| {
+            if let Some(member) = member {
+                if member.isolated {
+                    if let Some(pane) = active {
+                        terminal.sync_groups_mut().toggle_isolated(pane);
+                    }
+                } else {
+                    terminal.sync_groups_mut().toggle_enabled(member.group);
+                }
+            } else {
+                terminal.set_broadcast_menu_open(true);
+            }
+        });
         cx.notify();
+    }
+
+    pub(in crate::workspace) fn toggle_terminal_sync_isolation(
+        &mut self,
+        pane: PaneId,
+        cx: &mut Context<Self>,
+    ) {
+        self.terminal.update(cx, |terminal, _| {
+            terminal.sync_groups_mut().toggle_isolated(pane)
+        });
+        cx.notify();
+    }
+
+    pub(in crate::workspace) fn terminal_sync_group_name(
+        &self,
+        group: Option<uuid::Uuid>,
+    ) -> String {
+        group
+            .and_then(|id| {
+                self.terminal_broadcast_groups()
+                    .iter()
+                    .find(|group| group.id == id)
+            })
+            .map(|group| group.name.clone())
+            .unwrap_or_else(|| self.i18n.t("terminal.broadcast.temporary_group"))
     }
 
     pub(in crate::workspace) fn dismiss_terminal_broadcast_menu(
@@ -809,9 +838,9 @@ impl WorkspaceApp {
         let should_open = !self.terminal.read(cx).broadcast_menu_open();
         self.dismiss_terminal_broadcast_menu(cx);
         if should_open {
+            self.blur_terminal_quick_commands_input(cx);
             self.dismiss_terminal_recording_menu();
             self.dismiss_terminal_highlight_popover();
-            self.close_terminal_quick_commands_popover(cx);
             self.close_terminal_cwd_picker(cx);
             self.close_terminal_git_branch_picker(cx);
             self.close_terminal_project_panel(cx);
@@ -1024,7 +1053,7 @@ impl WorkspaceApp {
             return;
         }
 
-        if self.handle_terminal_command_overlay_escape(event, cx) {
+        if self.handle_terminal_command_overlay_escape(event, window, cx) {
             return;
         }
 
@@ -1120,7 +1149,11 @@ impl WorkspaceApp {
 
         if terminal_tab_capture_blocked_by_workspace_ui(
             self.active_ime_target(cx).is_some(),
-            self.terminal.read(cx).quick_commands.is_open(),
+            self.terminal
+                .read(cx)
+                .quick_commands
+                .focused_input()
+                .is_some(),
         ) {
             return false;
         }
@@ -1856,9 +1889,7 @@ impl WorkspaceApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.terminal.read(cx).broadcast_enabled() {
-            self.retain_live_terminal_broadcast_targets(cx);
-        }
+        self.retain_live_terminal_broadcast_targets(cx);
         let parameter_values = command
             .parameters
             .iter()
@@ -1891,6 +1922,7 @@ impl WorkspaceApp {
                     || !prepared.unavailable_targets.is_empty()
             });
         if needs_dialog || prepared.is_err() {
+            self.prepare_terminal_quick_commands_panel(window, cx);
             self.terminal.update(cx, |terminal, _cx| {
                 terminal.quick_commands.request_execution(command.clone())
             });
@@ -1910,9 +1942,7 @@ impl WorkspaceApp {
             return Vec::new();
         };
         let mut pane_ids = vec![active_pane_id];
-        if self.terminal.read(cx).broadcast_enabled() {
-            pane_ids.extend(self.terminal_broadcast_target_panes(active_pane_id, cx));
-        }
+        pane_ids.extend(self.terminal_broadcast_target_panes(active_pane_id, cx));
         pane_ids
             .into_iter()
             .filter_map(|pane_id| {
@@ -1938,7 +1968,9 @@ impl WorkspaceApp {
         let selected_group_name = self
             .terminal
             .read(cx)
-            .selected_broadcast_group_id()
+            .sync_groups()
+            .member(pane_id)
+            .and_then(|member| member.group)
             .and_then(|group_id| {
                 self.settings_store
                     .settings()
@@ -2498,7 +2530,9 @@ impl WorkspaceApp {
         candidates
             .retain(|pane_id| *pane_id != source_pane_id && tab_host.panes().contains_key(pane_id));
 
-        self.terminal.read(cx).filter_broadcast_targets(candidates)
+        self.terminal
+            .read(cx)
+            .filter_broadcast_targets(source_pane_id, candidates)
     }
 
     fn retain_live_terminal_broadcast_targets(&mut self, cx: &mut Context<Self>) {
@@ -2525,11 +2559,7 @@ impl WorkspaceApp {
                 if !tab_host.panes().contains_key(&pane_id) {
                     continue;
                 }
-                let label = if root.pane_count() > 1 {
-                    format!("{} · {}", tab.title, pane_id)
-                } else {
-                    tab.title.clone()
-                };
+                let label = tab.title.clone();
                 let saved_connection = root
                     .session_id_for_pane(pane_id)
                     .and_then(|session_id| self.terminal_saved_connection_refs.get(&session_id))
@@ -2714,29 +2744,53 @@ impl WorkspaceApp {
 
     pub(in crate::workspace) fn toggle_terminal_broadcast_group_member(
         &mut self,
-        group_id: uuid::Uuid,
-        target: oxideterm_settings::TerminalBroadcastTargetRef,
+        pane_id: PaneId,
         cx: &mut Context<Self>,
     ) {
-        self.edit_settings(
-            |settings| {
-                let Some(group) = settings
-                    .terminal
-                    .broadcast_groups
-                    .iter_mut()
-                    .find(|group| group.id == group_id)
-                else {
-                    return;
-                };
-                if let Some(index) = group.members.iter().position(|member| member == &target) {
-                    group.members.remove(index);
-                } else {
-                    group.members.push(target);
-                }
-            },
-            cx,
-        );
-        self.select_terminal_broadcast_group(group_id, cx);
+        let group_id = self.terminal.read(cx).selected_broadcast_group_id();
+        if self
+            .terminal
+            .read(cx)
+            .sync_groups()
+            .member(pane_id)
+            .is_some_and(|member| member.group != group_id)
+        {
+            return;
+        }
+        let entry = self
+            .terminal_broadcast_entries(cx)
+            .into_iter()
+            .find(|entry| entry.pane_id == pane_id);
+        self.terminal
+            .update(cx, |terminal, _| terminal.toggle_broadcast_target(pane_id));
+        if let (Some(group_id), Some(target)) =
+            (group_id, entry.and_then(|entry| entry.saved_connection))
+        {
+            let members = self.terminal.read(cx).sync_groups().panes(Some(group_id));
+            let profile_still_used = self.terminal_broadcast_entries(cx).iter().any(|entry| {
+                members.contains(&entry.pane_id) && entry.saved_connection.as_ref() == Some(&target)
+            });
+            self.edit_settings(
+                |settings| {
+                    if let Some(group) = settings
+                        .terminal
+                        .broadcast_groups
+                        .iter_mut()
+                        .find(|group| group.id == group_id)
+                    {
+                        if profile_still_used {
+                            if !group.members.contains(&target) {
+                                group.members.push(target);
+                            }
+                        } else {
+                            group.members.retain(|member| member != &target);
+                        }
+                    }
+                },
+                cx,
+            );
+        }
+        cx.notify();
     }
 
     fn terminal_command_should_handoff_focus(&self, command: &str) -> bool {

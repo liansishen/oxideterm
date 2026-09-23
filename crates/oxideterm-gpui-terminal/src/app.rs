@@ -28,10 +28,10 @@ use oxideterm_terminal::{
     TerminalCommandMarkConfidence, TerminalCommandMarkDetectionSource, TerminalCommandMarkEvent,
     TerminalCwdIntegrationLaunchState, TerminalDrainBudget, TerminalDrainReport,
     TerminalEditorApplication, TerminalEditorClipboardOperation, TerminalEditorIntegrationEvent,
-    TerminalEvent, TerminalLifecycle, TerminalOutputProcessor, TerminalProcessInfo,
-    TerminalProcessProbe, TerminalRow, TerminalSearchMatch, TerminalSession, TerminalSessionKind,
-    TerminalSnapshot, TmuxSeparator, TmuxSeparatorDirection, TrzszTransferDirection,
-    TrzszTransferSelection, serial_list_ports,
+    TerminalEvent, TerminalLifecycle, TerminalNotification, TerminalOutputProcessor,
+    TerminalProcessInfo, TerminalProcessProbe, TerminalRow, TerminalSearchMatch, TerminalSession,
+    TerminalSessionKind, TerminalSnapshot, TmuxSeparator, TmuxSeparatorDirection,
+    TrzszTransferDirection, TrzszTransferSelection, serial_list_ports,
 };
 use oxideterm_trzsz::TrzszState;
 use parking_lot::Mutex;
@@ -172,6 +172,8 @@ pub enum TerminalPaneEvent {
     ContextActionRequested,
     // Match payloads remain pane-owned; Workspace drains them using the source pane identity.
     TriggerMatchesAvailable,
+    // Notification text stays pane-owned; Workspace drains it using the source pane identity.
+    TerminalNotificationAvailable,
     // Search completion is asynchronous; Workspace reads the latest pane-owned status.
     SearchStatusChanged,
     // Persistence stays workspace-owned because panes do not own saved connection profiles.
@@ -489,6 +491,7 @@ pub struct TerminalPane {
     context_menu_presence: oxideterm_gpui_ui::motion::ExitPresence,
     context_action_requested: Option<TerminalContextAction>,
     pending_trigger_matches: VecDeque<oxideterm_terminal_triggers::TriggerMatched>,
+    pending_terminal_notifications: VecDeque<TerminalNotification>,
     plugin_input_interceptor: Option<TerminalInputInterceptor>,
     input_broadcaster: Option<TerminalInputBroadcaster>,
     #[cfg(test)]
@@ -1187,6 +1190,7 @@ impl TerminalPane {
             context_menu_presence: oxideterm_gpui_ui::motion::ExitPresence::visible(),
             context_action_requested: None,
             pending_trigger_matches: VecDeque::new(),
+            pending_terminal_notifications: VecDeque::new(),
             plugin_input_interceptor: None,
             input_broadcaster: None,
             #[cfg(test)]
@@ -1316,6 +1320,14 @@ impl TerminalPane {
 
     pub fn title(&self) -> SharedString {
         self.title.clone()
+    }
+
+    /// Terminal title for notification text, or `None` while the pane still shows
+    /// the application default, which carries no per-pane information.
+    pub fn notification_label(&self) -> Option<String> {
+        const APPLICATION_DEFAULT_TITLE: &str = "OxideTerm";
+        let title = self.title.trim();
+        (!title.is_empty() && title != APPLICATION_DEFAULT_TITLE).then(|| title.to_string())
     }
 
     fn set_selection(&mut self, selection: Option<TerminalSelection>) {
@@ -2526,6 +2538,28 @@ impl TerminalPane {
         self.pending_trigger_matches.drain(..).collect()
     }
 
+    pub fn take_terminal_notifications(&mut self) -> Vec<TerminalNotification> {
+        self.pending_terminal_notifications.drain(..).collect()
+    }
+
+    /// Queue pane-owned notification text and wake the owner once, so several
+    /// notifications arriving in one batch coalesce into a single delivery.
+    fn queue_terminal_notification(
+        &mut self,
+        notification: TerminalNotification,
+        cx: &mut Context<Self>,
+    ) {
+        const MAX_PENDING_TERMINAL_NOTIFICATIONS: usize = 16;
+        let should_emit = self.pending_terminal_notifications.is_empty();
+        if self.pending_terminal_notifications.len() >= MAX_PENDING_TERMINAL_NOTIFICATIONS {
+            self.pending_terminal_notifications.pop_front();
+        }
+        self.pending_terminal_notifications.push_back(notification);
+        if should_emit {
+            cx.emit(TerminalPaneEvent::TerminalNotificationAvailable);
+        }
+    }
+
     pub fn send_command_sender_raw_bytes(&mut self, bytes: &[u8], cx: &mut Context<Self>) -> bool {
         if bytes.is_empty() || !self.terminal_accepts_input() {
             return false;
@@ -3237,6 +3271,10 @@ impl TerminalPane {
                 }
                 TerminalEventEffect::default()
             }
+            TerminalEvent::Notification(notification) => {
+                self.queue_terminal_notification(notification, cx);
+                TerminalEventEffect::default()
+            }
             TerminalEvent::PrivilegePrompt(event) => {
                 let previous_state_generation = self.privilege_prompt_tracker.state_generation();
                 self.privilege_prompt_tracker
@@ -3254,6 +3292,7 @@ impl TerminalPane {
             }
             TerminalEvent::Bell => {
                 self.bell_flash = true;
+                self.queue_terminal_notification(TerminalNotification::bell(), cx);
                 cx.spawn(async move |weak, cx| {
                     cx.background_executor()
                         .timer(Duration::from_millis(180))

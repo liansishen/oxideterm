@@ -85,6 +85,8 @@ pub enum TerminalEvent {
     TitleChanged(String),
     TitleReset,
     Bell,
+    /// A program asked for the user's attention through a notification OSC.
+    Notification(crate::terminal_notification::TerminalNotification),
     Wakeup,
     BlinkChanged(bool),
     ChildExited(Option<i32>),

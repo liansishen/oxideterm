@@ -3,6 +3,8 @@
     "title": "事件日誌",
     "center_description": "集中檢視工作區通知與事件記錄。",
     "notification_empty": "暫無通知",
+    "terminal_notification_title": "終端機通知",
+    "terminal_bell_title": "終端機響鈴",
     "dnd": {
       "on": "勿擾模式",
       "enable": "開啟勿擾模式",

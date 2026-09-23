@@ -198,6 +198,52 @@ impl WorkspaceApp {
                 let matches = pane.update(cx, |pane, _cx| pane.take_trigger_matches());
                 self.handle_terminal_trigger_matches(pane_id, session_id, pane_owner, matches, cx);
             }
+            TerminalPaneEvent::TerminalNotificationAvailable => {
+                let Some(pane) = self.tab_host.read(cx).panes().get(&pane_id).cloned() else {
+                    return;
+                };
+                let notifications = pane.update(cx, |pane, _cx| pane.take_terminal_notifications());
+                if notifications.is_empty() {
+                    return;
+                }
+                // Text stays pane-owned; the workspace resolves presentation from
+                // the pane identity and the current focus state.
+                let pane_label = pane.read(cx).notification_label();
+                let pane_focused = self.active_pane_id(cx) == Some(pane_id);
+                let window_active = cx
+                    .update_window(window_handle, |_, window, _| window.is_window_active())
+                    .unwrap_or(false);
+                let pane_key = pane_id.0.to_string();
+                for notification in notifications {
+                    let Some(plan) = terminal_notification::plan_terminal_notification(
+                        &self.i18n,
+                        notification,
+                        pane_label.clone(),
+                        &pane_key,
+                        pane_focused,
+                        window_active,
+                    ) else {
+                        continue;
+                    };
+                    self.push_notification_entry(
+                        plan.kind,
+                        plan.severity,
+                        plan.title.clone(),
+                        plan.body.clone(),
+                        WorkspaceNotificationScope::Global,
+                        plan.dedupe_key,
+                    );
+                    if plan.show_system_notification {
+                        cx.show_system_notification(gpui::SystemNotification {
+                            tag: plan.system_tag.into(),
+                            title: plan.title.into(),
+                            body: plan.body.unwrap_or_default().into(),
+                            actions: Vec::new(),
+                        });
+                    }
+                }
+                cx.notify();
+            }
             TerminalPaneEvent::CurrentDirectoryChanged => {
                 if self.active_pane_id(cx) == Some(pane_id) {
                     self.sync_active_terminal_metadata_context(cx);

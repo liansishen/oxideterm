@@ -1061,6 +1061,151 @@ mod tests {
         assert!(visible_text.contains("$"));
     }
 
+    /// Counts bells the emulator itself observes, so a notification protocol can be
+    /// checked for double-reporting its own terminator.
+    #[derive(Clone)]
+    struct BellCounter(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+    impl alacritty_terminal::event::EventListener for BellCounter {
+        fn send_event(&self, event: alacritty_terminal::event::Event) {
+            if matches!(event, alacritty_terminal::event::Event::Bell) {
+                self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
+
+    fn notification_events(events: &[crate::TerminalEvent]) -> Vec<&crate::TerminalNotification> {
+        events
+            .iter()
+            .filter_map(|event| match event {
+                crate::TerminalEvent::Notification(notification) => Some(notification),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn shell_integration_osc9_notification_consumes_its_terminator() {
+        let size = TerminalSize {
+            cols: 80,
+            rows: 8,
+            cell_width: 8,
+            cell_height: 17,
+        };
+        let bells = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut term = Term::new(Config::default(), &size, BellCounter(bells.clone()));
+        let mut parser = Processor::<StdSyncHandler>::new();
+        let mut integration = crate::shell_integration::TerminalShellIntegration::default();
+        let mut events = Vec::new();
+
+        integration.advance(
+            &mut parser,
+            &mut term,
+            b"\x1b]9;Turn complete\x07$ ",
+            |event| events.push(event),
+        );
+
+        let notifications = notification_events(&events);
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(
+            notifications[0].source,
+            crate::TerminalNotificationSource::Osc9
+        );
+        assert_eq!(notifications[0].body.as_deref(), Some("Turn complete"));
+        assert_eq!(
+            bells.load(std::sync::atomic::Ordering::Relaxed),
+            0,
+            "the notification terminator must not ring the bell as well"
+        );
+        let snapshot = snapshot_from_term(&term, size, &TerminalGraphicsState::default());
+        let visible_text = snapshot
+            .lines
+            .iter()
+            .map(|row| row.text())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!visible_text.contains("Turn complete"));
+        assert!(visible_text.contains("$"));
+    }
+
+    #[test]
+    fn shell_integration_bare_bell_stays_a_bell() {
+        let size = TerminalSize {
+            cols: 80,
+            rows: 8,
+            cell_width: 8,
+            cell_height: 17,
+        };
+        let bells = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut term = Term::new(Config::default(), &size, BellCounter(bells.clone()));
+        let mut parser = Processor::<StdSyncHandler>::new();
+        let mut integration = crate::shell_integration::TerminalShellIntegration::default();
+        let mut events = Vec::new();
+
+        integration.advance(&mut parser, &mut term, b"\x07", |event| events.push(event));
+
+        assert_eq!(bells.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert!(notification_events(&events).is_empty());
+    }
+
+    #[test]
+    fn shell_integration_osc_progress_is_not_a_notification() {
+        let size = TerminalSize {
+            cols: 80,
+            rows: 8,
+            cell_width: 8,
+            cell_height: 17,
+        };
+        let mut term = Term::new(Config::default(), &size, VoidListener);
+        let mut parser = Processor::<StdSyncHandler>::new();
+        let mut integration = crate::shell_integration::TerminalShellIntegration::default();
+        let mut events = Vec::new();
+
+        integration.advance(
+            &mut parser,
+            &mut term,
+            b"\x1b]9;4;1;-1\x07",
+            |event| events.push(event),
+        );
+
+        assert!(notification_events(&events).is_empty());
+    }
+
+    #[test]
+    fn shell_integration_osc777_and_osc99_notifications_carry_their_text() {
+        let size = TerminalSize {
+            cols: 80,
+            rows: 8,
+            cell_width: 8,
+            cell_height: 17,
+        };
+        let mut term = Term::new(Config::default(), &size, VoidListener);
+        let mut parser = Processor::<StdSyncHandler>::new();
+        let mut integration = crate::shell_integration::TerminalShellIntegration::default();
+        let mut events = Vec::new();
+
+        integration.advance(
+            &mut parser,
+            &mut term,
+            b"\x1b]777;notify;Grok;Turn complete\x1b\\\x1b]99;i=grok;Turn complete\x1b\\",
+            |event| events.push(event),
+        );
+
+        let notifications = notification_events(&events);
+        assert_eq!(notifications.len(), 2);
+        assert_eq!(
+            notifications[0].source,
+            crate::TerminalNotificationSource::Osc777
+        );
+        assert_eq!(notifications[0].title.as_deref(), Some("Grok"));
+        assert_eq!(notifications[0].body.as_deref(), Some("Turn complete"));
+        assert_eq!(
+            notifications[1].source,
+            crate::TerminalNotificationSource::Osc99
+        );
+        assert_eq!(notifications[1].title.as_deref(), Some("Turn complete"));
+    }
+
     #[test]
     fn shell_integration_private_remote_metadata_accepts_version_two() {
         let size = TerminalSize {

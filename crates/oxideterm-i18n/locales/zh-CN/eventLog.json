@@ -3,6 +3,8 @@
     "title": "事件日志",
     "center_description": "集中查看工作区通知与事件记录。",
     "notification_empty": "暂无通知",
+    "terminal_notification_title": "终端通知",
+    "terminal_bell_title": "终端响铃",
     "dnd": {
       "on": "勿扰模式",
       "enable": "开启勿扰模式",

@@ -3,6 +3,8 @@
     "title": "Journal d'événements",
     "center_description": "Consultez au même endroit les notifications et l’historique des événements de l’espace de travail.",
     "notification_empty": "Aucune notification",
+    "terminal_notification_title": "Notification du terminal",
+    "terminal_bell_title": "Cloche du terminal",
     "dnd": {
       "on": "Ne pas déranger",
       "enable": "Activer Ne pas déranger",

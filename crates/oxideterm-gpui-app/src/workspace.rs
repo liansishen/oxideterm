@@ -66,6 +66,7 @@ mod terminal_context_actions;
 mod terminal_cwd;
 mod terminal_entity;
 mod terminal_git;
+mod terminal_notification;
 mod terminal_project;
 mod terminal_triggers_runtime;
 mod version_migration;

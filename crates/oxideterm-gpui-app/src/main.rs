@@ -249,6 +249,9 @@ fn main() {
     });
 
     application.run(move |cx: &mut App| {
+        // Windows drops notifications posted without an AppUserModelID, and the
+        // other platforms use the same identity as the notification's app name.
+        cx.set_app_identity("com.oxideterm.OxideTerm", "OxideTerm");
         oxideterm_desktop_presence::set_keep_running_on_close(
             startup_settings.general.minimize_to_tray_on_close,
         );

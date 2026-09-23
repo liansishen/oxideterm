@@ -3,6 +3,8 @@
     "title": "Registro eventi",
     "center_description": "Consulta in un unico posto le notifiche e la cronologia eventi dell’area di lavoro.",
     "notification_empty": "Nessuna notifica",
+    "terminal_notification_title": "Notifica del terminale",
+    "terminal_bell_title": "Campanello del terminale",
     "dnd": {
       "on": "Non disturbare",
       "enable": "Attiva Non disturbare",

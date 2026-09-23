@@ -171,6 +171,10 @@ correctness.
 - Backspace and Delete compatibility settings affect only legacy terminal key
   encoding. Kitty keyboard protocol mode owns its protocol-defined sequences
   and must ignore these compatibility overrides.
+- Notification OSC protocols (9, 99, 777) belong to the pane owner. Consume the
+  whole sequence, including a BEL terminator, so that terminator cannot also
+  surface as a bell. Payload text is untrusted: strip control characters and cap
+  its length before it reaches a notification surface.
 
 ## Native Render Policy
 

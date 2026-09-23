@@ -298,6 +298,7 @@ pub(crate) struct TerminalShellIntegration {
     pending_escape: bool,
     next_command_sequence: u64,
     saved_history_clear_detector: SavedHistoryClearDetector,
+    notifications: crate::terminal_notification::TerminalNotificationTracker,
 }
 
 impl TerminalShellIntegration {
@@ -672,6 +673,16 @@ impl TerminalShellIntegration {
             && let Some((cwd, host)) = parse_osc1337_cwd(data)
         {
             emit(crate::TerminalEvent::CwdChanged { cwd, host });
+            return true;
+        }
+        // Terminal notification protocols belong to the pane owner rather than to
+        // the emulator, which would drop or misread them.
+        if self
+            .notifications
+            .observe_osc(code, data, &mut |notification| {
+                emit(crate::TerminalEvent::Notification(notification));
+            })
+        {
             return true;
         }
         let source = match code {

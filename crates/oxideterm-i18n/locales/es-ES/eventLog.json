@@ -3,6 +3,8 @@
     "title": "Registro de eventos",
     "center_description": "Consulta en un solo lugar las notificaciones y el historial de eventos del espacio de trabajo.",
     "notification_empty": "Sin notificaciones",
+    "terminal_notification_title": "Notificación del terminal",
+    "terminal_bell_title": "Campana del terminal",
     "dnd": {
       "on": "No molestar",
       "enable": "Activar No molestar",

@@ -42,6 +42,7 @@ mod selection;
 mod session;
 mod shell_completion;
 mod shell_integration;
+mod terminal_notification;
 mod tmux;
 
 pub use tmux::{
@@ -108,6 +109,8 @@ pub use shell_integration::{
     TerminalCommandMarkClosedBy, TerminalCommandMarkConfidence, TerminalCommandMarkDetectionSource,
     TerminalCommandMarkEvent,
 };
+
+pub use terminal_notification::{TerminalNotification, TerminalNotificationSource};
 
 use color::{
     OXIDETERM_DARK_THEME, attrs_from_flags, color_for_alacritty_request_with_override,

@@ -3,6 +3,8 @@
     "title": "Ereignisprotokoll",
     "center_description": "Benachrichtigungen und Ereignisverlauf des Arbeitsbereichs an einem Ort anzeigen.",
     "notification_empty": "Keine Benachrichtigungen",
+    "terminal_notification_title": "Terminal-Benachrichtigung",
+    "terminal_bell_title": "Terminal-Klingel",
     "dnd": {
       "on": "Nicht stören",
       "enable": "Nicht stören aktivieren",

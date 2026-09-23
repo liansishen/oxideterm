@@ -3,6 +3,8 @@
     "title": "イベントログ",
     "center_description": "ワークスペースの通知とイベント履歴をまとめて確認します。",
     "notification_empty": "通知はありません",
+    "terminal_notification_title": "ターミナル通知",
+    "terminal_bell_title": "ターミナルのベル",
     "dnd": {
       "on": "おやすみモード",
       "enable": "おやすみモードを有効化",

@@ -3,6 +3,8 @@
     "title": "Event Log",
     "center_description": "Review workspace notifications and event history in one place.",
     "notification_empty": "No notifications",
+    "terminal_notification_title": "Terminal notification",
+    "terminal_bell_title": "Terminal bell",
     "dnd": {
       "on": "Do Not Disturb",
       "enable": "Enable Do Not Disturb",

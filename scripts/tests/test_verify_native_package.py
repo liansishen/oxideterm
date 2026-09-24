@@ -62,7 +62,7 @@ class ArtifactNameTests(unittest.TestCase):
 
 class PortableArchiveTests(unittest.TestCase):
     def required_entries(self, root: str, executable: str) -> list[str]:
-        return [
+        entries = [
             f"{root}/{executable}",
             f"{root}/portable",
             f"{root}/VERSION",
@@ -75,6 +75,13 @@ class PortableArchiveTests(unittest.TestCase):
             ),
             *(f"{root}/{name}" for name in verify_native_package.REQUIRED_DOCUMENTS),
         ]
+        if executable.endswith(".exe"):
+            # Windows packages keep the ConPTY runtime beside the executable.
+            entries.extend(
+                f"{root}/{name}"
+                for name in sorted(verify_native_package.WINDOWS_CONPTY_RUNTIME_FILES)
+            )
+        return entries
 
     def entry_bytes(self, name: str, executable: str) -> bytes:
         if name.endswith("VERSION"):
@@ -108,6 +115,22 @@ class PortableArchiveTests(unittest.TestCase):
             verify_native_package.verify_portable_archive(
                 path, "x86_64-pc-windows-msvc", "2.0.0"
             )
+
+    def test_windows_portable_archive_rejects_missing_conpty_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "portable.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                for name in self.required_entries("OxideTerm", "oxideterm-native.exe"):
+                    if name.endswith("/conpty.dll"):
+                        continue
+                    archive.writestr(
+                        name, self.entry_bytes(name, "oxideterm-native.exe")
+                    )
+
+            with self.assertRaisesRegex(RuntimeError, "conpty.dll"):
+                verify_native_package.verify_portable_archive(
+                    path, "x86_64-pc-windows-msvc", "2.0.0"
+                )
 
     def test_linux_portable_archive_rejects_missing_agent_notice(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

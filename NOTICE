@@ -72,6 +72,16 @@ GPUI text contrast and gamma correction code is adapted from Microsoft
 Terminal commit 1283c0f5b99a2961673249fa77c6b986efb5086c. The complete license
 is shipped as MICROSOFT-TERMINAL-LICENSE-MIT.
 
+Windows Console ConPTY runtime
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT License.
+conpty.dll and x64/OpenConsole.exe from the Microsoft.Windows.Console.ConPTY
+1.24.260710001 package are installed next to oxideterm-native.exe so local
+terminals use the Windows Terminal ConPTY implementation instead of the legacy
+system one. The package version and file hashes are recorded in
+crates/oxideterm-gpui-app/resources/windows/conpty/README.md. The complete
+license is shipped as MICROSOFT-TERMINAL-LICENSE-MIT.
+
 Linux graphics runtime
 The GPUI WGPU backend loads Vulkan and OpenGL/EGL loaders at runtime. As a
 result, libvulkan.so.1 and libEGL.so.1 may not appear in link-time dependency

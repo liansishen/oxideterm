@@ -24,6 +24,9 @@ dist/
 __pycache__/
 *.py[cod]
 
+# Vendored Windows ConPTY runtime (installed next to the executable)
+!crates/oxideterm-gpui-app/resources/windows/conpty/conpty.dll
+
 # Environment
 .env
 .env.local

@@ -501,6 +501,58 @@ class ReleaseDocumentTests(unittest.TestCase):
             self.assertNotIn("data", manifest["managedEntries"])
             self.assertNotIn("portable.json", manifest["managedEntries"])
 
+    def test_portable_update_manifest_tracks_windows_conpty_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            package_root = Path(directory)
+            binary = package_root / "oxideterm-native.exe"
+            update_helper = package_root / "oxideterm-update-helper.exe"
+            manifest_path = package_root / "portable-update.json"
+
+            package_native.write_portable_update_manifest(
+                package_root, binary, update_helper
+            )
+            absent = package_native.json.loads(manifest_path.read_text(encoding="utf-8"))
+            for name in package_native.CONPTY_RUNTIME_FILES:
+                self.assertNotIn(name, absent["managedEntries"])
+
+            for name in package_native.CONPTY_RUNTIME_FILES:
+                (package_root / name).write_bytes(b"runtime")
+
+            package_native.write_portable_update_manifest(
+                package_root, binary, update_helper
+            )
+            present = package_native.json.loads(manifest_path.read_text(encoding="utf-8"))
+            for name in package_native.CONPTY_RUNTIME_FILES:
+                self.assertIn(name, present["managedEntries"])
+
+
+class WindowsConptyRuntimeTests(unittest.TestCase):
+    def test_windows_package_installs_conpty_runtime_beside_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory)
+            package_native.copy_windows_conpty_runtime(
+                destination, "x86_64-pc-windows-msvc"
+            )
+
+            sources = {
+                "conpty.dll": package_native.CONPTY_RUNTIME_DIR / "conpty.dll",
+                "OpenConsole.exe": package_native.CONPTY_RUNTIME_DIR
+                / "x64"
+                / "OpenConsole.exe",
+            }
+            for name in package_native.CONPTY_RUNTIME_FILES:
+                copied = destination / name
+                self.assertEqual(copied.read_bytes(), sources[name].read_bytes())
+
+    def test_non_windows_package_omits_conpty_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory)
+            package_native.copy_windows_conpty_runtime(
+                destination, "aarch64-apple-darwin"
+            )
+
+            self.assertEqual(list(destination.iterdir()), [])
+
 
 class ReleaseVersionTests(unittest.TestCase):
     def test_release_version_must_match_compiled_workspace_version(self) -> None:

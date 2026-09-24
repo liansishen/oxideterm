@@ -52,6 +52,9 @@ AGENT_BINARY_PREFIX = "oxideterm-agent-"
 ENCODED_AGENT_SUFFIX = ".b64"
 HELPER_RESOURCE_DIR = "helpers"
 CONPTY_RUNTIME_DIR = RESOURCE_DIR / "windows" / "conpty"
+# Installed beside the executable and listed in the portable update manifest so
+# in-place updates replace them along with the rest of the package.
+CONPTY_RUNTIME_FILES = ("conpty.dll", "OpenConsole.exe")
 UPDATE_HELPER_DIR = "tools"
 WINDOWS_UPDATE_STAGING_DIR = "install"
 WINDOWS_UPDATE_FLAG = "OXIDETERM_UPDATE"
@@ -433,13 +436,15 @@ def copy_windows_conpty_runtime(dst: Path, target: str) -> None:
     if "windows" not in target:
         return
     arch = "arm64" if "aarch64" in target else "x64"
-    for source in (
-        CONPTY_RUNTIME_DIR / "conpty.dll",
-        CONPTY_RUNTIME_DIR / arch / "OpenConsole.exe",
-    ):
+    sources = {
+        "conpty.dll": CONPTY_RUNTIME_DIR / "conpty.dll",
+        "OpenConsole.exe": CONPTY_RUNTIME_DIR / arch / "OpenConsole.exe",
+    }
+    for name in CONPTY_RUNTIME_FILES:
+        source = sources[name]
         if not source.is_file():
             raise FileNotFoundError(f"ConPTY runtime file not found: {source}")
-        shutil.copy2(source, dst / source.name)
+        shutil.copy2(source, dst / name)
 
 
 def nsis_path(path: Path) -> str:
@@ -982,6 +987,9 @@ def write_portable_update_manifest(
     """Declare exactly which package-owned entries may be replaced in place."""
     managed_entries = [
         binary.name,
+        # Windows packages install the ConPTY runtime beside the executable, so
+        # in-place updates have to replace those files as well.
+        *(name for name in CONPTY_RUNTIME_FILES if (package_root / name).is_file()),
         "resources",
         *(destination_name for _source, destination_name in RELEASE_DOCUMENTS),
         PACKAGE_VERSION_FILENAME,

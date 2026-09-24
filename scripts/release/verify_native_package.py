@@ -171,6 +171,10 @@ def verify_portable_archive(path: Path, target: str, expected_version: str) -> N
         PACKAGE_VERSION_FILENAME,
         PORTABLE_UPDATE_MANIFEST_FILENAME,
     }
+    if "windows" in target:
+        # In-place updates only replace manifest entries, so the ConPTY runtime
+        # has to be listed or updated Windows installs lose it again.
+        required_managed_entries |= WINDOWS_CONPTY_RUNTIME_FILES
     if not isinstance(managed_entries, list) or not required_managed_entries.issubset(
         managed_entries
     ):

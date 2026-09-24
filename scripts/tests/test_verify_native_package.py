@@ -83,7 +83,13 @@ class PortableArchiveTests(unittest.TestCase):
             )
         return entries
 
-    def entry_bytes(self, name: str, executable: str) -> bytes:
+    def entry_bytes(
+        self,
+        name: str,
+        executable: str,
+        *,
+        manifest_conpty_runtime: bool = True,
+    ) -> bytes:
         if name.endswith("VERSION"):
             return b"2.0.0\n"
         if name.endswith("portable-update.json"):
@@ -92,14 +98,25 @@ class PortableArchiveTests(unittest.TestCase):
                 if executable.endswith(".exe")
                 else "tools/oxideterm-update-helper"
             )
+            managed_entries = [
+                executable,
+                "resources",
+                "tools",
+                "portable",
+                "VERSION",
+                "portable-update.json",
+            ]
+            if executable.endswith(".exe") and manifest_conpty_runtime:
+                managed_entries.extend(
+                    sorted(verify_native_package.WINDOWS_CONPTY_RUNTIME_FILES)
+                )
+            entries = ",".join(f'"{entry}"' for entry in managed_entries)
             return (
                 "{"
                 '"formatVersion":1,'
                 f'"appExecutable":"{executable}",'
                 f'"updateHelper":"{helper}",'
-                '"managedEntries":['
-                f'"{executable}","resources","tools","portable","VERSION",'
-                '"portable-update.json"]'
+                f'"managedEntries":[{entries}]'
                 "}"
             ).encode()
         return b"data"
@@ -128,6 +145,27 @@ class PortableArchiveTests(unittest.TestCase):
                     )
 
             with self.assertRaisesRegex(RuntimeError, "conpty.dll"):
+                verify_native_package.verify_portable_archive(
+                    path, "x86_64-pc-windows-msvc", "2.0.0"
+                )
+
+    def test_windows_portable_archive_rejects_manifest_without_conpty_runtime(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "portable.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                for name in self.required_entries("OxideTerm", "oxideterm-native.exe"):
+                    archive.writestr(
+                        name,
+                        self.entry_bytes(
+                            name,
+                            "oxideterm-native.exe",
+                            manifest_conpty_runtime=False,
+                        ),
+                    )
+
+            with self.assertRaisesRegex(RuntimeError, "manifest is incomplete"):
                 verify_native_package.verify_portable_archive(
                     path, "x86_64-pc-windows-msvc", "2.0.0"
                 )
@@ -196,8 +234,9 @@ class PortableArchiveTests(unittest.TestCase):
                     content = self.entry_bytes(name, "oxideterm-native.exe")
                     if name.endswith("portable-update.json"):
                         content = content.replace(
-                            b'"portable-update.json"]',
-                            b'"portable-update.json","data"]',
+                            b'"managedEntries":[',
+                            b'"managedEntries":["data",',
+                            1,
                         )
                     archive.writestr(name, content)
 

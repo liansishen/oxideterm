@@ -24,6 +24,8 @@ REQUIRED_DOCUMENTS = {
     "THIRD_PARTY_NOTICES.md",
     "AGENT_THIRD_PARTY_NOTICES.md",
 }
+
+WINDOWS_CONPTY_RUNTIME_FILES = {"conpty.dll", "OpenConsole.exe"}
 LINUX_DEB_GRAPHICS_RECOMMENDS = {"libegl1", "libvulkan1"}
 LINUX_RPM_GRAPHICS_RECOMMENDS = {"libglvnd-egl", "vulkan-loader"}
 LINUX_GLIBC_MAX_VERSION = (2, 35)
@@ -138,19 +140,18 @@ def verify_portable_archive(path: Path, target: str, expected_version: str) -> N
         if "windows" in target
         else "tools/oxideterm-update-helper"
     )
-    require_archive_suffixes(
-        archive_names(path),
-        REQUIRED_DOCUMENTS
-        | {
-            PACKAGE_VERSION_FILENAME,
-            PORTABLE_PLUGINS_DIR,
-            "portable",
-            PORTABLE_UPDATE_MANIFEST_FILENAME,
-            update_helper,
-            executable,
-        },
-        path,
-    )
+    required = REQUIRED_DOCUMENTS | {
+        PACKAGE_VERSION_FILENAME,
+        PORTABLE_PLUGINS_DIR,
+        "portable",
+        PORTABLE_UPDATE_MANIFEST_FILENAME,
+        update_helper,
+        executable,
+    }
+    if "windows" in target:
+        # The ConPTY runtime has to sit beside the executable, not in resources.
+        required |= WINDOWS_CONPTY_RUNTIME_FILES
+    require_archive_suffixes(archive_names(path), required, path)
     verify_embedded_version(path, PACKAGE_VERSION_FILENAME, expected_version)
     manifest = json.loads(
         archive_entry_bytes(path, PORTABLE_UPDATE_MANIFEST_FILENAME).decode("utf-8")
@@ -376,11 +377,14 @@ def verify_windows_installer(path: Path, expected_version: str) -> None:
     if not seven_zip:
         raise RuntimeError("7-Zip is required for NSIS content verification")
     listing = run_checked([seven_zip, "l", "-slt", str(path)])
-    for name in REQUIRED_DOCUMENTS | {
+    required = REQUIRED_DOCUMENTS | {
         PACKAGE_VERSION_FILENAME,
         "oxideterm-native.exe",
         "oxideterm-update-helper.exe",
-    }:
+    }
+    # The installer places the ConPTY runtime beside the executable.
+    required |= WINDOWS_CONPTY_RUNTIME_FILES
+    for name in required:
         if name not in listing:
             raise RuntimeError(f"{path.name} does not contain {name}")
     with tempfile.TemporaryDirectory() as directory:

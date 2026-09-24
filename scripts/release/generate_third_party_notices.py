@@ -212,6 +212,19 @@ def bundled_asset_notices(cwd: Path) -> list[BundledAssetNotice]:
                 file_count=len(list(asset_dir.glob("*.ttf"))),
             )
         )
+    # The ConPTY runtime ships beside the executable, so attribute it here even
+    # though cargo metadata cannot see it.
+    runtime_dir = cwd / "crates" / "oxideterm-gpui-app" / "resources" / "windows" / "conpty"
+    runtime_files = (runtime_dir / "conpty.dll", runtime_dir / "x64" / "OpenConsole.exe")
+    if all(path.is_file() for path in runtime_files):
+        notices.append(
+            BundledAssetNotice(
+                name="Windows Console ConPTY runtime",
+                license_name="MIT",
+                license_file="MICROSOFT-TERMINAL-LICENSE-MIT",
+                file_count=len(runtime_files),
+            )
+        )
     return notices
 
 

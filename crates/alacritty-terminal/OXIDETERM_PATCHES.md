@@ -40,6 +40,15 @@ source files are retained from the published package.
 - Differential tests compare the batch and scalar paths across wrapping,
   scrolling, history, styles, Unicode, DEC charset, insert mode, and wide-cell
   overlap.
+- `src/tty/windows/conpty.rs` creates the pseudoconsole with
+  `PSEUDOCONSOLE_PASSTHROUGH_MODE` and falls back to the default mode when the
+  local ConPTY build rejects the flag. The default mode re-renders the client's
+  output and keeps its own view of the terminal-facing input state, so
+  mouse-tracking changes a client writes are dropped or reordered against that
+  view; clients that re-declare mouse tracking on every focus change (Herdr)
+  then leave the terminal with mouse reporting off until the client restarts.
+  Passthrough forwards the client's VT verbatim, keeping the terminal's mouse
+  state equal to what the client last requested.
 
 Do not expand this fork into a replacement grid or scrollback implementation.
 Its only local responsibility is the proven common-case ASCII write path.

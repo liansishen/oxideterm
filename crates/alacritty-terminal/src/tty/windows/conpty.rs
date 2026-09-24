@@ -111,6 +111,15 @@ impl Drop for Conpty {
 // The ConPTY handle can be sent between threads.
 unsafe impl Send for Conpty {}
 
+/// `PSEUDOCONSOLE_PASSTHROUGH_MODE` from `conpty.h`.
+///
+/// The default mode re-renders the client's output and keeps its own view of the
+/// terminal-facing input state, so mouse-mode changes the client writes can be
+/// reordered or dropped against that view. Passthrough forwards the client's VT
+/// verbatim, which keeps the terminal's mouse tracking equal to what the client
+/// last requested.
+const PSEUDOCONSOLE_PASSTHROUGH_MODE: u32 = 0x0000_0008;
+
 pub fn new(config: &Options, window_size: WindowSize) -> Result<Pty> {
     let api = ConptyApi::new();
     let mut pty_handle: HPCON = 0;
@@ -122,16 +131,32 @@ pub fn new(config: &Options, window_size: WindowSize) -> Result<Pty> {
     let (conout, conout_pty_handle) = miow::pipe::anonymous(0)?;
     let (conin_pty_handle, conin) = miow::pipe::anonymous(0)?;
 
-    // Create the Pseudo Console, using the pipes.
-    let result = unsafe {
+    // Create the Pseudo Console, using the pipes. Passthrough mode only exists
+    // on newer ConPTY builds, so fall back to the default mode when rejected.
+    let conin_handle: HANDLE = conin_pty_handle.into_raw_handle() as HANDLE;
+    let conout_handle: HANDLE = conout_pty_handle.into_raw_handle() as HANDLE;
+    let mut result = unsafe {
         (api.create)(
             window_size.into(),
-            conin_pty_handle.into_raw_handle() as HANDLE,
-            conout_pty_handle.into_raw_handle() as HANDLE,
-            0,
+            conin_handle,
+            conout_handle,
+            PSEUDOCONSOLE_PASSTHROUGH_MODE,
             &mut pty_handle as *mut _,
         )
     };
+
+    if result != S_OK {
+        info!("ConPTY rejected passthrough mode; using the default mode");
+        result = unsafe {
+            (api.create)(
+                window_size.into(),
+                conin_handle,
+                conout_handle,
+                0,
+                &mut pty_handle as *mut _,
+            )
+        };
+    }
 
     assert_eq!(result, S_OK);
 

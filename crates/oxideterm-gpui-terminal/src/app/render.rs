@@ -6,6 +6,9 @@ use gpui::{
     MouseUpEvent, ObjectFit, Render, RenderImage, SharedString, StyledImage, Window, anchored,
     deferred, div, point, prelude::*, px, rgb, rgba,
 };
+use oxideterm_gpui_ui::button::{
+    ButtonRadius, ContextChipOptions, IconButtonOptions, context_chip, icon_button,
+};
 use oxideterm_gpui_ui::confirm::{ConfirmDialogVariant, ConfirmDialogView, confirm_dialog};
 use oxideterm_gpui_ui::context_menu::{
     ContextMenuItemKind, context_menu_action, context_menu_backdrop, context_menu_content,
@@ -17,6 +20,7 @@ use oxideterm_gpui_ui::menu::menu_content;
 use oxideterm_gpui_ui::modal::{TAURI_POPOVER_LAYER_PRIORITY, overlay_content_boundary};
 use oxideterm_gpui_ui::progress::progress;
 use oxideterm_gpui_ui::scroll::ScrollableElement;
+use oxideterm_gpui_ui::separator::{SeparatorOrientation, separator};
 use oxideterm_terminal::{
     DetectedModemProtocol, ModemTransferDirection, SerialControlLine, SerialDisplayMode,
     SerialFlowControl, SerialLineEnding, SerialParity, SerialSendMode, SerialSessionConfig,
@@ -48,8 +52,7 @@ const TERMINAL_MODEM_SUBMENU_ACTION_COUNT: f32 = 6.0;
 const TERMINAL_CONTEXT_MENU_ACTIONS_BEFORE_MODEM: f32 = 9.0;
 const TERMINAL_CONTEXT_MENU_SEPARATORS_BEFORE_MODEM: f32 = 2.0;
 const TERMINAL_CONTEXT_MENU_MARGIN: f32 = 8.0;
-const SERIAL_CONTROL_BAR_HEIGHT: f32 = 34.0;
-const TMUX_CONTROL_BAR_HEIGHT: f32 = 34.0;
+const TERMINAL_CONTROL_ROW_HEIGHT: f32 = 34.0;
 const SERIAL_CONTROL_BUTTON_RADIUS: f32 = 999.0;
 // Keep diagnostic chrome away from the prompt and command text at the left edge.
 const TERMINAL_PERFORMANCE_OVERLAY_INSET: f32 = 8.0;
@@ -345,10 +348,8 @@ impl Render for TerminalPane {
                 })
                 .flatten()
         });
-        let terminal_top = if tmux_state.is_some() {
-            TMUX_CONTROL_BAR_HEIGHT
-        } else if self.is_serial_transport() {
-            SERIAL_CONTROL_BAR_HEIGHT
+        let terminal_top = if tmux_state.is_some() || self.is_serial_transport() {
+            self.terminal_control_bar_height()
         } else {
             0.0
         };
@@ -943,16 +944,17 @@ impl TerminalPane {
 
     fn render_tmux_control_bar(&self, state: &TmuxUiState, cx: &mut Context<Self>) -> AnyElement {
         let labels = &self.preferences.tmux_labels;
+        let mut information = Vec::<AnyElement>::new();
         let mut controls = Vec::<AnyElement>::new();
-        controls.push(self.render_serial_status_chip(if state.ready {
+        information.push(self.render_terminal_toolbar_status(if state.ready {
             labels.tmux.clone()
         } else {
             format!("{} · {}", labels.tmux, labels.initializing)
         }));
         for session in &state.sessions {
             let session_id = session.id;
-            controls.push(
-                self.render_serial_control_button(
+            information.push(
+                self.render_terminal_toolbar_action(
                     format!("${session_id} {}", session.name),
                     state.ready,
                     session.active,
@@ -972,7 +974,7 @@ impl TerminalPane {
             let session_id = session.id;
             let session_name = session.name.clone();
             controls.push(
-                self.render_serial_control_button(
+                self.render_terminal_toolbar_action(
                     labels.rename_session.clone(),
                     state.ready,
                     false,
@@ -994,8 +996,8 @@ impl TerminalPane {
         }
         for tmux_window in &state.windows {
             let window_id = tmux_window.id;
-            controls.push(
-                self.render_serial_control_button(
+            information.push(
+                self.render_terminal_toolbar_action(
                     format!(
                         "{}:{}{}",
                         tmux_window.index, tmux_window.name, tmux_window.flags
@@ -1018,24 +1020,28 @@ impl TerminalPane {
             let window_id = tmux_window.id;
             let window_name = tmux_window.name.clone();
             controls.push(
-                self.render_serial_control_button(labels.rename_window.clone(), state.ready, false)
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
-                            window.prevent_default();
-                            cx.stop_propagation();
-                            this.open_tmux_prompt(
-                                TmuxPromptKind::RenameWindow(window_id),
-                                window_name.clone(),
-                                cx,
-                            );
-                        }),
-                    )
-                    .into_any_element(),
+                self.render_terminal_toolbar_action(
+                    labels.rename_window.clone(),
+                    state.ready,
+                    false,
+                )
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        this.open_tmux_prompt(
+                            TmuxPromptKind::RenameWindow(window_id),
+                            window_name.clone(),
+                            cx,
+                        );
+                    }),
+                )
+                .into_any_element(),
             );
         }
         controls.push(
-            self.render_serial_control_button(labels.command.clone(), state.ready, false)
+            self.render_terminal_toolbar_action(labels.command.clone(), state.ready, false)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _event: &MouseDownEvent, window, cx| {
@@ -1105,7 +1111,7 @@ impl TerminalPane {
         ];
         if state.pane_in_mode {
             controls.push(
-                self.render_serial_control_button(labels.cancel_mode.clone(), state.ready, true)
+                self.render_terminal_toolbar_action(labels.cancel_mode.clone(), state.ready, true)
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _event: &MouseDownEvent, window, cx| {
@@ -1119,7 +1125,7 @@ impl TerminalPane {
         }
         for (label, action, enabled) in actions {
             controls.push(
-                self.render_serial_control_button(label, state.ready && enabled, false)
+                self.render_terminal_toolbar_action(label, state.ready && enabled, false)
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
@@ -1134,35 +1140,18 @@ impl TerminalPane {
             );
         }
         if let Some(error) = &state.error {
-            controls.push(self.render_serial_status_chip(if error.is_empty() {
+            information.push(self.render_terminal_toolbar_status(if error.is_empty() {
                 labels.command_failed.clone()
             } else {
                 format!("{} · {error}", labels.command_failed)
             }));
         }
 
-        let control_row = div()
-            .size_full()
-            .flex()
-            .flex_row()
-            .items_center()
-            .gap(px(6.0))
-            .px(px(8.0))
-            .children(controls);
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .right_0()
-            .h(px(TMUX_CONTROL_BAR_HEIGHT))
-            .border_b_1()
-            .border_color(rgba(serial_color_alpha(self.theme.foreground, 0x33)))
-            .bg(rgba(serial_color_alpha(self.theme.background, 0xf0)))
-            .on_mouse_down(MouseButton::Left, |_event, _window, cx: &mut App| {
-                cx.stop_propagation();
-            })
-            .child(div().size_full().overflow_x_scrollbar().child(control_row))
-            .into_any_element()
+        self.render_terminal_control_bar(
+            self.render_terminal_toolbar_row(information),
+            self.render_terminal_toolbar_row(controls),
+            cx,
+        )
     }
 
     fn render_tmux_prompt_overlay(
@@ -1284,7 +1273,7 @@ impl TerminalPane {
     ) -> AnyElement {
         div()
             .absolute()
-            .top(px(TMUX_CONTROL_BAR_HEIGHT + 8.0))
+            .top(px(self.terminal_control_bar_height() + 8.0))
             .right(px(8.0))
             .max_w(px(520.0))
             .rounded(px(6.0))
@@ -1374,14 +1363,12 @@ impl TerminalPane {
             }
         );
 
-        // The scroll wrapper transfers its own styles to the viewport, so the
-        // control row must remain a separately styled child to stay horizontal.
-        let control_row = div()
+        let information_row = div()
             .size_full()
             .flex()
             .flex_row()
             .items_center()
-            .gap(px(8.0))
+            .gap(px(self.theme.tokens.spacing.one))
             .px(px(10.0))
             .child(
                 div()
@@ -1400,9 +1387,17 @@ impl TerminalPane {
                         lifecycle
                     )),
             )
-            .child(self.render_serial_status_chip(port_state))
+            .child(self.render_terminal_toolbar_separator())
+            .child(self.render_terminal_toolbar_status(port_state));
+        let control_row = div()
+            .size_full()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap(px(self.theme.tokens.spacing.one))
+            .px(px(10.0))
             .child(
-                self.render_serial_control_button(
+                self.render_terminal_toolbar_action(
                     send_mode_label,
                     true,
                     matches!(status.runtime_options.send_mode, SerialSendMode::Hex),
@@ -1416,8 +1411,9 @@ impl TerminalPane {
                     }),
                 ),
             )
+            .child(self.render_terminal_toolbar_separator())
             .child(
-                self.render_serial_control_button(
+                self.render_terminal_toolbar_action(
                     display_mode_label,
                     true,
                     !matches!(status.runtime_options.display_mode, SerialDisplayMode::Text),
@@ -1431,8 +1427,9 @@ impl TerminalPane {
                     }),
                 ),
             )
+            .child(self.render_terminal_toolbar_separator())
             .child(
-                self.render_serial_control_button(
+                self.render_terminal_toolbar_action(
                     line_ending_label,
                     true,
                     !matches!(status.runtime_options.line_ending, SerialLineEnding::None),
@@ -1446,8 +1443,9 @@ impl TerminalPane {
                     }),
                 ),
             )
+            .child(self.render_terminal_toolbar_separator())
             .child(
-                self.render_serial_control_button(
+                self.render_terminal_toolbar_action(
                     output_line_ending_label,
                     true,
                     !matches!(
@@ -1464,8 +1462,9 @@ impl TerminalPane {
                     }),
                 ),
             )
+            .child(self.render_terminal_toolbar_separator())
             .child(
-                self.render_serial_control_button(
+                self.render_terminal_toolbar_action(
                     local_echo_label,
                     true,
                     status.runtime_options.local_echo,
@@ -1479,8 +1478,9 @@ impl TerminalPane {
                     }),
                 ),
             )
+            .child(self.render_terminal_toolbar_separator())
             .child(
-                self.render_serial_control_button(labels.refresh.clone(), true, false)
+                self.render_terminal_toolbar_action(labels.refresh.clone(), true, false)
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _event: &MouseDownEvent, window, cx| {
@@ -1490,8 +1490,9 @@ impl TerminalPane {
                         }),
                     ),
             )
+            .child(self.render_terminal_toolbar_separator())
             .child(
-                self.render_serial_control_button(labels.send_break.clone(), running, false)
+                self.render_terminal_toolbar_action(labels.send_break.clone(), running, false)
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _event: &MouseDownEvent, window, cx| {
@@ -1501,8 +1502,9 @@ impl TerminalPane {
                         }),
                     ),
             )
+            .child(self.render_terminal_toolbar_separator())
             .child(
-                self.render_serial_control_button(
+                self.render_terminal_toolbar_action(
                     dtr_label,
                     running,
                     status.control_state.data_terminal_ready,
@@ -1523,8 +1525,9 @@ impl TerminalPane {
                     }),
                 ),
             )
+            .child(self.render_terminal_toolbar_separator())
             .child(
-                self.render_serial_control_button(
+                self.render_terminal_toolbar_action(
                     rts_label,
                     running,
                     status.control_state.request_to_send,
@@ -1546,34 +1549,152 @@ impl TerminalPane {
                 ),
             );
 
+        self.render_terminal_control_bar(information_row, control_row, cx)
+    }
+
+    fn terminal_control_bar_height(&self) -> f32 {
+        TERMINAL_CONTROL_ROW_HEIGHT * if self.control_bar_expanded { 2.0 } else { 1.0 }
+    }
+
+    fn render_terminal_control_bar(
+        &self,
+        information: gpui::Div,
+        controls: gpui::Div,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let tokens = self.theme.tokens;
+        let label = if self.control_bar_expanded {
+            self.preferences.control_bar_collapse_label.clone()
+        } else {
+            self.preferences.control_bar_expand_label.clone()
+        };
+        let toggle = icon_button(
+            &tokens,
+            gpui::svg()
+                .path(if self.control_bar_expanded {
+                    "lucide/chevron-down.svg"
+                } else {
+                    "lucide/chevron-right.svg"
+                })
+                .size(px(14.0))
+                .text_color(rgb(tokens.ui.text_muted))
+                .into_any_element(),
+            IconButtonOptions::opaque_toolbar(22.0, ButtonRadius::Sm),
+        )
+        .id("terminal-toolbar-toggle")
+        .flex_none()
+        .ml(px(tokens.spacing.two))
+        .role(gpui::Role::Button)
+        .aria_label(label.clone())
+        .aria_expanded(self.control_bar_expanded)
+        .tooltip(move |_, cx| {
+            oxideterm_gpui_ui::tooltip::tooltip_view(tokens, label.clone(), None, cx)
+        })
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _, window, cx| {
+                window.prevent_default();
+                cx.stop_propagation();
+                this.control_bar_expanded = !this.control_bar_expanded;
+                cx.notify();
+            }),
+        );
         div()
             .absolute()
             .top_0()
             .left_0()
             .right_0()
-            .h(px(SERIAL_CONTROL_BAR_HEIGHT))
+            .h(px(self.terminal_control_bar_height()))
+            .flex()
+            .flex_col()
             .border_b_1()
             .border_color(rgba(serial_color_alpha(self.theme.foreground, 0x33)))
             .bg(rgba(serial_color_alpha(self.theme.background, 0xf0)))
             .on_mouse_down(MouseButton::Left, |_event, _window, cx: &mut App| {
                 cx.stop_propagation();
             })
-            .child(div().size_full().overflow_x_scrollbar().child(control_row))
+            .child(
+                div()
+                    .id("terminal-toolbar-information")
+                    .w_full()
+                    .min_h(px(0.0))
+                    .flex_1()
+                    .flex()
+                    .items_center()
+                    .child(toggle)
+                    .child(
+                        div()
+                            .min_w(px(0.0))
+                            .h_full()
+                            .flex_1()
+                            .child(div().size_full().overflow_x_scrollbar().child(information)),
+                    ),
+            )
+            .when(self.control_bar_expanded, |bar| {
+                // The controls own a separate scroll scope and release their height when hidden.
+                bar.child(
+                    div()
+                        .id("terminal-toolbar-controls")
+                        .w_full()
+                        .min_h(px(0.0))
+                        .flex_1()
+                        .child(div().size_full().overflow_x_scrollbar().child(controls)),
+                )
+            })
             .into_any_element()
     }
 
-    fn render_serial_status_chip(&self, label: String) -> AnyElement {
+    fn render_terminal_toolbar_row(&self, items: Vec<AnyElement>) -> gpui::Div {
+        let mut row = div()
+            .size_full()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap(px(self.theme.tokens.spacing.one))
+            .px(px(8.0));
+        for (index, item) in items.into_iter().enumerate() {
+            if index > 0 {
+                row = row.child(self.render_terminal_toolbar_separator());
+            }
+            row = row.child(item);
+        }
+        row
+    }
+
+    fn render_terminal_toolbar_separator(&self) -> gpui::Div {
+        separator(&self.theme.tokens, SeparatorOrientation::Vertical).h(px(12.0))
+    }
+
+    fn render_terminal_toolbar_action(
+        &self,
+        label: String,
+        enabled: bool,
+        active: bool,
+    ) -> gpui::Div {
+        context_chip(
+            &self.theme.tokens,
+            ContextChipOptions::new()
+                .disabled(!enabled)
+                .radius(ButtonRadius::Sm)
+                .border_color(rgba(0x00000000))
+                .text_color(rgb(if active {
+                    self.theme.tokens.ui.accent
+                } else {
+                    self.theme.foreground
+                })),
+            None,
+            div().whitespace_nowrap().child(label).into_any_element(),
+            Vec::new(),
+        )
+        .when(!enabled, |control| control.opacity(0.45))
+    }
+
+    fn render_terminal_toolbar_status(&self, label: String) -> AnyElement {
         div()
             .flex_none()
-            .rounded(px(SERIAL_CONTROL_BUTTON_RADIUS))
-            .border_1()
-            .border_color(rgba(serial_color_alpha(self.theme.foreground, 0x26)))
-            .px(px(9.0))
-            .h(px(22.0))
-            .flex()
-            .items_center()
+            .whitespace_nowrap()
             .text_size(px(11.0))
-            .text_color(rgba(serial_color_alpha(self.theme.foreground, 0xb8)))
+            .text_color(rgb(self.theme.tokens.ui.text_muted))
             .child(label)
             .into_any_element()
     }
@@ -2900,6 +3021,61 @@ mod tests {
 
     struct AutosuggestTestView {
         pane: gpui::Entity<super::TerminalPane>,
+    }
+
+    struct ControlBarTestView {
+        pane: gpui::Entity<super::TerminalPane>,
+    }
+
+    impl gpui::Render for ControlBarTestView {
+        fn render(
+            &mut self,
+            _: &mut gpui::Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> impl gpui::IntoElement {
+            use gpui::prelude::*;
+            let bar = self.pane.update(cx, |pane, cx| {
+                pane.render_terminal_control_bar(
+                    gpui::div()
+                        .size_full()
+                        .debug_selector(|| "toolbar-information".into())
+                        .child("Port"),
+                    gpui::div()
+                        .size_full()
+                        .debug_selector(|| "toolbar-controls".into())
+                        .child("Send"),
+                    cx,
+                )
+            });
+            gpui::div().size_full().relative().child(bar)
+        }
+    }
+
+    #[gpui::test]
+    fn control_bar_toggle_hides_and_restores_the_controls_row(cx: &mut gpui::TestAppContext) {
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let pane = cx.new(|cx| {
+                super::TerminalPane::new_recording_playback(80, 24, Default::default(), window, cx)
+                    .unwrap()
+            });
+            cx.observe(&pane, |_, _, cx| cx.notify()).detach();
+            ControlBarTestView { pane }
+        });
+        cx.simulate_resize(gpui::size(gpui::px(400.0), gpui::px(200.0)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let information = cx.debug_bounds("toolbar-information").unwrap();
+        let controls = cx.debug_bounds("toolbar-controls").unwrap();
+        assert!(controls.top() >= information.bottom());
+        let toggle = gpui::point(gpui::px(18.0), information.center().y);
+        cx.simulate_click(toggle, gpui::Modifiers::none());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(cx.debug_bounds("toolbar-controls").is_none());
+        let collapsed_information = cx.debug_bounds("toolbar-information").unwrap();
+        assert_eq!(collapsed_information.origin, information.origin);
+        assert!(controls.bottom() - collapsed_information.bottom() >= controls.size.height);
+        cx.simulate_click(toggle, gpui::Modifiers::none());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(cx.debug_bounds("toolbar-controls").unwrap(), controls);
     }
 
     impl gpui::Render for AutosuggestTestView {

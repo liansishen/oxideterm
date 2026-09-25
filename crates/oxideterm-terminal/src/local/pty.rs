@@ -82,6 +82,17 @@ impl LocalPtySession {
         };
 
         let shell = local_config.shell.clone().unwrap_or_else(default_shell);
+        // Some PTY backends report a successful fork even when chdir or exec fails in the child.
+        // Reject known-invalid launch targets before a session can be registered by the caller.
+        if !shell.id.starts_with("wsl")
+            && local_config.cwd.as_ref().is_some_and(|path| !path.as_os_str().is_empty() && !path.is_dir())
+        {
+            anyhow::bail!("local terminal startup directory is unavailable");
+        }
+        if shell.path.is_absolute() && !shell.path.is_file() {
+            anyhow::bail!("local terminal shell executable is unavailable");
+        }
+
         let shell_program = shell.path.display().to_string();
         let terminal_env = oxideterm_terminal_env(&local_config, &shell);
         #[cfg(target_os = "windows")]
@@ -114,7 +125,7 @@ impl LocalPtySession {
             .or_else(|| env::var_os("USERPROFILE").map(PathBuf::from))
             .or_else(|| env::current_dir().ok());
         #[cfg(target_os = "windows")]
-        let working_directory = if matches!(shell.id.as_str(), "powershell" | "pwsh") {
+        let working_directory = if shell.id.starts_with("wsl") || matches!(shell.id.as_str(), "powershell" | "pwsh") {
             None
         } else {
             cwd.clone()
@@ -128,7 +139,7 @@ impl LocalPtySession {
                 drain_on_exit: true,
                 env: launch.env,
                 #[cfg(target_os = "windows")]
-                escape_args: false,
+                escape_args: shell.id.starts_with("wsl"),
             },
             window_size(size),
             0,
@@ -1115,6 +1126,9 @@ fn snapshot_row_from_source<T: EventListener>(
     let terminal_row = &term.grid()[Line(grid_line)];
     let terminal_cells = &terminal_row[..];
     let mut cells = Vec::with_capacity(size.cols);
+    let mut recent_styles = [None, None];
+    let mut next_style_slot = 0;
+    let mut previous_extra = None;
     // Default trailing cells have fixed paint data, so skip color and metadata conversion.
     for cell in &terminal_cells[..source.populated_cols] {
         if cell
@@ -1126,12 +1140,34 @@ fn snapshot_row_from_source<T: EventListener>(
         }
         let ch = if cell.c == '\0' { ' ' } else { cell.c };
         let attrs = attrs_from_flags(cell.flags);
-        let (fg, bg) = style_colors_for_cell(cell.fg, cell.bg, ch, attrs);
-        let style_origin = style_origin_for_cell(cell.fg, cell.bg, attrs);
-        let zerowidth = cell.zerowidth().into_iter().flatten().copied().collect();
-        let hyperlink = cell
-            .hyperlink()
-            .map(|hyperlink| hyperlink.uri().to_string());
+        let effective_fg = if attrs.inverse() { cell.bg } else { cell.fg };
+        let ((fg, bg), style_origin) = if crate::color::is_app_chosen_exact_color(&effective_fg) {
+            (
+                style_colors_for_cell(cell.fg, cell.bg, ch, attrs),
+                style_origin_for_cell(cell.fg, cell.bg, attrs),
+            )
+        } else {
+            // Decoration glyphs bypass contrast adjustment even inside the same ANSI style run.
+            let style_key = (
+                cell.fg,
+                cell.bg,
+                attrs,
+                crate::color::is_terminal_decoration_glyph(ch),
+            );
+            if let Some((_, colors, origin)) = recent_styles
+                .iter()
+                .flatten()
+                .find(|(key, _, _)| *key == style_key)
+            {
+                (*colors, *origin)
+            } else {
+                let colors = style_colors_for_cell(cell.fg, cell.bg, ch, attrs);
+                let origin = style_origin_for_cell(cell.fg, cell.bg, attrs);
+                recent_styles[next_style_slot] = Some((style_key, colors, origin));
+                next_style_slot = (next_style_slot + 1) % recent_styles.len();
+                (colors, origin)
+            }
+        };
         let mut snapshot_cell = TerminalCell {
             ch,
             wide: cell.flags.contains(Flags::WIDE_CHAR),
@@ -1142,7 +1178,26 @@ fn snapshot_row_from_source<T: EventListener>(
             extra: None,
             cursor: false,
         };
-        snapshot_cell.set_extra(zerowidth, hyperlink);
+        let zerowidth = cell.zerowidth().unwrap_or_default();
+        let hyperlink = cell.hyperlink();
+        if !zerowidth.is_empty() || hyperlink.is_some() {
+            if let Some((previous_zerowidth, previous_hyperlink, extra)) = &previous_extra
+                && previous_zerowidth == &zerowidth
+                && previous_hyperlink == &hyperlink
+            {
+                snapshot_cell.extra = Some(Arc::clone(extra));
+            } else {
+                snapshot_cell.set_extra(
+                    zerowidth.iter().copied().collect(),
+                    hyperlink.as_ref().map(|link| link.uri().to_owned()),
+                );
+                previous_extra = Some((
+                    zerowidth,
+                    hyperlink,
+                    snapshot_cell.extra.as_ref().unwrap().clone(),
+                ));
+            }
+        }
         cells.push(snapshot_cell);
     }
     cells.resize(size.cols, blank_terminal_cell());
@@ -1264,6 +1319,86 @@ mod incremental_snapshot_tests {
             assert_eq!(actual.signature, expected.signature);
         }
         assert_eq!(actual.images, expected.images);
+    }
+
+    #[test]
+    fn snapshot_style_runs_preserve_contrast_attributes_and_link_boundaries() {
+        let size = TerminalSize {
+            cols: 100,
+            rows: 3,
+            cell_width: 0,
+            cell_height: 0,
+        };
+        let (listener, _events) = local_event_channel();
+        let mut term = Term::new(Config::default(), &size, listener);
+        let graphics = TerminalGraphicsState::default();
+        let mut parser = Processor::<StdSyncHandler>::new();
+        parser.advance(&mut term, "\x1b[37;107mab─cd\x1b[2mef\x1b[7mgh\x1b[0mij\x1b[38;2;1;2;3mkl\x1b[38;5;196mmn\x1b[0m\r\n\x1b]8;;https://one.example\x1b\\ABe\u{301}C\x1b]8;;\x1b\\D\x1b]8;;https://two.example\x1b\\EF\x1b]8;;\x1b\\".as_bytes());
+        let snapshot = snapshot_from_term(&term, size, &graphics);
+        for (source, actual) in term.grid()[Line(0)][..]
+            .iter()
+            .take(16)
+            .zip(snapshot.lines[0].cells.iter())
+        {
+            let attrs = attrs_from_flags(source.flags);
+            assert_eq!(
+                (actual.fg, actual.bg),
+                style_colors_for_cell(source.fg, source.bg, source.c, attrs)
+            );
+            assert_eq!(actual.attrs, attrs);
+            assert_eq!(
+                actual.style_origin,
+                style_origin_for_cell(source.fg, source.bg, attrs)
+            );
+        }
+        let colors = &snapshot.lines[0].cells;
+        assert_ne!(
+            colors[0].fg, colors[2].fg,
+            "decoration glyphs bypass contrast adjustment"
+        );
+        assert_eq!(colors[2].fg, OXIDETERM_DARK_THEME.ansi[7]);
+        assert_eq!(colors[12].fg, TerminalColor::rgb(1, 2, 3));
+        let linked = &snapshot.lines[1].cells;
+        assert_eq!(snapshot.lines[1].text().trim_end(), "ABe\u{301}CDEF");
+        assert_eq!(
+            linked[..7]
+                .iter()
+                .map(TerminalCell::hyperlink)
+                .collect::<Vec<_>>(),
+            vec![
+                Some("https://one.example"),
+                Some("https://one.example"),
+                Some("https://one.example"),
+                Some("https://one.example"),
+                None,
+                Some("https://two.example"),
+                Some("https://two.example"),
+            ]
+        );
+        assert_eq!(
+            linked[..7]
+                .iter()
+                .map(TerminalCell::zerowidth)
+                .collect::<Vec<_>>(),
+            vec!["", "", "\u{301}", "", "", "", ""]
+        );
+        assert!(Arc::ptr_eq(
+            linked[0].extra.as_ref().unwrap(),
+            linked[1].extra.as_ref().unwrap()
+        ));
+        parser.advance(
+            &mut term,
+            b"\x1b[2;1H\x1b]8;;https://changed.example\x1b\\Z\x1b]8;;\x1b\\",
+        );
+        let next = incremental_snapshot_from_term(&mut term, size, &graphics, &snapshot);
+        assert_eq!(
+            next.lines[1].cells[0].hyperlink(),
+            Some("https://changed.example")
+        );
+        assert_eq!(linked[0].hyperlink(), Some("https://one.example"));
+        let mut expected = linked[1].clone();
+        expected.cursor = true;
+        assert_eq!(next.lines[1].cells[1], expected);
     }
 
     #[test]

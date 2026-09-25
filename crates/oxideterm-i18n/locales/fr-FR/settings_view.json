@@ -664,6 +664,10 @@
       "theme": "Thème",
       "color_theme": "Thème de couleurs",
       "color_theme_hint": "Schéma de couleurs du terminal",
+      "theme_preview_hint": "Survolez ou utilisez ↑/↓ pour prévisualiser. Cliquez ou appuyez sur Entrée pour appliquer.",
+      "theme_preview_added": "  Nouveau fichier : src/theme.rs",
+      "theme_preview_modified": "  Modifié : Cargo.toml",
+      "theme_preview_deleted": "  Supprimé : old-theme.toml",
       "select_theme": "Sélectionner le thème",
       "layout": "Disposition de l’interface",
       "layout_hint": "La barre latérale peut être redimensionnée en faisant glisser son bord droit. Utilisez le bouton de réduction (◧) pour la masquer.",
@@ -1469,7 +1473,9 @@
       "update_proxy_port_hint": "Port utilisé par le proxy de mise à jour.",
       "update_proxy_no_proxy": "Contourner le proxy pour",
       "update_proxy_no_proxy_hint": "Hôtes séparés par des virgules qui doivent contourner le proxy.",
-      "update_proxy_legal_hint": "Veuillez utiliser la fonction proxy conformément aux lois et réglementations locales."
+      "update_proxy_legal_hint": "Veuillez utiliser la fonction proxy conformément aux lois et réglementations locales.",
+      "third_party_notices": "Mentions de tiers",
+      "third_party_notices_description": "Attribution des dépendances et illustrations incluses, avec des liens vers leurs licences originales."
     },
     "errors": {
       "create_group_failed": "Échec de la création du groupe : {{error}}",

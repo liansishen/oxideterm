@@ -664,6 +664,10 @@
       "theme": "Design",
       "color_theme": "Farbschema",
       "color_theme_hint": "Terminal-Farbschema",
+      "theme_preview_hint": "Mit Mauszeiger oder ↑/↓ ansehen. Per Klick oder Enter anwenden.",
+      "theme_preview_added": "  Neue Datei: src/theme.rs",
+      "theme_preview_modified": "  Geändert: Cargo.toml",
+      "theme_preview_deleted": "  Gelöscht: old-theme.toml",
       "select_theme": "Design auswählen",
       "layout": "Oberflächenlayout",
       "layout_hint": "Die Seitenleiste kann durch Ziehen des rechten Rands angepasst werden. Verwenden Sie die Einklappen-Schaltfläche (◧) zum Ausblenden.",
@@ -1469,7 +1473,9 @@
       "update_proxy_port_hint": "Port des Update-Proxys.",
       "update_proxy_no_proxy": "Proxy umgehen fuer",
       "update_proxy_no_proxy_hint": "Durch Kommas getrennte Hosts, die den Proxy umgehen.",
-      "update_proxy_legal_hint": "Bitte verwenden Sie die Proxy-Funktion gemaess den geltenden lokalen Gesetzen."
+      "update_proxy_legal_hint": "Bitte verwenden Sie die Proxy-Funktion gemaess den geltenden lokalen Gesetzen.",
+      "third_party_notices": "Drittanbieterhinweise",
+      "third_party_notices_description": "Namensnennungen für enthaltene Abhängigkeiten und Grafiken mit Links zu den ursprünglichen Lizenzen."
     },
     "errors": {
       "create_group_failed": "Gruppe konnte nicht erstellt werden: {{error}}",

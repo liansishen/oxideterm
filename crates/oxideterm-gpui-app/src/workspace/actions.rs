@@ -471,7 +471,10 @@ impl WorkspaceApp {
         let terminal_active = self.active_tab(cx).is_some_and(|tab| {
             matches!(
                 tab.kind,
-                TabKind::LocalTerminal | TabKind::SshTerminal | TabKind::MoshTerminal
+                TabKind::LocalTerminal
+                    | TabKind::SshTerminal
+                    | TabKind::MoshTerminal
+                    | TabKind::Workspace
             )
         });
         if !terminal_active {
@@ -567,7 +570,10 @@ impl WorkspaceApp {
         let terminal_active = self.active_tab(cx).is_some_and(|tab| {
             matches!(
                 tab.kind,
-                TabKind::LocalTerminal | TabKind::SshTerminal | TabKind::MoshTerminal
+                TabKind::LocalTerminal
+                    | TabKind::SshTerminal
+                    | TabKind::MoshTerminal
+                    | TabKind::Workspace
             )
         });
         if matches!(
@@ -1013,6 +1019,13 @@ impl WorkspaceApp {
         }
 
         if self.active_surface == ActiveSurface::Settings && self.open_settings_select.is_some() {
+            if self.open_settings_select == Some(SettingsSelect::AppearanceTheme)
+                && self.handle_appearance_theme_select_key(event, cx)
+            {
+                window.prevent_default();
+                cx.stop_propagation();
+                return;
+            }
             if key == "escape" && !modifiers.platform {
                 self.close_settings_select();
                 cx.notify();
@@ -1079,7 +1092,7 @@ impl WorkspaceApp {
             return;
         }
 
-        if self.sftp_view.read(cx).focused_input().is_some()
+        if self.sftp_view().read(cx).focused_input().is_some()
             || self
                 .active_tab(cx)
                 .is_some_and(|tab| tab.kind == TabKind::Sftp)
@@ -1170,7 +1183,10 @@ impl WorkspaceApp {
         let terminal_active = self.active_tab(cx).is_some_and(|tab| {
             matches!(
                 tab.kind,
-                TabKind::LocalTerminal | TabKind::SshTerminal | TabKind::MoshTerminal
+                TabKind::LocalTerminal
+                    | TabKind::SshTerminal
+                    | TabKind::MoshTerminal
+                    | TabKind::Workspace
             )
         });
         if !terminal_active {
@@ -2559,7 +2575,7 @@ impl WorkspaceApp {
                 if !tab_host.panes().contains_key(&pane_id) {
                     continue;
                 }
-                let label = tab.title.clone();
+                let label = self.terminal_pane_label(pane_id, cx);
                 let saved_connection = root
                     .session_id_for_pane(pane_id)
                     .and_then(|session_id| self.terminal_saved_connection_refs.get(&session_id))

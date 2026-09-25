@@ -21,6 +21,7 @@ pub(crate) use history_quit::request_app_quit;
 mod ide;
 mod ime;
 mod knowledge;
+mod local_sessions;
 mod local_shell_launcher;
 mod local_terminal_background;
 mod new_connection;
@@ -614,12 +615,14 @@ enum TabDragMode {
     Pending,
     Reorder,
     Detach,
+    Content,
 }
 
 #[derive(Clone, Debug)]
 struct TabDragState {
     tab_id: TabId,
     from_index: usize,
+    destination_tab: Option<TabId>,
     start_x: f32,
     start_y: f32,
     current_x: f32,
@@ -695,6 +698,8 @@ struct TabbarScrollbarDragState {
 #[derive(Clone, Copy, Debug)]
 struct DetachedTabReturnDrag {
     tab_id: TabId,
+    source_bounds: Bounds<Pixels>,
+    native_window_move: bool,
     start_screen_x: f32,
     start_screen_y: f32,
     current_screen_x: f32,
@@ -755,6 +760,8 @@ pub(crate) struct WorkspaceApp {
     detached_tab_return_handoff: Option<DetachedTabReturnHandoff>,
     next_tab_window_handoff_generation: u64,
     main_window_tabbar_drop_bounds: Option<Bounds<Pixels>>,
+    split_drop_regions: Rc<RefCell<Vec<tabs::split_drop::SplitDropRegion>>>,
+    split_drop_target: Option<tabs::split_drop::SplitDropTarget>,
     pending_auto_close_terminal_sessions: HashSet<TerminalSessionId>,
     auto_close_terminal_sessions_scheduled: bool,
     tab_host: Entity<tabs::WorkspaceTabHostEntity>,
@@ -839,6 +846,8 @@ pub(crate) struct WorkspaceApp {
     active_session_sidebar_list_cache: RefCell<VirtualListSignatureCache>,
     knowledge_workspace_list_state: ListState,
     open_settings_select: Option<SettingsSelect>,
+    settings_theme_preview: Option<String>,
+    settings_theme_scroll: ScrollHandle,
     // A root-mounted select portal must only use the trigger geometry from the
     // native window that opened it.
     open_settings_select_owner_window_id: Option<gpui::WindowId>,
@@ -904,6 +913,7 @@ pub(crate) struct WorkspaceApp {
     saved_ssh_nodes: HashMap<String, NodeId>,
     expanded_ssh_nodes: HashSet<NodeId>,
     expanded_standalone_connections: HashSet<String>,
+    local_session_group_expanded: bool,
     active_ssh_node_id: Option<NodeId>,
     next_ssh_node_id: u64,
     forwarding: Entity<forwards::ForwardingWorkspaceEntity>,
@@ -928,6 +938,9 @@ pub(crate) struct WorkspaceApp {
     _ide_workspace_subscription: Subscription,
     knowledge_workspace: Entity<knowledge::KnowledgeWorkspaceEntity>,
     sftp_view: Entity<sftp::SftpWorkspaceEntity>,
+    sftp_pages: HashMap<TabId, sftp::views::SftpPage>,
+    sftp_dispatch_surface: Rc<Cell<Option<sftp::SftpSurfaceId>>>,
+    sftp_focused_surface: sftp::SftpSurfaceId,
     _sftp_observation: Subscription,
     _sftp_subscription: Subscription,
     graphics: Entity<GraphicsWorkspaceEntity>,

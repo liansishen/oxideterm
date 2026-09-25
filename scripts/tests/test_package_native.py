@@ -52,6 +52,11 @@ class WindowsInstallerScriptTests(unittest.TestCase):
         self.assertIn('"LegalCopyright" "Copyright (C) 2026 AnalyseDeCircuit"', script)
         self.assertIn('"ProductVersion" "1.2.0-gpui-preview.2"', script)
         self.assertIn("normal_install:", script)
+        normal_install = script.split("normal_install:\n", 1)[1].split("update_install:\n", 1)[0]
+        self.assertLess(
+            normal_install.index("Call EnsureApplicationClosed"),
+            normal_install.index('SetOutPath "$INSTDIR"'),
+        )
         self.assertIn("!insertmacro MUI_PAGE_COMPONENTS", script)
         self.assertIn('Section "Application Files"', script)
         self.assertIn("SectionIn RO", script)
@@ -60,6 +65,75 @@ class WindowsInstallerScriptTests(unittest.TestCase):
         self.assertNotIn("already installed", script)
         self.assertNotIn("uninstall_existing", script)
         self.assertNotIn("ExecWait", script)
+
+    def test_preflight_requires_consent_and_rechecks_file_owners(self) -> None:
+        script = package_native.windows_installer_script(
+            binary=Path("oxideterm-native.exe"),
+            version="2.0.31",
+            identity=self.identity(),
+            installer_root=Path(r"C:\dist\nsis-windows_x64"),
+            installer_path=Path(r"C:\dist\OxideTerm_setup.exe"),
+            icon_path=Path(r"C:\icons\icon.ico"),
+        )
+        preflight = script.split("Function EnsureApplicationClosed\n", 1)[1].split("FunctionEnd", 1)[0]
+        self.assertIn(r'IfFileExists "$INSTDIR\oxideterm-native.exe"', preflight)
+        self.assertIn('RmRegisterResources(i r0, i 1, *w', preflight)
+        self.assertLess(preflight.index("IfSilent preflight_cancel"), preflight.index("MessageBox MB_OKCANCEL"))
+        self.assertIn('IDCANCEL preflight_cancel', preflight)
+        shutdown = "RmShutdown(i r0, i 0, p 0)"
+        self.assertLess(preflight.index("MessageBox MB_OKCANCEL"), preflight.index(shutdown))
+        after_shutdown = preflight.split(shutdown, 1)[1]
+        self.assertLess(after_shutdown.index("RmGetList"), after_shutdown.index("preflight_done:"))
+        self.assertIn("StrCmp $2 0 preflight_done preflight_failed", after_shutdown)
+        cancel = preflight.split("preflight_cancel:\n", 1)[1].split("preflight_done:", 1)[0]
+        self.assertIn("RmEndSession", cancel)
+        self.assertIn("SetErrorLevel 2\n  Quit", cancel)
+
+    def test_installer_prompts_use_all_application_locales(self) -> None:
+        script = package_native.windows_installer_script(
+            binary=Path("oxideterm-native.exe"),
+            version="2.0.31",
+            identity=self.identity(),
+            installer_root=Path(r"C:\dist\nsis-windows_x64"),
+            installer_path=Path(r"C:\dist\OxideTerm_setup.exe"),
+            icon_path=Path(r"C:\icons\icon.ico"),
+        )
+        for language in (
+            "English", "SimpChinese", "TradChinese", "German", "Spanish",
+            "French", "Italian", "Japanese", "Korean", "PortugueseBR", "Vietnamese",
+        ):
+            with self.subTest(language=language):
+                self.assertIn(f'!insertmacro MUI_LANGUAGE "{language}"', script)
+                self.assertIn(f'LangString CloseRunningApplication ${{LANG_{language.upper()}}}', script)
+                self.assertIn(f'LangString ApplicationCloseFailed ${{LANG_{language.upper()}}}', script)
+        self.assertIn("OxideTerm GPUI Preview 仍在运行", script)
+        self.assertNotIn("{{app}}", script)
+        self.assertNotIn("{{path}}", script)
+
+    @unittest.skipUnless(shutil.which("makensis"), "NSIS compiler is not installed")
+    def test_installer_compiles_with_localized_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            payload = root / "payload"
+            (payload / "tools").mkdir(parents=True)
+            (payload / "oxideterm-native.exe").write_bytes(b"app payload")
+            (payload / "tools" / "oxideterm-update-helper.exe").write_bytes(b"helper payload")
+            installer = root / "setup.exe"
+            source = root / "setup.nsi"
+            source.write_text(package_native.windows_installer_script(
+                binary=Path("oxideterm-native.exe"),
+                version="2.0.31",
+                identity=self.identity(),
+                installer_root=payload,
+                installer_path=installer,
+                icon_path=package_native.RESOURCE_DIR / "icons" / "icon.ico",
+            ), encoding="utf-8")
+            result = subprocess.run(
+                [shutil.which("makensis"), "/V2" if sys.platform == "win32" else "-V2", str(source)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(installer.read_bytes()[:2], b"MZ")
 
     def test_update_mode_stages_files_and_installs_helper_directly(self) -> None:
         script = package_native.windows_installer_script(
@@ -83,6 +157,8 @@ class WindowsInstallerScriptTests(unittest.TestCase):
         self.assertIn('StrCmp $IsOxideUpdate "1" start_menu_shortcut_done', script)
         self.assertIn('StrCmp $IsOxideUpdate "1" desktop_shortcut_done', script)
         self.assertNotIn('$LOCALAPPDATA\\OxideTerm\\oxideterm.exe', script)
+        update_install = script.split("update_install:\n", 1)[1].split("install_done:\n", 1)[0]
+        self.assertNotIn("Call EnsureApplicationClosed", update_install)
 
     def test_all_install_modes_register_the_application_icon(self) -> None:
         script = package_native.windows_installer_script(
@@ -447,6 +523,19 @@ class MacosDmgDetachTests(unittest.TestCase):
 
 
 class ReleaseDocumentTests(unittest.TestCase):
+    def test_distribution_artwork_matches_the_recorded_hashes(self) -> None:
+        import hashlib
+        import re
+
+        notice = (package_native.THIRD_PARTY_LICENSE_DIR / "DISTRO-ICONS-NOTICE.md").read_text()
+        assets = re.findall(r"Bundled file: `([^`]+)`\.\n- SHA-256: `([0-9a-f]+)`", notice)
+        self.assertEqual([Path(path).stem for path, _ in assets], ["ubuntu", "archlinux", "debian", "gentoo", "nixos", "rocky", "linuxmint"])
+        asset_directory = package_native.ROOT_DIR / "crates/oxideterm-gpui-app/resources/distro-icons"
+        self.assertEqual({Path(path).name for path, _ in assets}, {path.name for path in asset_directory.glob("*.svg")})
+        for path, expected_hash in assets:
+            with self.subTest(asset=path):
+                self.assertEqual(hashlib.sha256((package_native.ROOT_DIR / path).read_bytes()).hexdigest(), expected_hash)
+
     def test_release_documents_include_native_and_agent_notices(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory)
@@ -461,6 +550,11 @@ class ReleaseDocumentTests(unittest.TestCase):
                     "MATERIAL-ICON-THEME-LICENSE-MIT",
                     "MICROSOFT-TERMINAL-LICENSE-MIT",
                     "NOTICE",
+                    "DISTRO-ICONS-NOTICE.md",
+                    "CC-BY-SA-3.0.txt",
+                    "CC-BY-SA-4.0.txt",
+                    "CC-BY-SA-2.5.txt",
+                    "CC-BY-4.0.txt",
                     "README.md",
                     "THIRD_PARTY_NOTICES.md",
                     "AGENT_THIRD_PARTY_NOTICES.md",

@@ -12,6 +12,8 @@ For example, releases based on upstream `2.1.0` use `2.1.0+fork.1`, `2.1.0+fork.
 
 On Windows, choose **Settings → Help → Update channel → Custom**, enter the GitHub `owner/repository` (or its `https://github.com/owner/repository` URL), and enter the same Base64 public key. The repository must publish signed packages and a `latest.json` compatible with OxideTerm. Check for updates, then choose **Update and restart** to download, verify, install, and restart. Both the NSIS installer and portable ZIP are supported. Fork builds with a configured public key default to their own repository on fresh installations; existing saved channel choices are preserved.
 
+If packaging succeeds but publication fails, dispatch **Native Package** from `main` with the existing `release_tag`, matching `version`, `upload_release=true`, `fork_release=true`, and `reuse_package_run_id` set to the original Native Package run ID. Recovery verifies that the source run built the exact tagged commit successfully and still has its Windows artifact. It skips recompilation, signs the saved packages, updates only the draft release, and runs the normal manifest and publication checks. Keep the existing tag unchanged.
+
 ## Prepare
 
 1. Obtain explicit approval that the GUI build has been run successfully and is ready to publish. That approval is the release gate.

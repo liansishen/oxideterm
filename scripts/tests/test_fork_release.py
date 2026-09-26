@@ -93,7 +93,6 @@ class ForkReleaseTests(unittest.TestCase):
         native = (ROOT / ".github/workflows/native-package.yml").read_text(encoding="utf-8")
         self.assertIn("vars.OXIDETERM_UPDATER_PUBKEY", native)
         self.assertIn("minisign -V -p", native)
-        self.assertIn("draft: ${{ inputs.fork_release }}", native)
         self.assertIn("latest.version !== version", native)
         self.assertIn("OxideTerm_${version}_windows_x64_portable.zip", native)
 

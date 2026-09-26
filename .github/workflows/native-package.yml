@@ -16,6 +16,9 @@ on:
       fork_release:
         required: false
         type: boolean
+      reuse_package_run_id:
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       fork_release:
@@ -36,6 +39,11 @@ on:
         required: false
         default: false
         type: boolean
+      reuse_package_run_id:
+        description: 'Reuse a verified Windows package from a prior native-package run'
+        required: false
+        default: ''
+        type: string
   # Packaging runs when a merged pull request lands on main. A direct push to main
   # still creates a run, but the source-merge gate skips every job. Publishing always
   # requires a manual dispatch with upload_release.
@@ -47,6 +55,7 @@ on:
       - 'Cargo.lock'
       - 'scripts/release/**'
       - '.github/workflows/native-package.yml'
+      - '.github/scripts/**'
 
 permissions:
   contents: read
@@ -91,6 +100,9 @@ jobs:
     needs: source_merge
     if: needs.source_merge.outputs.merged == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       raw_version: ${{ steps.release_request.outputs.raw_version }}
       release_commit: ${{ steps.release_request.outputs.release_commit }}
@@ -179,10 +191,46 @@ jobs:
             echo "version=${version}"
           } >> "${GITHUB_OUTPUT}"
 
+      - name: Validate reused package run
+        if: inputs.reuse_package_run_id != ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SOURCE_RUN_ID: ${{ inputs.reuse_package_run_id }}
+          RELEASE_COMMIT: ${{ steps.release_request.outputs.release_commit }}
+          FORK_RELEASE: ${{ inputs.fork_release }}
+          UPLOAD_RELEASE: ${{ inputs.upload_release }}
+        with:
+          script: |
+            if (process.env.FORK_RELEASE !== 'true' || process.env.UPLOAD_RELEASE !== 'true') {
+              throw new Error('Package reuse requires a fork release with upload enabled.');
+            }
+            if (!/^[1-9][0-9]*$/.test(process.env.SOURCE_RUN_ID)) throw new Error('Invalid source run ID.');
+            const run_id = Number(process.env.SOURCE_RUN_ID);
+            if (!Number.isSafeInteger(run_id) || run_id === context.runId) throw new Error('Invalid source run ID.');
+            const parameters = { owner: context.repo.owner, repo: context.repo.repo, run_id };
+            const { data: run } = await github.rest.actions.getWorkflowRun(parameters);
+            if (run.head_sha !== process.env.RELEASE_COMMIT || run.path !== '.github/workflows/native-package.yml'
+                || run.event !== 'workflow_dispatch' || run.status !== 'completed') {
+              throw new Error('Source run must be a completed native-package dispatch for the exact release commit.');
+            }
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              ...parameters, filter: 'all', per_page: 100,
+            });
+            if (!jobs.some((job) => job.name === 'Package windows-x64' && job.conclusion === 'success')) {
+              throw new Error('Source run has no successful Windows package job.');
+            }
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              ...parameters, per_page: 100,
+            });
+            if (!artifacts.some((artifact) => artifact.name === 'OxideTerm-windows-x64' && !artifact.expired)) {
+              throw new Error('Source run has no available Windows package artifact.');
+            }
+
   # ── Release packaging target: Windows x64 ──────────────────────────────
   package:
     name: Package ${{ matrix.label }}
     needs: validate-release-request
+    if: inputs.reuse_package_run_id == ''
     runs-on: ${{ matrix.os }}
     permissions:
       actions: write
@@ -453,9 +501,14 @@ jobs:
       - validate-release-request
       - package
     runs-on: ubuntu-latest
-    if: inputs.upload_release
+    if: >-
+      always() && !cancelled() && inputs.upload_release &&
+      needs.validate-release-request.result == 'success' &&
+      (needs.package.result == 'success' ||
+       (inputs.reuse_package_run_id != '' && needs.package.result == 'skipped'))
     permissions:
       contents: write
+      actions: read
     outputs:
       tag: ${{ steps.release_meta.outputs.tag }}
       version: ${{ steps.release_meta.outputs.version }}
@@ -486,6 +539,8 @@ jobs:
           pattern: OxideTerm-*
           path: dist-release
           merge-multiple: true
+          run-id: ${{ inputs.reuse_package_run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Resolve release metadata
         id: release_meta
@@ -654,7 +709,58 @@ jobs:
 
           (cd dist-release && sha256sum "${checksum_assets[@]/#dist-release\//}" > sha256sums.txt)
 
-      - name: Upload release assets
+      - name: Upload fork draft release assets
+        if: inputs.fork_release
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
+          RELEASE_PRERELEASE: ${{ steps.release_meta.outputs.prerelease }}
+          RELEASE_BODY_PATH: ${{ steps.release_notes.outputs.body_path }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const tag = process.env.RELEASE_TAG;
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner, repo: context.repo.repo, per_page: 100,
+            });
+            let release = releases.find((candidate) => candidate.tag_name === tag);
+            if (release && !release.draft) throw new Error(`Refusing to modify published release ${tag}.`);
+            const body = fs.readFileSync(process.env.RELEASE_BODY_PATH, 'utf8');
+            if (!release) {
+              ({ data: release } = await github.rest.repos.createRelease({
+                owner: context.repo.owner, repo: context.repo.repo, tag_name: tag,
+                name: `OxideTerm Windows Fork ${process.env.RELEASE_VERSION}`,
+                prerelease: process.env.RELEASE_PRERELEASE === 'true', draft: true, body,
+              }));
+            } else {
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner, repo: context.repo.repo, release_id: release.id,
+                name: `OxideTerm Windows Fork ${process.env.RELEASE_VERSION}`,
+                prerelease: process.env.RELEASE_PRERELEASE === 'true', draft: true, body,
+              });
+            }
+            const files = fs.readdirSync('dist-release').filter((name) =>
+              /\.(app\.zip|dmg|tar\.gz|zip|exe|AppImage|deb|rpm|sig)$/.test(name)
+              || name === 'sha256sums.txt'
+            ).sort();
+            if (files.length === 0) throw new Error('No release assets found.');
+            for (const name of files) {
+              const old = release.assets.find((asset) => asset.name === name);
+              if (old) await github.rest.repos.deleteReleaseAsset({
+                owner: context.repo.owner, repo: context.repo.repo, asset_id: old.id,
+              });
+              const data = fs.readFileSync(path.join('dist-release', name));
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner, repo: context.repo.repo, release_id: release.id,
+                name, data, headers: {
+                  'content-type': 'application/octet-stream', 'content-length': data.length,
+                },
+              });
+            }
+      - name: Upload non-fork release assets
+        if: ${{ !inputs.fork_release }}
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |
@@ -669,14 +775,11 @@ jobs:
             dist-release/*.sig
             dist-release/sha256sums.txt
           tag_name: ${{ steps.release_meta.outputs.tag }}
-          name: OxideTerm ${{ inputs.fork_release && 'Windows Fork' || 'Native' }} ${{ steps.release_meta.outputs.version }}
+          name: OxideTerm Native ${{ steps.release_meta.outputs.version }}
           prerelease: ${{ steps.release_meta.outputs.prerelease }}
-          # Stable releases become Latest automatically; prereleases must never
-          # displace the current stable release.
           make_latest: ${{ steps.release_meta.outputs.prerelease == 'false' }}
           body_path: ${{ steps.release_notes.outputs.body_path }}
           generate_release_notes: ${{ steps.release_notes.outputs.generate_release_notes }}
-          draft: ${{ inputs.fork_release }}
 
   publish-updater:
     name: Generate updater manifest

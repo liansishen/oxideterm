@@ -8,6 +8,7 @@ pub(super) struct LocalTerminalInstance {
     pub(super) title: String,
     pub(super) shell: Option<oxideterm_terminal::ShellInfo>,
     pub(super) cwd: Option<std::path::PathBuf>,
+    pub(super) post_connect_command: Option<zeroize::Zeroizing<String>>,
 }
 
 impl LocalTerminalInstance {
@@ -18,6 +19,7 @@ impl LocalTerminalInstance {
             title,
             shell: config.shell.clone(),
             cwd: config.cwd.clone(),
+            post_connect_command: config.post_connect_command.clone(),
         }
     }
 }
@@ -27,8 +29,10 @@ impl WorkspaceApp {
         &self,
         shell_id: Option<&str>,
         cwd: Option<&str>,
+        post_connect_command: Option<&str>,
     ) -> Result<LocalPtyConfig> {
         let mut config = self.local_terminal_config();
+        config.post_connect_command = post_connect_command.map(|command| command.to_owned().into());
         if let Some(id) = shell_id {
             config.shell = Some(
                 self.effective_local_shells_for_settings(self.settings_store.settings())
@@ -74,6 +78,8 @@ impl WorkspaceApp {
                 .then(|| form.icon_background_color.clone()),
             shell_id: form.local_shell_id.clone(),
             cwd: (!form.local_cwd.trim().is_empty()).then(|| form.local_cwd.trim().to_owned()),
+            post_connect_command: (!form.post_connect_command.trim().is_empty())
+                .then(|| form.post_connect_command.trim().to_owned()),
             group: (!self.connection_form_group_is_ungrouped(&form.group))
                 .then(|| form.group.trim().to_owned()),
         };
@@ -85,9 +91,11 @@ impl WorkspaceApp {
             let config = if action == NewConnectionSubmitAction::Save {
                 None
             } else {
-                Some(
-                    self.local_profile_config(request.shell_id.as_deref(), request.cwd.as_deref())?,
-                )
+                Some(self.local_profile_config(
+                    request.shell_id.as_deref(),
+                    request.cwd.as_deref(),
+                    request.post_connect_command.as_deref(),
+                )?)
             };
             let title = if request.name.is_empty() {
                 config
@@ -174,7 +182,11 @@ impl WorkspaceApp {
             return;
         };
         let result = self
-            .local_profile_config(profile.shell_id.as_deref(), profile.cwd.as_deref())
+            .local_profile_config(
+                profile.shell_id.as_deref(),
+                profile.cwd.as_deref(),
+                profile.post_connect_command.as_deref(),
+            )
             .and_then(|config| {
                 self.create_local_terminal_tab_with_owned_session(config, profile.name, window, cx)
             });
@@ -212,6 +224,7 @@ impl WorkspaceApp {
         form.icon_background_color = profile.icon_background_color.unwrap_or_default();
         form.local_shell_id = profile.shell_id;
         form.local_cwd = profile.cwd.unwrap_or_default();
+        form.post_connect_command = profile.post_connect_command.unwrap_or_default();
         form.group = profile
             .group
             .unwrap_or_else(|| self.i18n.t("ssh.form.ungrouped"));

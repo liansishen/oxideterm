@@ -74,6 +74,13 @@ impl LocalPtySession {
         encoding: TerminalEncoding,
         scrollback_lines: usize,
     ) -> Result<Self> {
+        let post_connect_input = crate::post_connect::normalize_post_connect_command(
+            local_config
+                .post_connect_command
+                .as_ref()
+                .map(|command| command.as_str()),
+        )
+        .map_err(anyhow::Error::msg)?;
         let size = TerminalSize {
             cols: cols.max(2),
             rows: rows.max(2),
@@ -183,7 +190,7 @@ impl LocalPtySession {
         let notifier = LocalGraphicsNotifier(pty_tx);
         let io_thread = event_loop.spawn();
 
-        Ok(Self {
+        let mut session = Self {
             term,
             notifier,
             event_rx,
@@ -205,7 +212,12 @@ impl LocalPtySession {
             encoding,
             input_encoder: TerminalInputEncoder::new(encoding),
             tmux_display,
-        })
+        };
+        // Queue input only after the PTY owns a running event loop; the shell consumes it on startup.
+        if let Some(input) = post_connect_input {
+            session.write_text(&input)?;
+        }
+        Ok(session)
     }
 
     pub fn drain_output(&mut self) -> bool {

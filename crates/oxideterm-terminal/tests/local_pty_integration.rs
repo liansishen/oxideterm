@@ -11,6 +11,62 @@ use oxideterm_terminal::{
 };
 
 #[test]
+fn local_pty_runs_post_connect_command_once_per_session_and_keeps_shell_interactive() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = LocalPtyConfig {
+        shell: Some(ShellInfo::new("sh", "Sh", "/bin/sh")),
+        cwd: Some(directory.path().to_path_buf()),
+        load_profile: false,
+        post_connect_command: Some(
+            "  printf '启动\\n' >> startup\r\nexport OXIDE_STARTUP=ready  "
+                .to_string()
+                .into(),
+        ),
+        ..Default::default()
+    };
+    for count in 1..=2 {
+        let mut session = LocalPtySession::spawn_with_config_graphics_and_encoding(
+            80,
+            24,
+            config.clone(),
+            GraphicsOptions::default(),
+            TerminalEncoding::Utf8,
+            100,
+        )
+        .unwrap();
+        assert_eventually(
+            Duration::from_secs(5),
+            || {
+                session.drain_output();
+                std::fs::read_to_string(directory.path().join("startup")).ok()
+                    == Some("启动\n".repeat(count))
+            },
+            "post-connect command did not run in the configured directory",
+        );
+        session
+            .write_text("printf '%s' \"$OXIDE_STARTUP\" > result\r")
+            .unwrap();
+        assert_eventually(
+            Duration::from_secs(5),
+            || {
+                session.drain_output();
+                std::fs::read_to_string(directory.path().join("result"))
+                    .ok()
+                    .as_deref()
+                    == Some("ready")
+            },
+            "post-connect environment was not available to subsequent shell input",
+        );
+        session.shutdown();
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("startup")).unwrap(),
+            "启动\n".repeat(count)
+        );
+        std::fs::remove_file(directory.path().join("result")).unwrap();
+    }
+}
+
+#[test]
 fn local_pty_shutdown_cleans_background_child_processes() {
     let marker_path = std::env::temp_dir().join(format!(
         "oxideterm-pty-child-{}-{}",

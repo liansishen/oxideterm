@@ -957,7 +957,10 @@ impl fmt::Debug for NewConnectionForm {
             // Notes are user-authored free text and may contain sensitive context.
             .field("notes_present", &!self.notes.is_empty())
             .field("sftp_initial_remote_path", &self.sftp_initial_remote_path)
-            .field("post_connect_command", &self.post_connect_command)
+            .field(
+                "post_connect_command",
+                &!self.post_connect_command.is_empty(),
+            )
             .field("proxy_command_enabled", &self.proxy_command_enabled)
             .field("proxy_command", &"[redacted secret]")
             .field("proxy_command_keychain_id", &self.proxy_command_keychain_id)
@@ -1229,6 +1232,7 @@ impl NewConnectionForm {
         self.passphrase.zeroize();
         self.upstream_proxy_password.zeroize();
         self.proxy_command.zeroize();
+        self.post_connect_command.zeroize();
     }
 }
 
@@ -1593,6 +1597,7 @@ pub(in crate::workspace) fn next_connection_field(
         let fields = [
             NewConnectionField::Name,
             NewConnectionField::LocalCwd,
+            NewConnectionField::PostConnectCommand,
             NewConnectionField::Group,
         ];
         let index = fields
@@ -2484,13 +2489,14 @@ mod tests {
 
     use super::{
         NewConnectionField, NewConnectionForm, NewConnectionProxyHop, NewConnectionTransport,
+        NewConnectionUpstreamProxyAuth, NewConnectionUpstreamProxyPolicy,
         RemoteDesktopSessionOptions, RemoteDesktopVncCompression, RemoteDesktopVncImageQuality,
         RemoteDesktopVncOptions, RemoteDesktopVncSecurityPolicy, RemoteDesktopVncSessionMode,
         SshAuthFamily, SshAuthTab, SshKeyAuthSource, StandaloneSftpTransferMode,
         auth_family_from_tab, backspace_current_connection_field, connection_secret_field_visible,
         form_from_mosh_profile, form_from_remote_desktop_profile, form_from_serial_profile,
         form_from_telnet_profile, insert_text_into_current_connection_field, key_source_from_tab,
-        select_current_connection_field, text_from_keystroke,
+        next_connection_field, select_current_connection_field, text_from_keystroke,
         toggle_connection_secret_field_visibility,
     };
 
@@ -2541,17 +2547,52 @@ mod tests {
     }
 
     #[test]
+    fn local_terminal_command_participates_in_keyboard_navigation_and_editing() {
+        use NewConnectionField::{Group, LocalCwd, PostConnectCommand};
+        for (from, forward, expected) in [
+            (LocalCwd, true, PostConnectCommand),
+            (PostConnectCommand, true, Group),
+            (Group, false, PostConnectCommand),
+            (PostConnectCommand, false, LocalCwd),
+        ] {
+            assert_eq!(
+                next_connection_field(
+                    from,
+                    SshAuthTab::Password,
+                    false,
+                    NewConnectionTransport::LocalTerminal,
+                    NewConnectionUpstreamProxyPolicy::UseGlobal,
+                    NewConnectionUpstreamProxyAuth::None,
+                    false,
+                    forward,
+                ),
+                expected
+            );
+        }
+        let mut form = NewConnectionForm::default();
+        form.transport = NewConnectionTransport::LocalTerminal;
+        form.focused_field = PostConnectCommand;
+        insert_text_into_current_connection_field(&mut form, "pwd");
+        assert_eq!(form.post_connect_command, "pwd");
+        select_current_connection_field(&mut form);
+        insert_text_into_current_connection_field(&mut form, "ls");
+        assert_eq!(form.post_connect_command, "ls");
+    }
+
+    #[test]
     fn visible_secret_drafts_remain_redacted_from_debug_output() {
         let mut form = NewConnectionForm::default();
         form.password = "password-value".to_string();
         form.password_visible = true;
         form.passphrase = "passphrase-value".to_string();
         form.passphrase_visible = true;
+        form.post_connect_command = "export TOKEN=private-command-value".to_string();
 
         let debug_output = format!("{form:?}");
 
         assert!(!debug_output.contains("password-value"));
         assert!(!debug_output.contains("passphrase-value"));
+        assert!(!debug_output.contains("private-command-value"));
         assert!(debug_output.contains("[redacted secret]"));
     }
 
@@ -2561,6 +2602,7 @@ mod tests {
         form.password = "password-value".to_string();
         form.passphrase = "passphrase-value".to_string();
         form.upstream_proxy_password = "proxy-password-value".to_string();
+        form.post_connect_command = "export TOKEN=private-command-value".to_string();
         form.standalone_sftp_transfer_mode = StandaloneSftpTransferMode::RemoteRemote;
         form.standalone_sftp_secondary.password = "secondary-password-value".to_string();
         form.standalone_sftp_secondary.passphrase = "secondary-passphrase-value".to_string();
@@ -2575,6 +2617,7 @@ mod tests {
         assert!(form.password.is_empty());
         assert!(form.passphrase.is_empty());
         assert!(form.upstream_proxy_password.is_empty());
+        assert!(form.post_connect_command.is_empty());
         assert!(form.standalone_sftp_secondary.password.is_empty());
         assert!(form.standalone_sftp_secondary.passphrase.is_empty());
         assert!(proxy_hop.password.is_empty());

@@ -522,6 +522,7 @@ fn local_profile_cloud_merge_and_selection_preserve_independent_edits() {
         group: None,
         shell_id: Some("zsh".into()),
         cwd: Some("~/base".into()),
+        post_connect_command: Some("pwd".into()),
         created_at: now,
         updated_at: now,
         last_used_at: None,
@@ -535,6 +536,7 @@ fn local_profile_cloud_merge_and_selection_preserve_independent_edits() {
     };
     let mut local = base.clone();
     local.local_terminal_profiles[0].name = "Local name".into();
+    local.local_terminal_profiles[0].post_connect_command = Some("ls".into());
     let mut remote = base.clone();
     remote.local_terminal_profiles[0].cwd = Some("~/remote".into());
     merge_connection_records(
@@ -546,6 +548,12 @@ fn local_profile_cloud_merge_and_selection_preserve_independent_edits() {
     )
     .unwrap();
     assert_eq!(remote.local_terminal_profiles[0].name, "Local name");
+    assert_eq!(
+        remote.local_terminal_profiles[0]
+            .post_connect_command
+            .as_deref(),
+        Some("ls")
+    );
     assert_eq!(
         remote.local_terminal_profiles[0].cwd.as_deref(),
         Some("~/remote")

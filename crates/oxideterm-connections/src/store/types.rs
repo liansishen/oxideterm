@@ -868,7 +868,7 @@ pub enum SerialLineEnding {
 }
 
 /// A reusable launch configuration, independent of any running PTY.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct LocalTerminalProfile {
     pub id: String,
     pub name: String,
@@ -884,13 +884,15 @@ pub struct LocalTerminalProfile {
     pub shell_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post_connect_command: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_used_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct SaveLocalTerminalProfileRequest {
     pub id: Option<String>,
     pub name: String,
@@ -900,6 +902,31 @@ pub struct SaveLocalTerminalProfileRequest {
     pub icon_background_color: Option<String>,
     pub shell_id: Option<String>,
     pub cwd: Option<String>,
+    pub post_connect_command: Option<String>,
+}
+
+impl fmt::Debug for LocalTerminalProfile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LocalTerminalProfile")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("shell_id", &self.shell_id)
+            .field("cwd", &self.cwd)
+            .field("post_connect_command", &self.post_connect_command.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for SaveLocalTerminalProfileRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SaveLocalTerminalProfileRequest")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("shell_id", &self.shell_id)
+            .field("cwd", &self.cwd)
+            .field("post_connect_command", &self.post_connect_command.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

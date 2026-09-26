@@ -736,7 +736,7 @@ jobs:
               }));
             } else {
               await github.rest.repos.updateRelease({
-                owner: context.repo.owner, repo: context.repo.repo, release_id: release.id,
+                owner: context.repo.owner, repo: context.repo.repo, release_id: release.id, tag_name: tag,
                 name: `OxideTerm Windows Fork ${process.env.RELEASE_VERSION}`,
                 prerelease: process.env.RELEASE_PRERELEASE === 'true', draft: true, body,
               });
@@ -787,7 +787,7 @@ jobs:
       - release
       - validate-release-request
     runs-on: ubuntu-latest
-    if: inputs.upload_release
+    if: always() && !cancelled() && inputs.upload_release && needs.release.result == 'success' && needs.validate-release-request.result == 'success'
     permissions:
       contents: write
     steps:
@@ -921,7 +921,7 @@ jobs:
       - release
       - publish-updater
     runs-on: ubuntu-latest
-    if: inputs.upload_release
+    if: always() && !cancelled() && inputs.upload_release && needs.release.result == 'success' && needs.publish-updater.result == 'success'
     permissions:
       contents: write
     steps:
@@ -954,7 +954,7 @@ jobs:
       - publish-updater
       - cleanup-sigs
     runs-on: ubuntu-latest
-    if: inputs.upload_release
+    if: always() && !cancelled() && inputs.upload_release && needs.release.result == 'success' && needs.publish-updater.result == 'success' && needs.cleanup-sigs.result == 'success'
     permissions:
       contents: read
     steps:
@@ -1047,7 +1047,7 @@ jobs:
   publish-fork-draft:
     name: Publish completed fork release
     needs: validate-release-assets
-    if: inputs.fork_release
+    if: always() && !cancelled() && inputs.fork_release && needs.validate-release-assets.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1066,6 +1066,6 @@ jobs:
             const manifest = release.assets.find((asset) => asset.name === 'latest.json');
             if (!manifest) throw new Error('Refusing to publish without latest.json');
             await github.rest.repos.updateRelease({
-              owner: context.repo.owner, repo: context.repo.repo, release_id: release.id, draft: false,
+              owner: context.repo.owner, repo: context.repo.repo, release_id: release.id, tag_name: process.env.TAG, draft: false,
               make_latest: 'true',
             });

@@ -66,6 +66,7 @@ test('fork draft upload finds draft by listing and replaces only draft assets', 
     const requireFn = (name) => name === 'node:fs' ? relativeFs : require(name);
     await execute('Upload fork draft release assets', github, env, requireFn);
     assert.deepEqual(calls.map(([action]) => action), ['update', 'delete', 'upload']);
+    assert.equal(calls[0][1].tag_name, 'v2.1.0+fork.1');
     assert.equal(calls[1][1].asset_id, 7);
     assert.equal(calls[2][1].release_id, 4);
     assert.equal(calls[2][1].data.toString(), 'verified-package');

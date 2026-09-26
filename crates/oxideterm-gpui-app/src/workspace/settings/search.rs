@@ -131,6 +131,8 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
             &[
                 "settings_view.terminal.font_family",
                 "settings_view.terminal.cjk_font_family",
+                "settings_view.terminal.custom_cjk_font_family",
+                "settings_view.terminal.custom_cjk_font_family_hint",
                 "settings_view.terminal.font_ligatures",
                 "settings_view.terminal.font_size",
                 "settings_view.terminal.line_height",

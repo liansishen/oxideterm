@@ -238,6 +238,8 @@
       "cjk_font_family": "Police chinoise / CJK",
       "cjk_font_family_hint": "Police de secours pour les glyphes chinois, japonais et coréens. Auto conserve la chaîne de secours intégrée et système.",
       "cjk_font_auto": "Auto · Police de secours intelligente",
+      "custom_cjk_font_family": "Police CJK personnalisée",
+      "custom_cjk_font_family_hint": "Saisissez le nom d’une police installée pour les caractères chinois, japonais et coréens. Laissez vide pour utiliser les polices de remplacement automatiques.",
       "font_preview": "Aperçu de la police",
       "font_size": "Taille de police",
       "font_size_hint": "Taille des caractères du terminal",

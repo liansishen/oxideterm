@@ -41,6 +41,7 @@ pub fn persisted_settings_input_value(
 ) -> Option<String> {
     let value = match input {
         SettingsInput::TerminalCustomFontFamily => settings.terminal.custom_font_family.clone(),
+        SettingsInput::TerminalCustomCjkFontFamily => settings.terminal.cjk_font_family.clone(),
         SettingsInput::TerminalFontSize => settings.terminal.font_size.to_string(),
         SettingsInput::TerminalFontWeight => settings.terminal.font_weight.to_string(),
         SettingsInput::TerminalScrollback => settings.terminal.scrollback.to_string(),
@@ -336,6 +337,10 @@ pub fn apply_persisted_settings_input_draft(
     match input {
         SettingsInput::TerminalCustomFontFamily => {
             settings.terminal.custom_font_family = draft.trim().to_string();
+            SettingsInputDraftApply::Applied
+        }
+        SettingsInput::TerminalCustomCjkFontFamily => {
+            settings.terminal.cjk_font_family = draft.trim().to_string();
             SettingsInputDraftApply::Applied
         }
         SettingsInput::TerminalFontSize => parse_i64(draft)
@@ -873,6 +878,44 @@ pub fn settings_multiline_line_selection(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_custom_cjk_font_input_preserves_primary_font_and_clears_to_auto() {
+        let mut settings = PersistedSettings::default();
+        settings.terminal.font_family = oxideterm_settings::FontFamily::Custom;
+        settings.terminal.custom_font_family = "Fira Code".to_string();
+        for (draft, expected) in [
+            ("  Source Han Mono SC  ", "Source Han Mono SC"),
+            ("更纱等距黑体 SC", "更纱等距黑体 SC"),
+            ("   ", ""),
+        ] {
+            assert_eq!(
+                apply_persisted_settings_input_draft(
+                    &mut settings,
+                    SettingsInput::TerminalCustomCjkFontFamily,
+                    draft,
+                ),
+                SettingsInputDraftApply::Applied
+            );
+            assert_eq!(settings.terminal.cjk_font_family, expected);
+            assert_eq!(
+                settings.terminal.font_family,
+                oxideterm_settings::FontFamily::Custom
+            );
+            assert_eq!(settings.terminal.custom_font_family, "Fira Code");
+            let serialized = serde_json::to_value(&settings).unwrap();
+            assert_eq!(serialized["terminal"]["cjkFontFamily"], expected);
+            let reloaded: PersistedSettings = serde_json::from_value(serialized).unwrap();
+            assert_eq!(
+                persisted_settings_input_value(
+                    &reloaded,
+                    SettingsInput::TerminalCustomCjkFontFamily
+                )
+                .as_deref(),
+                Some(expected)
+            );
+        }
+    }
 
     #[test]
     fn ide_font_preferences_persist_and_legacy_settings_inherit() {

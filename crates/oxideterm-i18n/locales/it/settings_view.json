@@ -238,6 +238,8 @@
       "cjk_font_family": "Font cinese / CJK",
       "cjk_font_family_hint": "Font di fallback per glifi cinesi, giapponesi e coreani. Auto mantiene la catena di fallback inclusa e di sistema.",
       "cjk_font_auto": "Auto · fallback intelligente",
+      "custom_cjk_font_family": "Carattere CJK personalizzato",
+      "custom_cjk_font_family_hint": "Inserisci il nome di un carattere installato per i caratteri cinesi, giapponesi e coreani. Lascia vuoto per usare automaticamente i caratteri alternativi.",
       "font_preview": "Anteprima font",
       "font_size": "Dimensione Font",
       "font_size_hint": "Dimensione dei caratteri del terminale",

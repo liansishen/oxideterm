@@ -238,6 +238,8 @@
       "cjk_font_family": "Fuente china / CJK",
       "cjk_font_family_hint": "Fuente de respaldo para glifos chinos, japoneses y coreanos. Auto mantiene la cadena de respaldo incluida y del sistema.",
       "cjk_font_auto": "Auto · Respaldo inteligente",
+      "custom_cjk_font_family": "Fuente CJK personalizada",
+      "custom_cjk_font_family_hint": "Introduce el nombre de una fuente instalada para caracteres chinos, japoneses y coreanos. Déjalo vacío para usar fuentes alternativas automáticas.",
       "font_preview": "Vista previa de fuente",
       "font_size": "Tamaño de fuente",
       "font_size_hint": "Tamaño de los caracteres del terminal",

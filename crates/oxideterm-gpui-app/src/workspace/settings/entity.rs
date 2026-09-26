@@ -389,6 +389,7 @@ pub(in crate::workspace) struct SettingsWorkspaceEntity {
     pub(super) portable_new_password: Zeroizing<String>,
     pub(super) portable_confirm_password: Zeroizing<String>,
     pub(super) settings_focused_input: Option<SettingsInput>,
+    pub(super) editing_custom_terminal_cjk_font: bool,
     pub(super) portable_dialog_presence: oxideterm_gpui_ui::motion::ExitPresence,
     pub(super) portable_dialog_exit_task: Option<Task<()>>,
     pub(super) portable_action_task: Option<Task<()>>,
@@ -538,6 +539,7 @@ impl SettingsWorkspaceEntity {
             portable_new_password: Zeroizing::new(String::new()),
             portable_confirm_password: Zeroizing::new(String::new()),
             settings_focused_input: None,
+            editing_custom_terminal_cjk_font: false,
             portable_dialog_presence: oxideterm_gpui_ui::motion::ExitPresence::visible(),
             portable_dialog_exit_task: None,
             portable_action_task: None,
@@ -622,6 +624,12 @@ impl SettingsWorkspaceEntity {
             launch_at_login_task: None,
             native_update: NativeUpdateRuntime::new(cx),
         }
+    }
+
+    pub(super) fn terminal_cjk_font_is_custom(&self, family: &str) -> bool {
+        // Keep the editor visible while an empty or preset family name is being entered.
+        self.editing_custom_terminal_cjk_font
+            || !oxideterm_gpui_settings_view::terminal_cjk_font_options().contains(&family.trim())
     }
 
     pub(in crate::workspace) fn route_snapshot(&self) -> SettingsRouteSnapshot {
@@ -2397,6 +2405,21 @@ mod tests {
         assert!(
             workspace_source.contains("zeroize::Zeroize::zeroize(&mut self.settings_input_draft)")
         );
+    }
+
+    #[gpui::test]
+    fn custom_terminal_cjk_editor_handles_saved_fonts_and_preset_switches(cx: &mut TestAppContext) {
+        let entity = cx.new(SettingsWorkspaceEntity::new);
+        entity.update(cx, |entity, _| {
+            assert!(entity.terminal_cjk_font_is_custom(" Source Han Mono SC "));
+            assert!(!entity.terminal_cjk_font_is_custom(""));
+            assert!(!entity.terminal_cjk_font_is_custom(" PingFang SC "));
+            entity.editing_custom_terminal_cjk_font = true;
+            assert!(entity.terminal_cjk_font_is_custom(""));
+            assert!(entity.terminal_cjk_font_is_custom("PingFang SC"));
+            entity.editing_custom_terminal_cjk_font = false;
+            assert!(!entity.terminal_cjk_font_is_custom("PingFang SC"));
+        });
     }
 
     #[gpui::test]

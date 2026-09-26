@@ -238,6 +238,8 @@
       "cjk_font_family": "中文 / CJK 字型",
       "cjk_font_family_hint": "用於渲染中、日、韓字元的備用字型。Auto 會繼續使用內建與系統備用鏈。",
       "cjk_font_auto": "Auto · 智慧備用",
+      "custom_cjk_font_family": "自訂中文 / CJK 字型",
+      "custom_cjk_font_family_hint": "輸入已安裝的中日韓字型名稱，留空時使用自動後備字型。",
       "font_preview": "字型預覽",
       "font_size": "字型大小",
       "font_size_hint": "終端機字元的大小",

@@ -238,6 +238,8 @@
       "cjk_font_family": "中国語 / CJK フォント",
       "cjk_font_family_hint": "中国語・日本語・韓国語の字形に使うフォールバックフォント。Auto はバンドル済みおよびシステムのフォールバックチェーンを使います。",
       "cjk_font_auto": "Auto · 自動フォールバック",
+      "custom_cjk_font_family": "カスタム CJK フォント",
+      "custom_cjk_font_family_hint": "中国語・日本語・韓国語の文字に使用するインストール済みフォント名を入力します。空欄の場合は自動フォールバックを使用します。",
       "font_preview": "フォントプレビュー",
       "font_size": "フォントサイズ",
       "font_size_hint": "ターミナル文字のサイズ",

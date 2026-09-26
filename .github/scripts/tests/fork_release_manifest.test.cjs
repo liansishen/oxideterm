@@ -8,7 +8,7 @@ function fixture(version = '2.1.0+fork.1') {
   const setup = `OxideTerm_${version}_windows_x64-setup.exe`;
   const portable = `OxideTerm_${version}_windows_x64_portable.zip`;
   const assets = [setup, portable].flatMap((name) => [
-    { name, browser_download_url: `https://github.com/fork/oxideterm/releases/download/v${version}/${name}` },
+    { name, browser_download_url: `https://github.com/fork/oxideterm/releases/download/untagged-draft/${name}` },
     { name: `${name}.sig`, url: `https://api.github.com/assets/${name}.sig` },
   ]);
   return { assets, setup, portable };
@@ -20,6 +20,7 @@ test('fork manifest uses versioned Windows assets and authenticated signature do
   const requests = [];
   const result = await buildForkReleasePlatforms({
     version: '2.1.0+fork.1',
+    repository: 'fork/oxideterm',
     release: { assets: data.assets },
     token,
     fetchImpl: async (url, options) => {
@@ -41,17 +42,18 @@ test('fork manifest uses versioned Windows assets and authenticated signature do
   assert.equal(result.version, '2.1.0+fork.1');
   assert.deepEqual(result.platforms['windows-x86_64'], {
     signature: Buffer.from(`signature:https://api.github.com/assets/${data.setup}.sig`).toString('base64'),
-    url: `https://github.com/fork/oxideterm/releases/download/v2.1.0+fork.1/${data.setup}`,
+    url: 'https://github.com/fork/oxideterm/releases/download/v2.1.0%2Bfork.1/OxideTerm_2.1.0%2Bfork.1_windows_x64-setup.exe',
   });
   assert.equal(result.platforms['windows-x86_64-nsis'].url, result.platforms['windows-x86_64'].url);
   assert.equal(result.platforms['windows-x86_64-portable'].url,
-    `https://github.com/fork/oxideterm/releases/download/v2.1.0+fork.1/${data.portable}`);
+    'https://github.com/fork/oxideterm/releases/download/v2.1.0%2Bfork.1/OxideTerm_2.1.0%2Bfork.1_windows_x64_portable.zip');
 });
 
 test('manifest generation rejects failed authenticated asset downloads', async () => {
   const data = fixture();
   await assert.rejects(buildForkReleasePlatforms({
     version: '2.1.0+fork.1',
+    repository: 'fork/oxideterm',
     release: { assets: data.assets },
     token: 'test-token',
     fetchImpl: async () => ({ ok: false, status: 403, text: async () => '' }),

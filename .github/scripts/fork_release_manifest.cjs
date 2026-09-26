@@ -16,7 +16,7 @@ async function readSignedAsset(signatureAsset, token, fetchImpl) {
   return Buffer.from((await response.text()).trim(), 'utf8').toString('base64');
 }
 
-async function buildForkReleasePlatforms({ version, release, token, fetchImpl }) {
+async function buildForkReleasePlatforms({ version, repository, release, token, fetchImpl }) {
   if (!version.match(/^\d+\.\d+\.\d+\+fork\.[1-9]\d*$/)) {
     throw new Error(`invalid fork release version: ${version}`);
   }
@@ -27,7 +27,9 @@ async function buildForkReleasePlatforms({ version, release, token, fetchImpl })
     const signature = assets.get(`${filename}.sig`);
     if (!binary || !signature) throw new Error(`missing signed release asset: ${filename}`);
     const encodedSignature = await readSignedAsset(signature, token, fetchImpl);
-    for (const key of keys) platforms[key] = { signature: encodedSignature, url: binary.browser_download_url };
+    // Draft asset URLs contain a temporary tag that changes when the release is published.
+    const url = `https://github.com/${repository}/releases/download/${encodeURIComponent(`v${version}`)}/${encodeURIComponent(filename)}`;
+    for (const key of keys) platforms[key] = { signature: encodedSignature, url };
   }
   await add(['windows-x86_64', 'windows-x86_64-nsis', 'x86_64-pc-windows-msvc', 'x86_64-pc-windows-msvc-nsis'], SETUP_NAME(version));
   await add(['windows-x86_64-portable'], PORTABLE_NAME(version));

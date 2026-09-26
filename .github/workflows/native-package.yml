@@ -851,7 +851,8 @@ jobs:
                 `${process.env.GITHUB_WORKSPACE}/.github/scripts/fork_release_manifest.cjs`,
               );
               ({ platforms } = await buildForkReleasePlatforms({
-                version, release, token: process.env.GITHUB_TOKEN, fetchImpl: fetch,
+                version, repository: `${context.repo.owner}/${context.repo.repo}`,
+                release, token: process.env.GITHUB_TOKEN, fetchImpl: fetch,
               }));
             } else {
               await addAsset(
@@ -1015,7 +1016,10 @@ jobs:
             ]) {
               const platform = latest.platforms?.[key];
               const asset = assetByName.get(filename);
-              if (!platform || !asset || platform.url !== asset.browser_download_url) {
+              const expectedUrl = version.includes('+fork.')
+                ? `https://github.com/${context.repo.owner}/${context.repo.repo}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(filename)}`
+                : asset?.browser_download_url;
+              if (!platform || !asset || platform.url !== expectedUrl) {
                 throw new Error(`latest.json has an invalid URL for ${key}`);
               }
             }

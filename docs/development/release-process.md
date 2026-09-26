@@ -2,6 +2,16 @@
 
 This page is for maintainers preparing native releases. Contributors should not create release tags or dispatch publishing workflows unless explicitly asked.
 
+## Fork Windows Release
+
+The fork-only Windows release is started with **Actions → Fork Release → Run workflow** on `main`. The workflow requires confirmation, verifies that the upstream tag matching the workspace base version is an ancestor of `main`, allocates the next `+fork.N` revision for that exact base, runs `bump_version.py`, then commits and tags before invoking `native-package.yml` as a reusable workflow. The native job builds Windows x64 and creates a draft release; it is published only after signing, artifact checks, and updater manifest generation succeed.
+
+Configure repository variable `OXIDETERM_UPDATER_PUBKEY` with the Base64 encoding of the complete minisign public-key file, including its comment line. It must correspond to the Base64-encoded private-key file in the `TAURI_SIGNING_PRIVATE_KEY` secret; retain `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key is password-protected. Missing or mismatched signing keys fail before any release commit or tag is created. `latest.json` contains the fork version and points to assets in the current repository.
+
+For example, releases based on upstream `2.1.0` use `2.1.0+fork.1`, `2.1.0+fork.2`, and so on. Once upstream `2.1.1` is merged and the workspace base version changes, the sequence starts at `2.1.1+fork.1`. A failed run can reuse the current unpublished tag when it still points to the dispatched `main` commit. Published releases always allocate a new revision. Branch protection must allow the workflow to push its version commit to `main`; the branch and tag are pushed atomically.
+
+On Windows, choose **Settings → Help → Update channel → Custom**, enter the GitHub `owner/repository` (or its `https://github.com/owner/repository` URL), and enter the same Base64 public key. The repository must publish signed packages and a `latest.json` compatible with OxideTerm. Check for updates, then choose **Update and restart** to download, verify, install, and restart. Both the NSIS installer and portable ZIP are supported. Fork builds with a configured public key default to their own repository on fresh installations; existing saved channel choices are preserved.
+
 ## Prepare
 
 1. Obtain explicit approval that the GUI build has been run successfully and is ready to publish. That approval is the release gate.

@@ -14,10 +14,9 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 WORKSPACE_MANIFEST = ROOT_DIR / "Cargo.toml"
 README_BADGE_RE = re.compile(r"https://img\.shields\.io/badge/version-[^\"]+-blue")
 SEMVER_RE = re.compile(
-    r"^(0|[1-9]\d*)\."
-    r"(0|[1-9]\d*)\."
-    r"(0|[1-9]\d*)"
-    r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+    r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
 )
 
 

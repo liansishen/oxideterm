@@ -2,8 +2,27 @@ name: Native Package
 run-name: Native Package ${{ inputs.release_tag || inputs.version || github.sha }}
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        required: false
+        type: string
+      release_tag:
+        required: false
+        type: string
+      upload_release:
+        required: false
+        type: boolean
+      fork_release:
+        required: false
+        type: boolean
   workflow_dispatch:
     inputs:
+      fork_release:
+        description: Fork version and release channel (internal reusable workflow input)
+        required: false
+        default: false
+        type: boolean
       version:
         description: 'Optional artifact version override, for example 0.1.0-preview.1'
         required: false
@@ -90,6 +109,7 @@ jobs:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_UPLOAD_RELEASE: ${{ inputs.upload_release }}
+          INPUT_FORK_RELEASE: ${{ inputs.fork_release }}
         run: |
           set -euo pipefail
 
@@ -107,7 +127,9 @@ jobs:
               echo 'Release publishing requires release_tag.' >&2
               exit 1
             fi
-            if [[ ! "${INPUT_RELEASE_TAG}" =~ ^(v|native-v|gpui-v)[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            if [[ "${INPUT_FORK_RELEASE:-false}" == true ]]; then
+              [[ "${INPUT_RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+fork\.[1-9][0-9]*$ ]] || { echo 'Invalid fork release tag.' >&2; exit 1; }
+            elif [[ ! "${INPUT_RELEASE_TAG}" =~ ^(v|native-v|gpui-v)[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
               echo "Unsupported release tag: ${INPUT_RELEASE_TAG}" >&2
               exit 1
             fi
@@ -116,7 +138,10 @@ jobs:
             raw_version="${release_tag}"
             git fetch --no-tags origin "refs/tags/${release_tag}:refs/tags/${release_tag}"
             tag_commit="$(git rev-list -n 1 "refs/tags/${release_tag}")"
-            if ! git merge-base --is-ancestor "${tag_commit}" "${GITHUB_SHA}"; then
+            git fetch --no-tags origin main
+            validation_base="${GITHUB_SHA}"
+            if [[ "${INPUT_FORK_RELEASE:-false}" == true ]]; then validation_base="origin/main"; fi
+            if ! git merge-base --is-ancestor "${tag_commit}" "${validation_base}"; then
               echo "Release tag ${release_tag} points outside dispatched main history." >&2
               exit 1
             fi
@@ -147,10 +172,12 @@ jobs:
             exit 1
           fi
 
-          echo "raw_version=${raw_version}" >> "${GITHUB_OUTPUT}"
-          echo "release_commit=${release_commit}" >> "${GITHUB_OUTPUT}"
-          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "raw_version=${raw_version}"
+            echo "release_commit=${release_commit}"
+            echo "release_tag=${release_tag}"
+            echo "version=${version}"
+          } >> "${GITHUB_OUTPUT}"
 
   # ── Release packaging target: Windows x64 ──────────────────────────────
   package:
@@ -328,8 +355,10 @@ jobs:
             echo 'Imported macOS certificate did not expose a code-signing identity.' >&2
             exit 1
           fi
-          echo "MACOS_CODESIGN_IDENTITY=${signing_identity}" >> "${GITHUB_ENV}"
-          echo "MACOS_SIGNING_KEYCHAIN=${keychain_path}" >> "${GITHUB_ENV}"
+          {
+            echo "MACOS_CODESIGN_IDENTITY=${signing_identity}"
+            echo "MACOS_SIGNING_KEYCHAIN=${keychain_path}"
+          } >> "${GITHUB_ENV}"
 
           if [[ -n "${MACOS_NOTARY_KEY_BASE64:-}" ]]; then
             if [[ -z "${MACOS_NOTARY_KEY_ID:-}" || -z "${MACOS_NOTARY_ISSUER_ID:-}" ]]; then
@@ -339,9 +368,11 @@ jobs:
             notary_key_path="${RUNNER_TEMP}/AuthKey_${MACOS_NOTARY_KEY_ID}.p8"
             printf '%s' "${MACOS_NOTARY_KEY_BASE64}" | openssl base64 -d -A > "${notary_key_path}"
             chmod 600 "${notary_key_path}"
-            echo "MACOS_NOTARY_KEY_PATH=${notary_key_path}" >> "${GITHUB_ENV}"
-            echo "MACOS_NOTARY_KEY_ID=${MACOS_NOTARY_KEY_ID}" >> "${GITHUB_ENV}"
-            echo "MACOS_NOTARY_ISSUER_ID=${MACOS_NOTARY_ISSUER_ID}" >> "${GITHUB_ENV}"
+            {
+              echo "MACOS_NOTARY_KEY_PATH=${notary_key_path}"
+              echo "MACOS_NOTARY_KEY_ID=${MACOS_NOTARY_KEY_ID}"
+              echo "MACOS_NOTARY_ISSUER_ID=${MACOS_NOTARY_ISSUER_ID}"
+            } >> "${GITHUB_ENV}"
           fi
 
           rm -f "${certificate_path}" "${identity_path}"
@@ -349,6 +380,8 @@ jobs:
       - name: Package native app
         env:
           OXIDETERM_VERSION: ${{ needs.validate-release-request.outputs.raw_version }}
+          OXIDETERM_UPDATE_REPOSITORY: ${{ github.repository != 'AnalyseDeCircuit/oxideterm' && vars.OXIDETERM_UPDATER_PUBKEY != '' && github.repository || '' }}
+          OXIDETERM_UPDATER_PUBKEY: ${{ vars.OXIDETERM_UPDATER_PUBKEY }}
           APPIMAGE_EXTRACT_AND_RUN: ${{ runner.os == 'Linux' && '1' || '' }}
         run: python scripts/release/package_native.py ${{ matrix.target }}
 
@@ -433,6 +466,20 @@ jobs:
         with:
           ref: ${{ needs.validate-release-request.outputs.release_commit }}
 
+      - name: Protect published fork releases
+        if: inputs.fork_release
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RELEASE_TAG: ${{ needs.validate-release-request.outputs.release_tag }}
+        with:
+          script: |
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner, repo: context.repo.repo, per_page: 100,
+            });
+            const release = releases.find((candidate) => candidate.tag_name === process.env.RELEASE_TAG);
+            if (release && !release.draft) {
+              throw new Error('This fork release is already published. Start a new Fork Release run to allocate the next revision.');
+            }
       - name: Download package artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -454,9 +501,11 @@ jobs:
             prerelease=true
           fi
 
-          echo "tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
-          echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "tag=${RELEASE_TAG}"
+            echo "version=${RELEASE_VERSION}"
+            echo "prerelease=${prerelease}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Resolve release notes
         id: release_notes
@@ -467,6 +516,33 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [[ "${RELEASE_VERSION}" == *+fork.* ]]; then
+            cat > release-notes.md <<EOF
+          ### English
+          This fork release packages the OxideTerm upstream ${RELEASE_VERSION%%+fork.*} baseline with the fork release channel. No additional feature changes are claimed in this release.
+
+          #### Upstream changes
+          See the upstream OxideTerm release notes for the included baseline.
+
+          #### Fork-specific changes
+          Windows setup and portable packages are provided by this fork release.
+
+          ### 中文
+          本次 Fork 发布基于 OxideTerm 上游 ${RELEASE_VERSION%%+fork.*}，并使用 Fork 发布通道。本次发布不额外宣称新增功能。
+
+          #### 上游更新
+          本次版本包含的上游基线内容请参阅 OxideTerm 上游发布说明。
+
+          #### Fork 自有更新
+          本 Fork 提供 Windows 安装包与便携版压缩包。
+          EOF
+            {
+              echo "channel=fork"
+              echo "generate_release_notes=false"
+              echo "body_path=release-notes.md"
+            } >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
           notes_channel="stable"
           notes_base=".github/release-notes/stable.md"
           notes_changelog=".github/release-notes/stable-changelog.md"
@@ -490,9 +566,11 @@ jobs:
             --changelog "${notes_changelog}" \
             --output release-notes.md
 
-          echo "channel=${notes_channel}" >> "${GITHUB_OUTPUT}"
-          echo "generate_release_notes=false" >> "${GITHUB_OUTPUT}"
-          echo "body_path=release-notes.md" >> "${GITHUB_OUTPUT}"
+          {
+            echo "channel=${notes_channel}"
+            echo "generate_release_notes=false"
+            echo "body_path=release-notes.md"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Sign release assets
         shell: bash
@@ -500,15 +578,19 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           VERSION: ${{ steps.release_meta.outputs.version }}
+          OXIDETERM_UPDATER_PUBKEY: ${{ vars.OXIDETERM_UPDATER_PUBKEY }}
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y minisign
+          if [[ -z "${OXIDETERM_UPDATER_PUBKEY:-}" ]]; then echo "OXIDETERM_UPDATER_PUBKEY is required." >&2; exit 1; fi
 
           key_path="$(mktemp)"
-          trap 'rm -f "${key_path}"' EXIT
+          public_key_path="$(mktemp)"
+          trap 'rm -f "${key_path}" "${public_key_path}"' EXIT
           printf '%s' "${TAURI_SIGNING_PRIVATE_KEY}" | base64 --decode > "${key_path}"
           chmod 600 "${key_path}"
+          printf '%s' "${OXIDETERM_UPDATER_PUBKEY}" | base64 --decode > "${public_key_path}"
 
           # Native and Tauri channel updaters both reject unsigned assets.
           mapfile -t assets < <(find dist-release -maxdepth 1 -type f \( \
@@ -536,6 +618,7 @@ jobs:
             else
               minisign -S -W -s "${key_path}" -m "${asset}" -x "${sig}" -t "${trusted_comment}"
             fi
+            minisign -V -p "${public_key_path}" -m "${asset}" -x "${sig}"
           done
 
       - name: Generate release checksums
@@ -587,34 +670,43 @@ jobs:
           # upload failure) must overwrite in place instead of failing on an
           # existing release.
           update_release: true
+          draft: ${{ inputs.fork_release }}
 
   publish-updater:
     name: Generate updater manifest
-    needs: release
+    needs:
+      - release
+      - validate-release-request
     runs-on: ubuntu-latest
     if: inputs.upload_release
     permissions:
       contents: write
     steps:
+      - name: Checkout release manifest helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate-release-request.outputs.release_commit }}
+
       - name: Build and upload latest.json
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RELEASE_TAG: ${{ needs.release.outputs.tag }}
           RELEASE_VERSION: ${{ needs.release.outputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           script: |
             const tag = process.env.RELEASE_TAG;
             const version = process.env.RELEASE_VERSION;
             const isStable = tag.startsWith('v') && !version.includes('-');
 
-            const { data: release } = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag,
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner, repo: context.repo.repo, per_page: 100,
             });
+            const release = releases.find((candidate) => candidate.tag_name === tag);
+            if (!release) throw new Error(`Release ${tag} was not found.`);
 
             const assets = new Map(release.assets.map((asset) => [asset.name, asset]));
-            const platforms = {};
+            let platforms = {};
 
             async function addAsset(keys, assetName) {
               const binaryAsset = assets.get(assetName);
@@ -623,7 +715,12 @@ jobs:
                 throw new Error(`Cannot build updater manifest: ${assetName} or its signature is missing`);
               }
 
-              const sigResponse = await fetch(sigAsset.browser_download_url);
+              const sigResponse = await fetch(sigAsset.url, {
+                headers: {
+                  Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                  Accept: 'application/octet-stream',
+                },
+              });
               if (!sigResponse.ok) {
                 throw new Error(`failed to download ${sigAsset.name}: HTTP ${sigResponse.status}`);
               }
@@ -640,14 +737,23 @@ jobs:
               }
             }
 
-            await addAsset(
-              ['windows-x86_64', 'windows-x86_64-nsis', 'x86_64-pc-windows-msvc', 'x86_64-pc-windows-msvc-nsis'],
-              `OxideTerm_${version}_windows_x64-setup.exe`,
-            );
-            await addAsset(
-              ['windows-x86_64-portable'],
-              `OxideTerm_${version}_windows_x64_portable.zip`,
-            );
+            if (version.includes('+fork.')) {
+              const { buildForkReleasePlatforms } = require(
+                `${process.env.GITHUB_WORKSPACE}/.github/scripts/fork_release_manifest.cjs`,
+              );
+              ({ platforms } = await buildForkReleasePlatforms({
+                version, release, token: process.env.GITHUB_TOKEN, fetchImpl: fetch,
+              }));
+            } else {
+              await addAsset(
+                ['windows-x86_64', 'windows-x86_64-nsis', 'x86_64-pc-windows-msvc', 'x86_64-pc-windows-msvc-nsis'],
+                `OxideTerm_${version}_windows_x64-setup.exe`,
+              );
+              await addAsset(
+                ['windows-x86_64-portable'],
+                `OxideTerm_${version}_windows_x64_portable.zip`,
+              );
+            }
 
             if (isStable) {
               // OxideTerm 1.x follows the Latest release and probes these
@@ -717,11 +823,11 @@ jobs:
         with:
           script: |
             const tag = process.env.RELEASE_TAG;
-            const { data: release } = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag,
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner, repo: context.repo.repo, per_page: 100,
             });
+            const release = releases.find((candidate) => candidate.tag_name === tag);
+            if (!release) throw new Error(`Release ${tag} was not found.`);
             const sigAssets = release.assets.filter((asset) => asset.name.endsWith('.sig'));
             for (const asset of sigAssets) {
               await github.rest.repos.deleteReleaseAsset({
@@ -748,16 +854,17 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.release.outputs.tag }}
           RELEASE_VERSION: ${{ needs.release.outputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           script: |
             const tag = process.env.RELEASE_TAG;
             const version = process.env.RELEASE_VERSION;
 
-            const { data: release } = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag,
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner, repo: context.repo.repo, per_page: 100,
             });
+            const release = releases.find((candidate) => candidate.tag_name === tag);
+            if (!release) throw new Error(`Release ${tag} was not found.`);
 
             const names = new Set(release.assets.map((asset) => asset.name));
             const isGpuiPreview = tag.startsWith('gpui-v')
@@ -780,13 +887,41 @@ jobs:
               throw new Error(`Release ${tag} is missing asset(s): ${missing.join(', ')}`);
             }
 
+            const latestAsset = release.assets.find((asset) => asset.name === 'latest.json');
+            const latestResponse = await fetch(latestAsset.url, {
+              headers: {
+                Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                Accept: 'application/octet-stream',
+              },
+            });
+            if (!latestResponse.ok) throw new Error(`failed to download latest.json: HTTP ${latestResponse.status}`);
+            const latest = JSON.parse(await latestResponse.text());
+            if (latest.version !== version) throw new Error(`latest.json version ${latest.version} does not match ${version}`);
+            const assetByName = new Map(release.assets.map((asset) => [asset.name, asset]));
+            for (const [key, filename] of [
+              ['windows-x86_64', `OxideTerm_${version}_windows_x64-setup.exe`],
+              ['windows-x86_64-nsis', `OxideTerm_${version}_windows_x64-setup.exe`],
+              ['windows-x86_64-portable', `OxideTerm_${version}_windows_x64_portable.zip`],
+            ]) {
+              const platform = latest.platforms?.[key];
+              const asset = assetByName.get(filename);
+              if (!platform || !asset || platform.url !== asset.browser_download_url) {
+                throw new Error(`latest.json has an invalid URL for ${key}`);
+              }
+            }
+
             const leakedSigs = [...names].filter((name) => name.endsWith('.sig'));
             if (leakedSigs.length > 0) {
               throw new Error(`Release ${tag} still exposes signature helper asset(s): ${leakedSigs.join(', ')}`);
             }
 
             const checksumAsset = release.assets.find((asset) => asset.name === 'sha256sums.txt');
-            const response = await fetch(checksumAsset.browser_download_url);
+            const response = await fetch(checksumAsset.url, {
+              headers: {
+                Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                Accept: 'application/octet-stream',
+              },
+            });
             if (!response.ok) {
               throw new Error(`failed to download sha256sums.txt: HTTP ${response.status}`);
             }
@@ -799,3 +934,29 @@ jobs:
             }
 
             core.info(`Validated ${expected.length} release asset(s) for ${tag}.`);
+
+  publish-fork-draft:
+    name: Publish completed fork release
+    needs: validate-release-assets
+    if: inputs.fork_release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish draft after assets and manifest are ready
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TAG: ${{ inputs.release_tag }}
+        with:
+          script: |
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner, repo: context.repo.repo, per_page: 100,
+            });
+            const release = releases.find((candidate) => candidate.tag_name === process.env.TAG);
+            if (!release) throw new Error(`Release ${process.env.TAG} was not found.`);
+            const manifest = release.assets.find((asset) => asset.name === 'latest.json');
+            if (!manifest) throw new Error('Refusing to publish without latest.json');
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner, repo: context.repo.repo, release_id: release.id, draft: false,
+              make_latest: 'true',
+            });

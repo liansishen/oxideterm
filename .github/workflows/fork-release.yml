@@ -1,0 +1,153 @@
+name: Fork Release
+run-name: Fork Release from ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Confirm creation of a fork release commit and tag
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository != 'AnalyseDeCircuit/oxideterm' && github.ref == 'refs/heads/main' && inputs.confirm
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate updater signing configuration before release changes
+        shell: bash
+        env:
+          OXIDETERM_UPDATER_PUBKEY: ${{ vars.OXIDETERM_UPDATER_PUBKEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${OXIDETERM_UPDATER_PUBKEY:-}" || -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+            echo 'Updater public key variable and signing private key secret are required.' >&2
+            exit 1
+          fi
+          sudo apt-get update
+          sudo apt-get install -y minisign
+          key_path="$(mktemp)"
+          public_key_path="$(mktemp)"
+          message_path="$(mktemp)"
+          signature_path="$(mktemp)"
+          trap 'rm -f "$key_path" "$public_key_path" "$message_path" "$signature_path"' EXIT
+          printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" | base64 --decode > "$key_path"
+          printf '%s' "$OXIDETERM_UPDATER_PUBKEY" | base64 --decode > "$public_key_path"
+          printf 'OxideTerm updater key preflight\n' > "$message_path"
+          chmod 600 "$key_path"
+          if [[ -n "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" ]]; then
+            printf '%s\n' "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$key_path" -m "$message_path" -x "$signature_path"
+          else
+            minisign -S -W -s "$key_path" -m "$message_path" -x "$signature_path"
+          fi
+          minisign -V -p "$public_key_path" -m "$message_path" -x "$signature_path" >/dev/null
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: 1.94.1
+
+      - name: Fetch locked Rust dependencies for cold-runner version update
+        run: cargo fetch --locked
+
+      - name: Verify upstream baseline and plan release version
+        id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/AnalyseDeCircuit/oxideterm.git || true
+          base="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"].split("+fork.", 1)[0])')"
+          git fetch upstream "refs/tags/v${base}:refs/tags/upstream-v${base}"
+          git fetch origin --tags
+          head_commit="$(git rev-parse HEAD)"
+          current_version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
+          current_tag="v${current_version}"
+          current_tag_commit=''
+          release_state=missing
+          if [[ "$current_version" == "$base"+fork.* ]] && git ls-remote --exit-code --tags origin "refs/tags/${current_tag}" >/dev/null; then
+            git fetch origin "+refs/tags/${current_tag}:refs/tags/${current_tag}"
+            current_tag_commit="$(git rev-list -n 1 "refs/tags/${current_tag}")"
+            if release_response="$(gh api "repos/${REPOSITORY}/releases/tags/${current_tag}" --jq '.draft' 2>&1)"; then
+              case "$release_response" in
+                true) release_state=draft ;;
+                false) release_state=published ;;
+                *) echo 'GitHub returned an invalid release state.' >&2; exit 1 ;;
+              esac
+            else
+              if [[ "$release_response" == *'HTTP 404'* ]]; then
+                release_state=missing
+              else
+                echo 'Unable to inspect existing GitHub release; refusing to treat the error as missing.' >&2
+                exit 1
+              fi
+            fi
+          fi
+          plan_json="$(python3 scripts/release/fork_version.py "$base" \
+            --current-version "$current_version" \
+            --head "$head_commit" \
+            --current-tag-commit "$current_tag_commit" \
+            --release-state "$release_state")"
+          version="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' <<< "$plan_json")"
+          reuse="$(python3 -c 'import json,sys; print(str(json.load(sys.stdin)["reuse_existing"]).lower())' <<< "$plan_json")"
+          tag="v${version}"
+          if [[ "$reuse" != true ]] && git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            echo "Refusing to overwrite an existing release tag: ${tag}" >&2
+            exit 1
+          fi
+          {
+            echo "version=${version}"
+            echo "tag=${tag}"
+            echo "reuse=${reuse}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set release version
+        if: steps.plan.outputs.reuse != 'true'
+        run: python3 scripts/release/bump_version.py '${{ steps.plan.outputs.version }}'
+
+      - name: Commit and atomically push release branch and tag
+        if: steps.plan.outputs.reuse != 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Cargo.toml Cargo.lock README.md docs/readme
+          git commit -m "chore(release): ${VERSION}"
+          git tag -a "$TAG" -m "OxideTerm ${VERSION} fork release"
+          git push --atomic origin HEAD:main "refs/tags/${TAG}"
+
+  package:
+    needs: prepare
+    uses: ./.github/workflows/native-package.yml
+    with:
+      release_tag: ${{ needs.prepare.outputs.tag }}
+      version: ${{ needs.prepare.outputs.version }}
+      upload_release: true
+      fork_release: true
+    secrets: inherit

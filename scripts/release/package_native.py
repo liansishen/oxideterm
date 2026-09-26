@@ -7,6 +7,7 @@ import base64
 import json
 import os
 import plistlib
+import re
 import shutil
 import stat
 import subprocess
@@ -1503,12 +1504,16 @@ def linux_deb_version(version: str) -> str:
 
 
 def windows_numeric_version(version: str) -> str:
-    """Convert SemVer to the four numeric fields required by NSIS version info."""
-    core = version.split("-", 1)[0]
+    """Map SemVer to NSIS fields, reserving field four for the fork sequence."""
+    core = version.split("-", 1)[0].split("+", 1)[0]
     components = core.split(".")
     if len(components) != 3 or any(not part.isdigit() for part in components):
         raise RuntimeError(f"Windows package version is not SemVer: {version}")
-    numeric = [int(part) for part in components] + [0]
+    fork_match = re.search(r"\+fork\.(\d+)$", version)
+    fork_revision = int(fork_match.group(1)) if fork_match else 0
+    if "+" in version and fork_match is None:
+        raise RuntimeError(f"Unsupported Windows version metadata: {version}")
+    numeric = [int(part) for part in components] + [fork_revision]
     if any(part > 65535 for part in numeric):
         raise RuntimeError(f"Windows package version component exceeds 65535: {version}")
     return ".".join(str(part) for part in numeric)

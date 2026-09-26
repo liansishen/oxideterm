@@ -81,6 +81,8 @@ pub struct NativeUpdateRequest {
     pub current_version: String,
     pub target: PlatformTarget,
     pub install_flavor: InstallFlavor,
+    pub custom_repository: Option<String>,
+    pub custom_public_key: Option<String>,
 }
 
 impl NativeUpdateRequest {
@@ -94,7 +96,19 @@ impl NativeUpdateRequest {
             current_version: current_version.into(),
             target: current_platform_target(),
             install_flavor,
+            custom_repository: None,
+            custom_public_key: None,
         }
+    }
+
+    pub fn with_custom_source(
+        mut self,
+        repository: impl Into<String>,
+        public_key: impl Into<String>,
+    ) -> Self {
+        self.custom_repository = Some(repository.into());
+        self.custom_public_key = Some(public_key.into());
+        self
     }
 }
 
@@ -138,33 +152,56 @@ impl NativeUpdateClient {
         &self,
         request: NativeUpdateRequest,
     ) -> Result<NativeUpdateStatus, NativeUpdateError> {
-        let endpoint = endpoint_for_channel(request.channel);
+        let (manifest_url, verification_key) = if request.channel == UpdateChannel::Custom {
+            let repository = request
+                .custom_repository
+                .as_deref()
+                .and_then(crate::normalize_update_repository)
+                .ok_or_else(|| {
+                    NativeUpdateError::General("custom update repository is invalid".to_string())
+                })?;
+            let key = request
+                .custom_public_key
+                .clone()
+                .filter(|key| !key.trim().is_empty())
+                .ok_or_else(|| {
+                    NativeUpdateError::General("custom update public key is missing".to_string())
+                })?;
+            crate::integrity::validate_minisign_public_key(&key)?;
+            (
+                format!("https://github.com/{repository}/releases/latest/download/latest.json"),
+                Some(key),
+            )
+        } else {
+            (endpoint_for_channel(request.channel)?.url.to_string(), None)
+        };
         let response = self
             .http
-            .get(endpoint.url)
+            .get(&manifest_url)
             .send()
             .await
             .map_err(NativeUpdateError::ManifestFetch)?;
         if !response.status().is_success() {
             return Err(NativeUpdateError::ManifestStatus {
                 status: response.status(),
-                url: endpoint.url.to_string(),
+                url: manifest_url,
             });
         }
-
         let bytes = response
             .bytes()
             .await
             .map_err(NativeUpdateError::ManifestFetch)?;
         let manifest: NativeUpdateManifest =
             serde_json::from_slice(&bytes).map_err(NativeUpdateError::ManifestJson)?;
-
         match manifest.select_package(
             &request.current_version,
             &request.target,
             request.install_flavor,
         ) {
-            Some(package) => Ok(NativeUpdateStatus::Available(package)),
+            Some(mut package) => {
+                package.verification_key = verification_key;
+                Ok(NativeUpdateStatus::Available(package))
+            }
             None if manifest.platforms.is_empty() => Ok(NativeUpdateStatus::UpToDate),
             None if crate::is_update_newer(&manifest.version, &request.current_version) => {
                 Err(NativeUpdateError::UnsupportedPlatform {
@@ -223,6 +260,7 @@ impl NativeUpdateClient {
         if persisted.status.stage.is_terminal()
             || persisted.download_url != package.url
             || persisted.signature != package.signature
+            || persisted.verification_key != package.verification_key
         {
             clear_version_cache(&version_dir).await?;
             persisted = new_persisted_state(&package);
@@ -266,7 +304,11 @@ impl NativeUpdateClient {
             .signature
             .as_deref()
             .ok_or_else(|| NativeUpdateError::Integrity("release signature missing".to_string()))?;
-        verify_minisign_signature(&package_bytes, signature)?;
+        if let Some(key) = package.verification_key.as_deref() {
+            crate::integrity::verify_minisign_signature_with_key(&package_bytes, signature, key)?;
+        } else {
+            verify_minisign_signature(&package_bytes, signature)?;
+        }
 
         let final_path = version_dir.join(package_file_name(&package));
         tokio::fs::rename(version_dir.join(PART_FILE_NAME), &final_path)
@@ -590,6 +632,7 @@ fn new_persisted_state(package: &NativeUpdatePackage) -> PersistedUpdateState {
         status,
         download_url: package.url.clone(),
         signature: package.signature.clone(),
+        verification_key: package.verification_key.clone(),
         etag: None,
         last_modified: None,
     }
@@ -788,6 +831,7 @@ mod tests {
             platform_key: "darwin-aarch64".into(),
             url: "https://example.invalid/download/OxideTerm Preview.dmg?token=secret".into(),
             signature: None,
+            verification_key: None,
         });
 
         assert!(name.starts_with("1.2.0-beta.1-"));

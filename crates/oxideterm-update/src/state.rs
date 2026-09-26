@@ -56,6 +56,8 @@ pub struct PersistedUpdateState {
     pub status: ResumableUpdateStatus,
     pub download_url: String,
     pub signature: Option<String>,
+    #[serde(default)]
+    pub verification_key: Option<String>,
     pub etag: Option<String>,
     pub last_modified: Option<String>,
 }

@@ -128,7 +128,10 @@ impl WorkspaceApp {
             }
             (SettingsTab::Help, SettingsSelect::UpdateChannel) => {
                 let mut popup = select_overlay_popup(&self.tokens, width);
-                for channel in [UpdateChannel::Stable, UpdateChannel::Beta] {
+                for channel in [UpdateChannel::Stable, UpdateChannel::Beta]
+                    .into_iter()
+                    .chain(cfg!(windows).then_some(UpdateChannel::Custom))
+                {
                     let label = update_channel_label(channel, &self.i18n);
                     popup = popup.child(select_option_action(
                         select_option(

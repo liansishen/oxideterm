@@ -1215,6 +1215,13 @@ impl WorkspaceApp {
         settings: &PersistedSettings,
         cx: &mut Context<Self>,
     ) {
+        if previous_settings.general.update_channel != settings.general.update_channel
+            || previous_settings.general.update_repository != settings.general.update_repository
+            || previous_settings.general.update_public_key != settings.general.update_public_key
+        {
+            self.settings_workspace
+                .update(cx, |entity, cx| entity.invalidate_native_update_source(cx));
+        }
         if previous_settings.keybindings != settings.keybindings {
             crate::keybindings::install_context_keybindings(&settings.keybindings.overrides, cx);
         }

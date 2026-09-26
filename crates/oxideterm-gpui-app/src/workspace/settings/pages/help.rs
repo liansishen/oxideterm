@@ -59,7 +59,7 @@ impl WorkspaceApp {
             self.settings_store.settings().general.update_channel,
             &self.i18n,
         );
-        let version_rows = div()
+        let mut version_rows = div()
             .flex()
             .flex_col()
             .gap(px(12.0))
@@ -76,6 +76,38 @@ impl WorkspaceApp {
                 cx,
             ))
             .child(self.help_portable_or_channel_row(is_portable, channel_label, cx));
+
+        if cfg!(windows)
+            && self.settings_store.settings().general.update_channel == UpdateChannel::Custom
+        {
+            for (input, label, hint, placeholder) in [
+                (
+                    SettingsInput::UpdateRepository,
+                    "settings_view.help.update_repository",
+                    "settings_view.help.update_repository_hint",
+                    "owner/oxideterm",
+                ),
+                (
+                    SettingsInput::UpdatePublicKey,
+                    "settings_view.help.update_public_key",
+                    "settings_view.help.update_public_key_hint",
+                    "",
+                ),
+            ] {
+                version_rows = version_rows.child(self.setting_row(
+                    label,
+                    hint,
+                    self.settings_text_input_control(
+                        input,
+                        &self.current_settings_input_value(input, cx),
+                        placeholder.to_owned(),
+                        300.0,
+                        cx,
+                    ),
+                    cx,
+                ));
+            }
+        }
 
         // Tauri HelpAboutSection keeps the version rows and update controls inside one
         // card, with only the update block separated by `border-t pt-4`.
@@ -265,6 +297,22 @@ impl WorkspaceApp {
                 self.tokens.ui.text_muted,
                 cx,
             ))
+            .children(
+                option_env!("OXIDETERM_UPDATE_REPOSITORY")
+                    .filter(|repository| cfg!(windows) && !repository.is_empty())
+                    .map(|repository| {
+                        self.render_selectable_text_scoped(
+                            "settings-help-legal",
+                            "fork-attribution",
+                            self.i18n_with(
+                                "settings_view.help.fork_attribution",
+                                &[("repository", repository.to_string())],
+                            ),
+                            self.tokens.ui.text_muted,
+                            cx,
+                        )
+                    }),
+            )
             .child(self.render_selectable_text_scoped(
                 "settings-help-legal",
                 "license",
@@ -292,7 +340,7 @@ impl WorkspaceApp {
         channel_label: String,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        if is_portable {
+        if is_portable && !cfg!(windows) {
             return self.setting_row(
                 "settings_view.help.portable_mode",
                 "settings_view.help.portable_mode_hint",
@@ -530,7 +578,7 @@ impl WorkspaceApp {
                     ));
                 }
                 actions = actions.child(self.help_outline_button(
-                    self.i18n.t("settings_view.help.download_update"),
+                    self.i18n.t(native_update_download_label()),
                     LucideIcon::Download,
                     |this, _event, _window, cx| {
                         this.download_native_update(cx);
@@ -558,6 +606,12 @@ impl WorkspaceApp {
                                         .child(format!("v{version}")),
                                 ),
                         )
+                        .children(cfg!(windows).then(|| {
+                            div()
+                                .text_size(px(self.tokens.metrics.ui_text_sm))
+                                .text_color(rgb(self.tokens.ui.text_muted))
+                                .child(self.i18n.t("settings_view.help.update_now_hint"))
+                        }))
                         .child(actions)
                         .into_any_element(),
                 )

@@ -22,6 +22,7 @@ mod windows_update_helper;
 
 pub use channel::{
     BETA_UPDATE_ENDPOINT, STABLE_UPDATE_ENDPOINT, UpdateEndpoint, endpoint_for_channel,
+    normalize_update_repository,
 };
 pub use download::{
     DownloadProgress, NativeUpdateClient, NativeUpdateDownload, NativeUpdateError,

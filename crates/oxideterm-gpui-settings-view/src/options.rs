@@ -619,6 +619,7 @@ pub fn update_channel_label(channel: UpdateChannel, i18n: &I18n) -> String {
     match channel {
         UpdateChannel::Stable => i18n.t("settings_view.help.channel_stable"),
         UpdateChannel::Beta => i18n.t("settings_view.help.channel_beta"),
+        UpdateChannel::Custom => i18n.t("settings_view.help.channel_custom"),
     }
 }
 

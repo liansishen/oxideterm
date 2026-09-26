@@ -61,6 +61,7 @@ pub(super) struct NativeUpdateRuntime {
     wake: delivery::ActiveDeliveryWake,
     cancel: Option<Arc<AtomicBool>>,
     cancel_requested: bool,
+    install_after_download: bool,
     package: Option<oxideterm_update::NativeUpdatePackage>,
     check_task: Option<Task<()>>,
     operation_task: Option<Task<()>>,
@@ -72,6 +73,8 @@ pub(super) struct NativeUpdateRuntime {
 struct NativeUpdateCheckRequest {
     kind: NativeUpdateCheckKind,
     channel: UpdateChannel,
+    repository: String,
+    public_key: String,
     current_version: String,
     install_flavor: Result<oxideterm_update::InstallFlavor, String>,
     update_proxy: oxideterm_settings::UpdateProxySettings,
@@ -114,12 +117,21 @@ impl NativeUpdateRuntime {
             wake,
             cancel: None,
             cancel_requested: false,
+            install_after_download: false,
             package: None,
             check_task: None,
             operation_task: None,
             automatic_check_task: None,
             _delivery_task: delivery_task,
             error_fallback: String::new(),
+        }
+    }
+}
+
+impl Drop for NativeUpdateRuntime {
+    fn drop(&mut self) {
+        if let Some(cancel) = &self.cancel {
+            cancel.store(true, Ordering::Relaxed);
         }
     }
 }
@@ -262,11 +274,14 @@ impl SettingsWorkspaceEntity {
                         &request.update_proxy,
                     )?;
                     client
-                        .check(oxideterm_update::NativeUpdateRequest::current(
-                            request.channel,
-                            request.current_version,
-                            install_flavor,
-                        ))
+                        .check(
+                            oxideterm_update::NativeUpdateRequest::current(
+                                request.channel,
+                                request.current_version,
+                                install_flavor,
+                            )
+                            .with_custom_source(request.repository, request.public_key),
+                        )
                         .await
                 })
                 .await
@@ -307,6 +322,7 @@ impl SettingsWorkspaceEntity {
         update_proxy: oxideterm_settings::UpdateProxySettings,
         runtime: Arc<tokio::runtime::Runtime>,
         error_fallback: String,
+        install_after_download: bool,
         cx: &mut Context<Self>,
     ) -> bool {
         if self.native_update.receiver.is_some() {
@@ -325,6 +341,7 @@ impl SettingsWorkspaceEntity {
         self.native_update.cancel = Some(cancel.clone());
         self.native_update.cancel_requested = false;
         self.native_update.error_fallback = error_fallback;
+        self.native_update.install_after_download = install_after_download;
         self.native_update.state = NativeUpdateUiState::Downloading(None);
         cx.emit(SettingsWorkspaceEvent::ShowNativeUpdateNotification);
 
@@ -414,11 +431,33 @@ impl SettingsWorkspaceEntity {
         true
     }
 
-    fn cancel_native_update(&mut self, cx: &mut Context<Self>) {
-        if let Some(cancel) = self.native_update.cancel.as_ref() {
+    pub(super) fn invalidate_native_update_source(&mut self, cx: &mut Context<Self>) {
+        if matches!(
+            self.native_update.state,
+            NativeUpdateUiState::Installing(_) | NativeUpdateUiState::InstallFinished(_)
+        ) {
+            return;
+        }
+        // A completed package and a pending check belong to the source that selected them.
+        self.native_update.check_task = None;
+        self.native_update.package = None;
+        self.native_update.install_after_download = false;
+        if let Some(cancel) = &self.native_update.cancel {
             cancel.store(true, Ordering::Relaxed);
             self.native_update.cancel_requested = true;
         }
+        self.native_update.state = NativeUpdateUiState::Idle;
+        cx.emit(SettingsWorkspaceEvent::ResetNativeUpdateOverlay);
+        cx.notify();
+    }
+
+    fn cancel_native_update(&mut self, cx: &mut Context<Self>) {
+        let Some(cancel) = self.native_update.cancel.as_ref() else {
+            return;
+        };
+        cancel.store(true, Ordering::Relaxed);
+        self.native_update.cancel_requested = true;
+        self.native_update.install_after_download = false;
         self.native_update.state = self.native_update_available_state();
         cx.notify();
     }
@@ -479,14 +518,29 @@ impl SettingsWorkspaceEntity {
                 }
             }
             NativeUpdateDelivery::Finished(Ok(download)) => {
-                self.native_update.package = Some(download.package.clone());
-                self.native_update.state = NativeUpdateUiState::Downloaded(download);
+                let cancelled = self.native_update.cancel_requested;
+                let install =
+                    std::mem::take(&mut self.native_update.install_after_download) && !cancelled;
+                // Release the finished download before requesting installation; the sender may
+                // still be alive when the terminal result reaches the Entity.
+                self.native_update.receiver = None;
+                self.native_update.operation_task = None;
                 self.native_update.cancel = None;
                 self.native_update.cancel_requested = false;
-                cx.emit(SettingsWorkspaceEvent::ShowNativeUpdateNotification);
+                if cancelled {
+                    self.native_update.state = self.native_update_available_state();
+                    return;
+                }
+                self.native_update.package = Some(download.package.clone());
+                self.native_update.state = NativeUpdateUiState::Downloaded(download);
+                if install {
+                    cx.emit(SettingsWorkspaceEvent::RequestNativeUpdateInstall);
+                } else {
+                    cx.emit(SettingsWorkspaceEvent::ShowNativeUpdateNotification);
+                }
             }
             NativeUpdateDelivery::Finished(Err(error)) => {
-                if error.contains("update cancelled") {
+                if self.native_update.cancel_requested || error.contains("update cancelled") {
                     self.native_update.state = self.native_update_available_state();
                 } else {
                     self.native_update.state = NativeUpdateUiState::Error(error);
@@ -495,8 +549,11 @@ impl SettingsWorkspaceEntity {
                         SettingsWorkspaceToast::Error,
                     ));
                 }
+                self.native_update.receiver = None;
+                self.native_update.operation_task = None;
                 self.native_update.cancel = None;
                 self.native_update.cancel_requested = false;
+                self.native_update.install_after_download = false;
             }
             NativeUpdateDelivery::InstallFinished(Ok(outcome)) => {
                 let is_success =
@@ -600,6 +657,9 @@ impl WorkspaceApp {
             }
             SettingsWorkspaceEvent::RequestAutomaticNativeUpdateCheck => {
                 self.check_native_update_with_kind(NativeUpdateCheckKind::Automatic, cx);
+            }
+            SettingsWorkspaceEvent::RequestNativeUpdateInstall => {
+                self.install_native_update(cx);
             }
             SettingsWorkspaceEvent::RequestQuitAfterNativeUpdate => {
                 self.schedule_native_update_quit(cx);
@@ -893,6 +953,18 @@ impl WorkspaceApp {
         let request = NativeUpdateCheckRequest {
             kind: check_kind,
             channel,
+            repository: self
+                .settings_store
+                .settings()
+                .general
+                .update_repository
+                .clone(),
+            public_key: self
+                .settings_store
+                .settings()
+                .general
+                .update_public_key
+                .clone(),
             current_version: env!("CARGO_PKG_VERSION").to_string(),
             install_flavor,
             update_proxy: self.settings_store.settings().general.update_proxy.clone(),
@@ -914,6 +986,7 @@ impl WorkspaceApp {
                 update_proxy,
                 runtime,
                 error_fallback,
+                cfg!(windows),
                 cx,
             );
         });
@@ -972,6 +1045,14 @@ pub(in crate::workspace) fn native_update_progress_ratio(
 ) -> Option<f32> {
     let total_bytes = status.total_bytes.filter(|total| *total > 0)?;
     Some((status.downloaded_bytes as f64 / total_bytes as f64).clamp(0.0, 1.0) as f32)
+}
+
+pub(in crate::workspace) fn native_update_download_label() -> &'static str {
+    if cfg!(windows) {
+        "settings_view.help.update_now"
+    } else {
+        "settings_view.help.download_update"
+    }
 }
 
 pub(in crate::workspace) fn native_update_progress_hint(
@@ -1044,6 +1125,110 @@ mod tests {
             native_update_progress_hint(&update_status(512, None)),
             "512 B"
         );
+    }
+
+    fn completed_download() -> oxideterm_update::NativeUpdateDownload {
+        oxideterm_update::NativeUpdateDownload {
+            package: oxideterm_update::NativeUpdatePackage {
+                version: "2.2.0".into(),
+                current_version: "2.1.0".into(),
+                body: None,
+                date: None,
+                platform_key: "windows-x86_64-nsis".into(),
+                url: "https://github.com/example/oxideterm/releases/download/v2.2.0/setup.exe"
+                    .into(),
+                signature: None,
+                verification_key: None,
+            },
+            path: "setup.exe".into(),
+            bytes: 512,
+            sha256: String::new(),
+            status: update_status(512, Some(512)),
+        }
+    }
+
+    #[gpui::test]
+    fn native_update_automatically_installs_only_a_completed_requested_download(
+        cx: &mut TestAppContext,
+    ) {
+        for (scenario, auto_install, expected_installs) in [
+            ("automatic", true, 1),
+            ("download only", false, 0),
+            ("cancelled", true, 0),
+            ("source changed", true, 0),
+            ("verification failed", true, 0),
+        ] {
+            let settings = cx.new(SettingsWorkspaceEntity::new);
+            let installs = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let observed = installs.clone();
+            let _subscription = settings.update(cx, |_, cx| {
+                cx.subscribe(&settings, move |entity, _, event: &SettingsWorkspaceEvent, _| {
+                    if *event == SettingsWorkspaceEvent::RequestNativeUpdateInstall {
+                        assert!(entity.native_update.receiver.is_none());
+                        assert!(matches!(&entity.native_update.state, NativeUpdateUiState::Downloaded(download) if download.package.version == "2.2.0"));
+                        observed.fetch_add(1, Ordering::Relaxed);
+                    }
+                })
+            });
+            let cancel = Arc::new(AtomicBool::new(false));
+            let sender = settings.update(cx, |entity, cx| {
+                let (sender, receiver) = delivery::ActiveDeliverySender::channel();
+                entity.native_update.receiver = Some(receiver);
+                entity.native_update.cancel = Some(cancel.clone());
+                entity.native_update.package = Some(completed_download().package);
+                entity.native_update.state = NativeUpdateUiState::Downloading(None);
+                entity.native_update.install_after_download = auto_install;
+                match scenario {
+                    "cancelled" => entity.cancel_native_update(cx),
+                    "source changed" => entity.invalidate_native_update_source(cx),
+                    _ => {}
+                }
+                sender
+            });
+            let result = if scenario == "verification failed" {
+                Err("signature mismatch".into())
+            } else {
+                Ok(completed_download())
+            };
+            sender.send(NativeUpdateDelivery::Finished(result)).unwrap();
+            settings.update(cx, |entity, cx| {
+                entity.drain_native_update_delivery(cx);
+            });
+            cx.run_until_parked();
+            assert_eq!(
+                installs.load(Ordering::Relaxed),
+                expected_installs,
+                "{scenario}"
+            );
+            settings.update(cx, |entity, _| {
+                match scenario {
+                    "cancelled" => assert!(matches!(&entity.native_update.state, NativeUpdateUiState::Available(package) if package.version == "2.2.0")),
+                    "source changed" => {
+                        assert!(matches!(entity.native_update.state, NativeUpdateUiState::Idle));
+                        assert!(entity.native_update.package.is_none());
+                    }
+                    "verification failed" => assert!(matches!(&entity.native_update.state, NativeUpdateUiState::Error(error) if error == "signature mismatch")),
+                    _ => assert!(matches!(&entity.native_update.state, NativeUpdateUiState::Downloaded(download) if download.path == std::path::Path::new("setup.exe"))),
+                }
+            });
+            assert_eq!(
+                cancel.load(Ordering::Relaxed),
+                matches!(scenario, "cancelled" | "source changed")
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn native_update_owner_release_cancels_its_download(cx: &mut TestAppContext) {
+        let settings = cx.new(SettingsWorkspaceEntity::new);
+        let cancel = Arc::new(AtomicBool::new(false));
+        settings.update(cx, |entity, _| {
+            entity.native_update.cancel = Some(cancel.clone());
+        });
+        drop(settings);
+        cx.update(|_| {});
+        cx.run_until_parked();
+        assert!(cancel.load(Ordering::Relaxed));
     }
 
     #[gpui::test]

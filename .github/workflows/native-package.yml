@@ -513,11 +513,15 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
           RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
+          OXIDETERM_UPDATER_PUBKEY: ${{ vars.OXIDETERM_UPDATER_PUBKEY }}
         run: |
           set -euo pipefail
 
           if [[ "${RELEASE_VERSION}" == *+fork.* ]]; then
-            cat > release-notes.md <<EOF
+            if grep -Fxq -- "## ${RELEASE_VERSION}" .github/release-notes/fork-changelog.md; then
+              python3 -c 'import sys; from pathlib import Path; sys.path.insert(0, ".github/scripts"); from compose_release_notes import extract_version_section; print(extract_version_section(Path(".github/release-notes/fork-changelog.md").read_text(), sys.argv[1], include_heading=False))' "${RELEASE_VERSION}" > release-notes.md
+            else
+              cat > release-notes.md <<EOF
           ### English
           This fork release packages the OxideTerm upstream ${RELEASE_VERSION%%+fork.*} baseline with the fork release channel. No additional feature changes are claimed in this release.
 
@@ -536,6 +540,13 @@ jobs:
           #### Fork 自有更新
           本 Fork 提供 Windows 安装包与便携版压缩包。
           EOF
+            fi
+            {
+              printf '\n## Downloads / 下载\n\n'
+              printf -- '- [Windows x64 setup / 安装版](https://github.com/%s/releases/download/%s/OxideTerm_%s_windows_x64-setup.exe)\n' "$GITHUB_REPOSITORY" "$RELEASE_TAG" "$RELEASE_VERSION"
+              printf -- '- [Windows x64 portable / 便携版](https://github.com/%s/releases/download/%s/OxideTerm_%s_windows_x64_portable.zip)\n' "$GITHUB_REPOSITORY" "$RELEASE_TAG" "$RELEASE_VERSION"
+              printf '\n## Custom update source / 自定义更新源\n\nRepository / 仓库：%s\n\nBase64 minisign public key / 公钥：\n\n    %s\n' "$GITHUB_REPOSITORY" "$OXIDETERM_UPDATER_PUBKEY"
+            } >> release-notes.md
             {
               echo "channel=fork"
               echo "generate_release_notes=false"
@@ -659,7 +670,7 @@ jobs:
             dist-release/sha256sums.txt
           tag_name: ${{ steps.release_meta.outputs.tag }}
           target_commitish: ${{ needs.validate-release-request.outputs.release_commit }}
-          name: OxideTerm Native ${{ steps.release_meta.outputs.version }}
+          name: OxideTerm ${{ inputs.fork_release && 'Windows Fork' || 'Native' }} ${{ steps.release_meta.outputs.version }}
           prerelease: ${{ steps.release_meta.outputs.prerelease }}
           # Stable releases become Latest automatically; prereleases must never
           # displace the current stable release.

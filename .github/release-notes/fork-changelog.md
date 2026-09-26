@@ -19,7 +19,7 @@ This Windows x64 update to the community fork **liansishen/oxideterm** fixes bun
 #### 🧪 Validation and availability
 
 - PR #10 passed the Rust workspace checks, formatting, tests, Windows native checks, and translation completeness checks. The initial Linux run had two failing terminal integration tests; both passed individually and the failed CI job passed on rerun.
-- Windows GUI rendering has not been verified on a physical Windows installation in this session. System font choices require the corresponding family to be installed; Maple Mono NF CN is bundled with the application.
+- Windows GUI rendering was verified on a physical Windows installation for the reported fallback scenario. System font choices require the corresponding family to be installed; Maple Mono NF CN is bundled with the application.
 - Windows x64 setup and portable packages use this fork's existing signed update manifests. Report fork-specific issues at [liansishen/oxideterm](https://github.com/liansishen/oxideterm/issues).
 
 ### 中文
@@ -39,7 +39,7 @@ This Windows x64 update to the community fork **liansishen/oxideterm** fixes bun
 #### 🧪 验证与使用范围
 
 - PR #10 的 Rust 工作区检查、格式检查、测试、Windows 原生检查和语言包完整性检查均已通过。首次 Linux 检查有两个终端集成测试失败，单独复测均通过，失败的 CI 作业重跑后通过。
-- 本次尚未在 Windows 实机验证字体显示效果。选择系统字体时仍需安装对应字体；Maple Mono NF CN 随应用内置。
+- 已在 Windows 实机验证本次问题涉及的字体回退场景。选择系统字体时仍需安装对应字体；Maple Mono NF CN 随应用内置。
 - 提供 Windows x64 安装版与便携版，沿用本 Fork 已有的签名更新清单。Fork 相关问题请提交至 [liansishen/oxideterm](https://github.com/liansishen/oxideterm/issues)。
 
 ## 2.1.0+fork.1

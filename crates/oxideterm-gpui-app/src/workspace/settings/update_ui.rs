@@ -216,7 +216,7 @@ impl WorkspaceApp {
         let primary_action = match update_state {
             NativeUpdateRenderState::Available { .. } => Some((
                 NativeUpdateNotificationAction::Download,
-                "settings_view.help.download_update",
+                native_update_download_label(),
             )),
             NativeUpdateRenderState::Downloading(_) | NativeUpdateRenderState::Verifying(_) => {
                 Some((

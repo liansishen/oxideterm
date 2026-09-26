@@ -116,6 +116,8 @@ pub fn persisted_settings_input_value(
         SettingsInput::NetworkProxyTestHost
         | SettingsInput::NetworkProxyTestPort
         | SettingsInput::PublicMcpPort => return None,
+        SettingsInput::UpdateRepository => settings.general.update_repository.clone(),
+        SettingsInput::UpdatePublicKey => settings.general.update_public_key.clone(),
         SettingsInput::UpdateProxyHost => settings.general.update_proxy.host.clone(),
         SettingsInput::UpdateProxyPort => settings.general.update_proxy.port.to_string(),
         SettingsInput::UpdateProxyNoProxy => settings.general.update_proxy.no_proxy.clone(),
@@ -335,6 +337,14 @@ pub fn apply_persisted_settings_input_draft(
     draft: &str,
 ) -> SettingsInputDraftApply {
     match input {
+        SettingsInput::UpdateRepository => {
+            settings.general.update_repository = draft.trim().to_owned();
+            SettingsInputDraftApply::Applied
+        }
+        SettingsInput::UpdatePublicKey => {
+            settings.general.update_public_key = draft.trim().to_owned();
+            SettingsInputDraftApply::Applied
+        }
         SettingsInput::TerminalCustomFontFamily => {
             settings.terminal.custom_font_family = draft.trim().to_string();
             SettingsInputDraftApply::Applied
@@ -878,6 +888,41 @@ pub fn settings_multiline_line_selection(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_update_source_inputs_persist_repository_and_public_key_separately() {
+        let mut settings = PersistedSettings::default();
+        settings.general.update_channel = oxideterm_settings::UpdateChannel::Custom;
+        for (input, value) in [
+            (SettingsInput::UpdateRepository, "example/oxideterm"),
+            (SettingsInput::UpdatePublicKey, "base64-public-key"),
+        ] {
+            assert_eq!(
+                apply_persisted_settings_input_draft(&mut settings, input, &format!(" {value} ")),
+                SettingsInputDraftApply::Applied
+            );
+            assert_eq!(
+                persisted_settings_input_value(&settings, input).as_deref(),
+                Some(value)
+            );
+        }
+        assert_eq!(settings.general.update_repository, "example/oxideterm");
+        assert_eq!(settings.general.update_public_key, "base64-public-key");
+        assert_eq!(
+            apply_persisted_settings_input_draft(
+                &mut settings,
+                SettingsInput::UpdateRepository,
+                ""
+            ),
+            SettingsInputDraftApply::Applied
+        );
+        assert_eq!(settings.general.update_repository, "");
+        assert_eq!(settings.general.update_public_key, "base64-public-key");
+        assert_eq!(
+            settings.general.update_channel,
+            oxideterm_settings::UpdateChannel::Custom
+        );
+    }
 
     #[test]
     fn terminal_custom_cjk_font_input_preserves_primary_font_and_clears_to_auto() {

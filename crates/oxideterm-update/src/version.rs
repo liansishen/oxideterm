@@ -14,6 +14,7 @@ pub enum VersionOrdering {
 struct ParsedVersion {
     core: Vec<u64>,
     prerelease: Option<String>,
+    fork_revision: Option<u64>,
 }
 
 pub fn compare_versions(candidate: &str, current: &str) -> VersionOrdering {
@@ -30,10 +31,15 @@ pub fn is_update_newer(candidate: &str, current: &str) -> bool {
 
 fn parse_version(input: &str) -> ParsedVersion {
     let trimmed = input.trim().trim_start_matches('v');
-    let (core, prerelease) = trimmed
+    let (without_metadata, metadata) = trimmed.split_once('+').unwrap_or((trimmed, ""));
+    let fork_revision = metadata
+        .strip_prefix("fork.")
+        .and_then(|value| value.parse().ok());
+    let (core, prerelease) = without_metadata
         .split_once('-')
-        .map_or((trimmed, None), |(core, pre)| (core, Some(pre.to_string())));
-
+        .map_or((without_metadata, None), |(core, pre)| {
+            (core, Some(pre.to_string()))
+        });
     let mut parts = core
         .split('.')
         .map(|part| part.parse::<u64>().unwrap_or(0))
@@ -41,10 +47,10 @@ fn parse_version(input: &str) -> ParsedVersion {
     while parts.len() < 3 {
         parts.push(0);
     }
-
     ParsedVersion {
         core: parts,
         prerelease,
+        fork_revision,
     }
 }
 
@@ -55,12 +61,18 @@ impl Ord for ParsedVersion {
             return core_ordering;
         }
 
-        match (&self.prerelease, &other.prerelease) {
+        let prerelease_ordering = match (&self.prerelease, &other.prerelease) {
             (None, None) => Ordering::Equal,
             (None, Some(_)) => Ordering::Greater,
             (Some(_), None) => Ordering::Less,
             (Some(left), Some(right)) => compare_prerelease(left, right),
+        };
+        if prerelease_ordering != Ordering::Equal {
+            return prerelease_ordering;
         }
+        self.fork_revision
+            .unwrap_or(0)
+            .cmp(&other.fork_revision.unwrap_or(0))
     }
 }
 
@@ -99,5 +111,20 @@ mod tests {
         assert!(is_update_newer("1.2.0-beta.2", "1.2.0-beta.1"));
         assert!(is_update_newer("1.2.0", "1.2.0-beta.9"));
         assert!(!is_update_newer("1.2.0-beta.1", "1.2.0"));
+    }
+
+    #[test]
+    fn compares_fork_revision_metadata_without_ordering_other_metadata() {
+        assert!(is_update_newer("2.1.0+fork.1", "2.1.0"));
+        assert!(is_update_newer("2.1.0+fork.10", "2.1.0+fork.2"));
+        assert!(is_update_newer("2.1.1", "2.1.0+fork.99"));
+        assert!(is_update_newer(
+            "2.1.0-beta.2+fork.1",
+            "2.1.0-beta.1+fork.99"
+        ));
+        assert_eq!(
+            compare_versions("2.1.0+build.7", "2.1.0+build.2"),
+            VersionOrdering::Equal
+        );
     }
 }

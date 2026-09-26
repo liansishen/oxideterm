@@ -12,7 +12,21 @@ pub fn verify_minisign_signature(
     data: &[u8],
     release_signature: &str,
 ) -> Result<(), NativeUpdateError> {
-    let pub_key_decoded = base64_to_string(OXIDETERM_UPDATER_PUBKEY)?;
+    verify_minisign_signature_with_key(data, release_signature, OXIDETERM_UPDATER_PUBKEY)
+}
+
+pub fn validate_minisign_public_key(public_key_base64: &str) -> Result<(), NativeUpdateError> {
+    let decoded = base64_to_string(public_key_base64)?;
+    PublicKey::decode(&decoded)
+        .map(|_| ())
+        .map_err(|error| NativeUpdateError::Integrity(format!("decode public key failed: {error}")))
+}
+pub fn verify_minisign_signature_with_key(
+    data: &[u8],
+    release_signature: &str,
+    public_key_base64: &str,
+) -> Result<(), NativeUpdateError> {
+    let pub_key_decoded = base64_to_string(public_key_base64)?;
     let public_key = PublicKey::decode(&pub_key_decoded).map_err(|error| {
         NativeUpdateError::Integrity(format!("decode public key failed: {error}"))
     })?;
@@ -33,4 +47,30 @@ fn base64_to_string(value: &str) -> Result<String, NativeUpdateError> {
     std::str::from_utf8(&decoded)
         .map(str::to_string)
         .map_err(|_| NativeUpdateError::Integrity("invalid utf8 in signature".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PUBLIC_KEY: &str = "untrusted comment: minisign public key E7620F1842B4E81F\nRWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3\n";
+    const SIGNATURE: &str = "untrusted comment: signature from minisign secret key\nRWQf6LRCGA9i59SLOFxz6NxvASXDJeRtuZykwQepbDEGt87ig1BNpWaVWuNrm73YiIiJbq71Wi+dP9eKL8OC351vwIasSSbXxwA=\ntrusted comment: timestamp:1555779966\tfile:test\nQtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfNQUaOAA==";
+
+    fn outer_base64(value: &str) -> String {
+        base64::engine::general_purpose::STANDARD.encode(value)
+    }
+
+    #[test]
+    fn verifies_custom_signature_only_with_the_selected_key() {
+        let key = outer_base64(PUBLIC_KEY);
+        let signature = outer_base64(SIGNATURE);
+        verify_minisign_signature_with_key(b"test", &signature, &key)
+            .unwrap_or_else(|error| panic!("{error:?}"));
+        validate_minisign_public_key(OXIDETERM_UPDATER_PUBKEY).unwrap();
+        assert!(
+            verify_minisign_signature_with_key(b"test", &signature, OXIDETERM_UPDATER_PUBKEY,)
+                .is_err()
+        );
+        assert!(verify_minisign_signature_with_key(b"tampered", &signature, &key).is_err());
+    }
 }

@@ -728,6 +728,10 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
                 "settings_view.help.check_update",
                 "settings_view.help.release_notes",
                 "settings_view.help.channel_stable",
+                "settings_view.help.channel_custom",
+                "settings_view.help.update_repository",
+                "settings_view.help.update_public_key",
+                "settings_view.help.update_now",
             ],
         ),
         settings_search_entry(

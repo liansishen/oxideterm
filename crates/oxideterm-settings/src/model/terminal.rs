@@ -2,6 +2,10 @@
 pub struct GeneralSettings {
     pub language: Language,
     pub update_channel: UpdateChannel,
+    #[serde(rename = "updateRepository", default = "default_update_repository")]
+    pub update_repository: String,
+    #[serde(rename = "updatePublicKey", default = "default_update_public_key")]
+    pub update_public_key: String,
     #[serde(
         rename = "minimizeToTrayOnClose",
         default = "default_minimize_to_tray_on_close"
@@ -23,12 +27,26 @@ impl Default for GeneralSettings {
         Self {
             language: Language::ZhCn,
             update_channel: UpdateChannel::default(),
+            update_repository: default_update_repository(),
+            update_public_key: default_update_public_key(),
             minimize_to_tray_on_close: default_minimize_to_tray_on_close(),
             external_connection_uris_enabled: default_external_connection_uris_enabled(),
             update_proxy: UpdateProxySettings::default(),
             extra: ExtraFields::new(),
         }
     }
+}
+
+fn default_update_repository() -> String {
+    option_env!("OXIDETERM_UPDATE_REPOSITORY")
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn default_update_public_key() -> String {
+    option_env!("OXIDETERM_UPDATER_PUBKEY")
+        .unwrap_or_default()
+        .to_string()
 }
 
 fn default_minimize_to_tray_on_close() -> bool {
@@ -38,6 +56,49 @@ fn default_minimize_to_tray_on_close() -> bool {
 fn default_external_connection_uris_enabled() -> bool {
     // External applications should not open connections until the user opts in.
     false
+}
+
+#[cfg(test)]
+mod update_setting_tests {
+    use super::GeneralSettings;
+
+    #[test]
+    fn update_settings_preserve_custom_source_and_default_missing_fields() {
+        let settings = GeneralSettings {
+            update_channel: super::UpdateChannel::Custom,
+            update_repository: "example/oxideterm".into(),
+            update_public_key: "configured-public-key".into(),
+            ..GeneralSettings::default()
+        };
+        let mut encoded = serde_json::to_value(&settings).expect("serialize general settings");
+        assert_eq!(encoded["updateRepository"], "example/oxideterm");
+        assert_eq!(encoded["updatePublicKey"], "configured-public-key");
+        encoded["updateRepository"] = serde_json::json!("other/oxideterm");
+        encoded["updatePublicKey"] = serde_json::json!("other-public-key");
+        let restored: GeneralSettings =
+            serde_json::from_value(encoded.clone()).expect("deserialize general settings");
+        assert_eq!(restored.update_repository, "other/oxideterm");
+        assert_eq!(restored.update_public_key, "other-public-key");
+        let mut older_settings = encoded;
+        older_settings
+            .as_object_mut()
+            .unwrap()
+            .remove("updateRepository");
+        older_settings
+            .as_object_mut()
+            .unwrap()
+            .remove("updatePublicKey");
+        let restored: GeneralSettings =
+            serde_json::from_value(older_settings).expect("read settings without update fields");
+        assert_eq!(
+            restored.update_repository,
+            option_env!("OXIDETERM_UPDATE_REPOSITORY").unwrap_or_default()
+        );
+        assert_eq!(
+            restored.update_public_key,
+            option_env!("OXIDETERM_UPDATER_PUBKEY").unwrap_or_default()
+        );
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

@@ -255,7 +255,8 @@ pub(in crate::workspace) use remote_shell_integration::{
     RemoteShellIntegrationRuntimeState,
 };
 pub(in crate::workspace) use update::{
-    NativeUpdateRenderState, native_update_progress_hint, native_update_progress_ratio,
+    NativeUpdateRenderState, native_update_download_label, native_update_progress_hint,
+    native_update_progress_ratio,
 };
 
 fn settings_tab_lucide(icon: SettingsTabIcon) -> LucideIcon {

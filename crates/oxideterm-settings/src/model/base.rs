@@ -95,11 +95,17 @@ fn version_contains_prerelease_tag(version: &str, tags: &[&str]) -> bool {
 pub enum UpdateChannel {
     Stable,
     Beta,
+    Custom,
 }
 
 impl Default for UpdateChannel {
     fn default() -> Self {
-        // Stable builds follow Stable while all prerelease builds follow Beta.
+        #[cfg(windows)]
+        if option_env!("OXIDETERM_UPDATE_REPOSITORY")
+            .is_some_and(|repository| !repository.trim().is_empty())
+        {
+            return Self::Custom;
+        }
         default_update_channel_for_version(env!("CARGO_PKG_VERSION"))
     }
 }

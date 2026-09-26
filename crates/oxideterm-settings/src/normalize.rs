@@ -847,10 +847,11 @@ pub fn sanitize_settings_value(raw: Value) -> Result<SanitizedSettings> {
     sanitize_enum(
         &mut settings,
         &["general", "updateChannel"],
-        &["stable", "beta"],
+        &["stable", "beta", "custom"],
         match UpdateChannel::default() {
             UpdateChannel::Stable => "stable",
             UpdateChannel::Beta => "beta",
+            UpdateChannel::Custom => "custom",
         },
         &mut validation_warnings,
     );

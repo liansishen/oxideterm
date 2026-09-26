@@ -36,6 +36,7 @@ pub struct NativeUpdatePackage {
     pub platform_key: String,
     pub url: String,
     pub signature: Option<String>,
+    pub verification_key: Option<String>,
 }
 
 impl NativeUpdateManifest {
@@ -62,6 +63,7 @@ impl NativeUpdateManifest {
             platform_key: platform_key.clone(),
             url: asset.url.clone(),
             signature: asset.signature.clone(),
+            verification_key: None,
         })
     }
 }

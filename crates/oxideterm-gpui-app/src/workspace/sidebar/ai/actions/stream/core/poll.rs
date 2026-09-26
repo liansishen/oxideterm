@@ -458,6 +458,7 @@ impl WorkspaceApp {
                                         let config = LocalPtyConfig {
                                             shell: Some(shell),
                                             cwd: Some(resolved_cwd),
+                                            post_connect_command: None,
                                             env,
                                             load_profile: false,
                                             current_directory_shell_integration: false,

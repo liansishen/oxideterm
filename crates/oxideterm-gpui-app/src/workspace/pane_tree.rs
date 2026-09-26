@@ -550,6 +550,7 @@ impl WorkspaceApp {
         if let Some(instance) = &source_instance {
             local_config.shell = instance.shell.clone();
             local_config.cwd = instance.cwd.clone();
+            local_config.post_connect_command = instance.post_connect_command.clone();
         }
         if let Some(pane) = self.tab_host.read(cx).panes().get(&target.active_pane_id) {
             if let Some(snapshot) = terminal_cwd::terminal_cwd_snapshot_from_pane(

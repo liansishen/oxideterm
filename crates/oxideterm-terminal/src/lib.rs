@@ -33,6 +33,7 @@ mod editor_integration;
 mod local_graphics_event_loop;
 mod local_shell;
 mod local_shell_integration;
+mod post_connect;
 mod privilege_prompt;
 mod process;
 mod process_lifecycle;

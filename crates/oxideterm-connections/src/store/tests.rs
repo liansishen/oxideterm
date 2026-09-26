@@ -3575,7 +3575,8 @@ mod tests {
         let profile = source.upsert_local_terminal_profile(SaveLocalTerminalProfileRequest {
             id: Some("project".into()), name: "Project".into(), group: Some("Work/Code".into()),
             shell_id: Some("zsh".into()), cwd: Some("~/work/project".into()),
-            icon: Some("debian".into()), ..Default::default()
+            icon: Some("debian".into()), post_connect_command: Some("  cd src\nprintf ready  ".into()),
+            ..Default::default()
         }).unwrap();
         let snapshot = source.export_saved_connections_snapshot().unwrap();
         source.mark_local_terminal_profile_used("project").unwrap();
@@ -3586,12 +3587,34 @@ mod tests {
         let reloaded = ConnectionStore::load(target.path.clone()).unwrap();
         assert_eq!(reloaded.local_terminal_profiles()[0].cwd.as_deref(), Some("~/work/project"));
         assert_eq!(reloaded.local_terminal_profiles()[0].icon.as_deref(), Some("debian"));
+        assert_eq!(reloaded.local_terminal_profiles()[0].post_connect_command.as_deref(), Some("cd src\nprintf ready"));
         source.delete_local_terminal_profile("project").unwrap();
         target.apply_saved_connections_snapshot(source.export_saved_connections_snapshot().unwrap(), SavedConnectionsConflictStrategy::Merge).unwrap();
         assert!(target.local_terminal_profiles().is_empty());
         target.apply_saved_connections_snapshot(snapshot, SavedConnectionsConflictStrategy::Replace).unwrap();
         assert!(target.local_terminal_profiles().is_empty(), "stale devices must not resurrect deleted profiles");
         assert_eq!(target.export_saved_connections_snapshot().unwrap().local_terminal_tombstones[0].id, "project");
+    }
+
+    #[test]
+    fn local_profile_post_connect_command_can_be_cleared_and_defaults_for_old_profiles() {
+        let mut store = load_empty_store("local-profile-command");
+        for (command, expected) in [(Some("pwd"), Some("pwd")), (Some(" \r\n "), None), (None, None)] {
+            store.upsert_local_terminal_profile(SaveLocalTerminalProfileRequest {
+                id: Some("project".into()),
+                name: "Project".into(),
+                post_connect_command: command.map(str::to_owned),
+                ..Default::default()
+            }).unwrap();
+            let reloaded = ConnectionStore::load(store.path.clone()).unwrap();
+            assert_eq!(reloaded.local_terminal_profiles()[0].post_connect_command.as_deref(), expected);
+        }
+        let old: LocalTerminalProfile = serde_json::from_str(r#"{
+            "id":"old", "name":"Old profile", "shell_id":"bash", "cwd":"/tmp",
+            "created_at":"2026-01-01T00:00:00Z", "updated_at":"2026-01-01T00:00:00Z"
+        }"#).unwrap();
+        assert_eq!(old.post_connect_command, None);
+        assert_eq!(old.shell_id.as_deref(), Some("bash"));
     }
 
     #[test]

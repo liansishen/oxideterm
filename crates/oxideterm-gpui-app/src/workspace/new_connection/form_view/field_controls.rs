@@ -2998,6 +2998,7 @@ impl WorkspaceApp {
             .expect("local form");
         let name = form.name.clone();
         let cwd = form.local_cwd.clone();
+        let post_connect_command = form.post_connect_command.clone();
         let group = form.group.clone();
         let selected_shell_id = form.local_shell_id.as_deref();
         let resolved_shell = match selected_shell_id {
@@ -3084,6 +3085,15 @@ impl WorkspaceApp {
                 false,
                 cx,
             ))
+            .child(self.render_connection_field(
+                self.i18n.t("ssh.form.post_connect_command"),
+                &post_connect_command,
+                self.i18n.t("ssh.form.post_connect_command_placeholder"),
+                NewConnectionField::PostConnectCommand,
+                false,
+                cx,
+            ))
+            .child(self.render_connection_hint(self.i18n.t("ssh.form.post_connect_command_hint")))
             .child(self.render_connection_group_select(self.i18n.t("ssh.form.group"), &group, cx));
         self.render_connection_form_section(
             ConnectionFormSection::LocalShell,

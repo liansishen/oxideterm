@@ -33,10 +33,11 @@ impl ShellInfo {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct LocalPtyConfig {
     pub shell: Option<ShellInfo>,
     pub cwd: Option<PathBuf>,
+    pub post_connect_command: Option<zeroize::Zeroizing<String>>,
     pub env: HashMap<String, String>,
     pub load_profile: bool,
     pub current_directory_shell_integration: bool,
@@ -44,11 +45,30 @@ pub struct LocalPtyConfig {
     pub oh_my_posh_theme: Option<String>,
 }
 
+impl std::fmt::Debug for LocalPtyConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LocalPtyConfig")
+            .field("shell", &self.shell)
+            .field("cwd", &self.cwd)
+            .field("post_connect_command", &self.post_connect_command.is_some())
+            .field("env_keys", &self.env.keys().collect::<Vec<_>>())
+            .field("load_profile", &self.load_profile)
+            .field(
+                "current_directory_shell_integration",
+                &self.current_directory_shell_integration,
+            )
+            .field("oh_my_posh_enabled", &self.oh_my_posh_enabled)
+            .field("oh_my_posh_theme", &self.oh_my_posh_theme)
+            .finish()
+    }
+}
+
 impl Default for LocalPtyConfig {
     fn default() -> Self {
         Self {
             shell: None,
             cwd: None,
+            post_connect_command: None,
             env: HashMap::new(),
             load_profile: true,
             current_directory_shell_integration: false,

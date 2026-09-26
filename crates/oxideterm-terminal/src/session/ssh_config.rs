@@ -26,8 +26,6 @@ pub struct SshSessionConfig {
     post_connect_command: Option<String>,
 }
 
-const POST_CONNECT_COMMAND_MAX_BYTES: usize = 8192;
-
 impl SshSessionConfig {
     pub fn new(host: impl Into<String>, port: u16, username: impl Into<String>) -> Self {
         Self::from(SshConfig::password(host, port, username, ""))
@@ -169,7 +167,8 @@ impl SshSessionConfig {
     }
 
     pub fn post_connect_input(&self) -> Result<Option<Vec<u8>>, String> {
-        normalize_post_connect_command(self.post_connect_command.as_deref())
+        crate::post_connect::normalize_post_connect_command(self.post_connect_command.as_deref())
+            .map(|input| input.map(|input| input.as_bytes().to_vec()))
     }
 }
 
@@ -193,45 +192,10 @@ impl From<oxideterm_ssh::SshConfig> for SshSessionConfig {
     }
 }
 
-fn normalize_post_connect_command(command: Option<&str>) -> Result<Option<Vec<u8>>, String> {
-    let Some(command) = command.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(None);
-    };
-
-    // Tauri sends each logical line as an Enter key. Normalize all newline
-    // variants to carriage returns before the SSH PTY receives the payload.
-    let mut normalized = command.replace("\r\n", "\n").replace('\r', "\n");
-    normalized = normalized.replace('\n', "\r");
-    if !normalized.ends_with('\r') {
-        normalized.push('\r');
-    }
-
-    let bytes = normalized.into_bytes();
-    if bytes.len() > POST_CONNECT_COMMAND_MAX_BYTES {
-        return Err(format!(
-            "Post-connect command is too long (max {} bytes)",
-            POST_CONNECT_COMMAND_MAX_BYTES
-        ));
-    }
-    Ok(Some(bytes))
-}
-
 #[cfg(test)]
 mod ssh_config_tests {
-    use super::{SshSessionConfig, normalize_post_connect_command};
+    use super::SshSessionConfig;
     use oxideterm_ssh::{SshConfig, X11ForwardPolicy};
-
-    #[test]
-    fn post_connect_command_normalization_handles_content_and_empty_values() {
-        for (input, expected) in [
-            (Some("  cd /srv/app  "), Some(b"cd /srv/app\r".to_vec())),
-            (Some("cd /srv/app\nls"), Some(b"cd /srv/app\rls\r".to_vec())),
-            (Some("   "), None),
-            (None, None),
-        ] {
-            assert_eq!(normalize_post_connect_command(input).unwrap(), expected);
-        }
-    }
 
     #[test]
     fn post_connect_override_can_clear_saved_node_command() {

@@ -296,6 +296,7 @@ impl WorkspaceApp {
         LocalPtyConfig {
             shell,
             cwd,
+            post_connect_command: None,
             env,
             load_profile: settings.load_shell_profile,
             current_directory_shell_integration: self

@@ -956,7 +956,8 @@ jobs:
     runs-on: ubuntu-latest
     if: always() && !cancelled() && inputs.upload_release && needs.release.result == 'success' && needs.publish-updater.result == 'success' && needs.cleanup-sigs.result == 'success'
     permissions:
-      contents: read
+      # GitHub exposes draft releases only to tokens with push access.
+      contents: write
     steps:
       - name: Check final release asset set
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0

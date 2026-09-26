@@ -859,14 +859,36 @@ impl WorkspaceApp {
                     ));
                 }
                 rows.push(self.card_separator());
+                let custom_cjk = self
+                    .settings_workspace
+                    .read(cx)
+                    .terminal_cjk_font_is_custom(&settings.terminal.cjk_font_family);
                 rows.push(self.select_setting_row(
                     "settings_view.terminal.cjk_font_family",
                     "settings_view.terminal.cjk_font_family_hint",
                     SettingsSelect::TerminalCjkFontFamily,
-                    terminal_cjk_font_label(&settings.terminal.cjk_font_family, &self.i18n),
+                    if custom_cjk {
+                        self.i18n.t("settings_view.terminal.custom_font")
+                    } else {
+                        terminal_cjk_font_label(&settings.terminal.cjk_font_family, &self.i18n)
+                    },
                     self.tokens.metrics.settings_select_width,
                     cx,
                 ));
+                if custom_cjk {
+                    rows.push(self.setting_row(
+                        "settings_view.terminal.custom_cjk_font_family",
+                        "settings_view.terminal.custom_cjk_font_family_hint",
+                        self.settings_text_input_control(
+                            SettingsInput::TerminalCustomCjkFontFamily,
+                            &settings.terminal.cjk_font_family,
+                            "Source Han Mono SC".to_string(),
+                            SETTINGS_TERMINAL_CUSTOM_FONT_INPUT_WIDTH,
+                            cx,
+                        ),
+                        cx,
+                    ));
+                }
                 rows.extend([
                     self.card_separator(),
                     self.decimal_row(

@@ -238,6 +238,8 @@
       "cjk_font_family": "Chinesische / CJK-Schrift",
       "cjk_font_family_hint": "Fallback-Schrift für chinesische, japanische und koreanische Zeichen. Auto verwendet weiter die gebündelte und System-Fallback-Kette.",
       "cjk_font_auto": "Auto · Intelligenter Fallback",
+      "custom_cjk_font_family": "Benutzerdefinierte CJK-Schrift",
+      "custom_cjk_font_family_hint": "Geben Sie den Namen einer installierten Schrift für chinesische, japanische und koreanische Zeichen ein. Leer lassen für automatische Ersatzschriften.",
       "font_preview": "Schriftartvorschau",
       "font_size": "Schriftgröße",
       "font_size_hint": "Größe der Terminalzeichen",

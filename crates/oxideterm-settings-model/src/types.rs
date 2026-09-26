@@ -146,6 +146,7 @@ pub enum SettingsSelect {
 pub enum SettingsInput {
     SettingsSearch,
     TerminalCustomFontFamily,
+    TerminalCustomCjkFontFamily,
     TerminalFontSize,
     TerminalFontWeight,
     TerminalScrollback,
@@ -544,6 +545,7 @@ impl SettingsInput {
         match self {
             Self::SettingsSearch => SETTINGS_SEARCH_INPUT_ANCHOR_KEY,
             Self::TerminalCustomFontFamily => 19,
+            Self::TerminalCustomCjkFontFamily => 24,
             Self::TerminalFontSize => 1,
             Self::TerminalFontWeight => 21,
             Self::TerminalScrollback => 33_000,

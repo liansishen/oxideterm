@@ -238,6 +238,8 @@
       "cjk_font_family": "Chinese / CJK Font",
       "cjk_font_family_hint": "Fallback font used for Chinese, Japanese, and Korean glyphs. Auto keeps the bundled and system fallback chain.",
       "cjk_font_auto": "Auto · Smart fallback",
+      "custom_cjk_font_family": "Custom CJK Font",
+      "custom_cjk_font_family_hint": "Enter the name of an installed font for Chinese, Japanese, and Korean characters. Leave empty for automatic fallback.",
       "font_preview": "Font Preview",
       "font_size": "Font Size",
       "font_size_hint": "Size of terminal characters",

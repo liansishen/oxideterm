@@ -868,7 +868,7 @@ impl WorkspaceApp {
                     "settings_view.terminal.cjk_font_family_hint",
                     SettingsSelect::TerminalCjkFontFamily,
                     if custom_cjk {
-                        self.i18n.t("settings_view.terminal.custom_font")
+                        self.i18n.t("settings_view.terminal.cjk_font_custom")
                     } else {
                         terminal_cjk_font_label(&settings.terminal.cjk_font_family, &self.i18n)
                     },

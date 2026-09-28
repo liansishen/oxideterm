@@ -56,6 +56,7 @@ mod selectable_text;
 mod selection_motion;
 mod session_icons;
 mod session_manager;
+mod session_restore;
 mod settings;
 mod sftp;
 mod sidebar;
@@ -896,6 +897,7 @@ pub(crate) struct WorkspaceApp {
     _connection_flow_observation: Subscription,
     _connection_flow_subscription: Subscription,
     workspace_runtime: Entity<runtime_entity::WorkspaceRuntimeEntity>,
+    pending_terminal_workspace_restore: Option<session_restore::PendingRestore>,
     _workspace_runtime_subscription: Subscription,
     public_mcp: public_mcp::PublicMcpWorkspaceBridge,
     ssh_registry: SshConnectionRegistry,

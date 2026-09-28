@@ -756,6 +756,7 @@ impl WorkspaceApp {
             _connection_flow_observation: connection_flow_observation,
             _connection_flow_subscription: connection_flow_subscription,
             workspace_runtime,
+            pending_terminal_workspace_restore: None,
             _workspace_runtime_subscription: workspace_runtime_subscription,
             public_mcp,
             ssh_registry,
@@ -868,6 +869,7 @@ impl WorkspaceApp {
         workspace.sync_ssh_config_sync_service();
         workspace.start_audit_delivery(cx);
         workspace.restore_session_tree_snapshot();
+        workspace.restore_terminal_workspace(window, cx);
         workspace.standalone_connections =
             standalone_connections::StandaloneConnectionRegistry::restore(
                 default_session_tree_path().with_file_name("standalone_sessions.json"),
@@ -880,6 +882,11 @@ impl WorkspaceApp {
         workspace.refresh_terminal_trigger_runtime(cx);
         workspace.schedule_automatic_native_update_check(cx);
         cx.on_release(|workspace, cx| {
+            if let Err(error) = workspace.save_terminal_workspace_snapshot(cx) {
+                eprintln!(
+                    "failed to save terminal workspace snapshot during workspace release: {error}"
+                );
+            }
             workspace.flush_main_window_state(cx);
             workspace.shutdown_terminal_trigger_runtime();
             // Shutdown ordering is security-sensitive: late broker callbacks

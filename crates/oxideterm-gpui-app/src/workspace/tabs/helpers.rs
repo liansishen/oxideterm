@@ -10,10 +10,11 @@ pub(super) fn welcome_layout_is_stacked(available_width: f32) -> bool {
     available_width - 2.0 * WELCOME_PAGE_PADDING < WELCOME_WORKBENCH_MIN_ROW_WIDTH
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 /// Identifies the transport without carrying any connection credentials.
 pub(super) enum WelcomeRecentKind {
     Ssh,
+    Local,
     Serial,
     Telnet,
     Mosh,
@@ -25,6 +26,7 @@ pub(super) enum WelcomeRecentKind {
 /// Keeps the start page decoupled from transport-specific open implementations.
 pub(super) enum WelcomeRecentTarget {
     Ssh(String),
+    Local(String),
     Serial(String),
     Telnet(String),
     Mosh(String),
@@ -37,7 +39,8 @@ pub(super) struct WelcomeRecentConnection {
     pub subtitle: String,
     pub kind: WelcomeRecentKind,
     pub target: WelcomeRecentTarget,
-    last_used_at: DateTime<Utc>,
+    id: String,
+    last_used_at: Option<DateTime<Utc>>,
 }
 
 /// Projects every saved transport into one non-secret, most-recently-used list.
@@ -56,7 +59,8 @@ pub(super) fn welcome_recent_connections(
             ),
             kind: WelcomeRecentKind::Ssh,
             target: WelcomeRecentTarget::Ssh(connection.id.clone()),
-            last_used_at: connection.last_used_at?,
+            id: connection.id.clone(),
+            last_used_at: connection.last_used_at,
         })
     }));
     recent.extend(store.serial_profiles().iter().filter_map(|profile| {
@@ -65,7 +69,8 @@ pub(super) fn welcome_recent_connections(
             subtitle: format!("{} · {}", profile.port_path, profile.baud_rate),
             kind: WelcomeRecentKind::Serial,
             target: WelcomeRecentTarget::Serial(profile.id.clone()),
-            last_used_at: profile.last_used_at?,
+            id: profile.id.clone(),
+            last_used_at: Some(profile.last_used_at?),
         })
     }));
     recent.extend(store.telnet_profiles().iter().filter_map(|profile| {
@@ -74,7 +79,8 @@ pub(super) fn welcome_recent_connections(
             subtitle: format!("{}:{}", profile.host, profile.port),
             kind: WelcomeRecentKind::Telnet,
             target: WelcomeRecentTarget::Telnet(profile.id.clone()),
-            last_used_at: profile.last_used_at?,
+            id: profile.id.clone(),
+            last_used_at: Some(profile.last_used_at?),
         })
     }));
     recent.extend(store.mosh_profiles().iter().filter_map(|profile| {
@@ -83,7 +89,8 @@ pub(super) fn welcome_recent_connections(
             subtitle: format!("{}@{}:{}", profile.username, profile.host, profile.ssh_port),
             kind: WelcomeRecentKind::Mosh,
             target: WelcomeRecentTarget::Mosh(profile.id.clone()),
-            last_used_at: profile.last_used_at?,
+            id: profile.id.clone(),
+            last_used_at: Some(profile.last_used_at?),
         })
     }));
     recent.extend(
@@ -105,8 +112,23 @@ pub(super) fn welcome_recent_connections(
                         RemoteDesktopProtocol::Vnc => WelcomeRecentKind::Vnc,
                     },
                     target: WelcomeRecentTarget::RemoteDesktop(profile.id.clone()),
-                    last_used_at: profile.last_used_at?,
+                    id: profile.id.clone(),
+                    last_used_at: Some(profile.last_used_at?),
                 })
+            }),
+    );
+
+    recent.extend(
+        store
+            .local_terminal_profiles()
+            .iter()
+            .map(|profile| WelcomeRecentConnection {
+                name: profile.name.clone(),
+                subtitle: profile.cwd.clone().unwrap_or_default(),
+                kind: WelcomeRecentKind::Local,
+                target: WelcomeRecentTarget::Local(profile.id.clone()),
+                id: profile.id.clone(),
+                last_used_at: profile.last_used_at,
             }),
     );
 
@@ -123,7 +145,8 @@ fn newest_welcome_connections(
             .last_used_at
             .cmp(&left.last_used_at)
             .then_with(|| left.name.cmp(&right.name))
-            .then_with(|| left.subtitle.cmp(&right.subtitle))
+            .then_with(|| left.kind.cmp(&right.kind))
+            .then_with(|| left.id.cmp(&right.id))
     });
     recent.truncate(limit);
     recent
@@ -154,7 +177,8 @@ mod tests {
             subtitle: format!("{name}.example:22"),
             kind: WelcomeRecentKind::Ssh,
             target: WelcomeRecentTarget::Ssh(name.to_string()),
-            last_used_at: Utc.with_ymd_and_hms(2026, 8, 13, 12, minute, 0).unwrap(),
+            id: name.to_string(),
+            last_used_at: Some(Utc.with_ymd_and_hms(2026, 8, 13, 12, minute, 0).unwrap()),
         }
     }
 
@@ -175,6 +199,61 @@ mod tests {
                 .map(|connection| connection.name.as_str())
                 .collect::<Vec<_>>(),
             vec!["new", "middle"]
+        );
+    }
+
+    #[test]
+    fn saved_ssh_and_local_profiles_include_unused_entries_in_usage_order() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("connections.json");
+        let ssh = |id: &str, name: &str, used: Option<&str>| {
+            serde_json::json!({
+                "id": id, "name": name, "host": "example.invalid", "port": 22,
+                "username": "tester", "auth": {"type": "password"},
+                "created_at": "2026-08-01T00:00:00Z", "last_used_at": used
+            })
+        };
+        let local = |id: &str, name: &str, used: Option<&str>| {
+            serde_json::json!({
+                "id": id, "name": name, "shell_id": "pwsh", "cwd": "C:/work",
+                "created_at": "2026-08-01T00:00:00Z",
+                "updated_at": "2026-08-01T00:00:00Z", "last_used_at": used
+            })
+        };
+        let data = serde_json::json!({
+            "connections": [
+                ssh("ssh-old", "Old", Some("2026-08-13T12:01:00Z")),
+                ssh("ssh-tied", "Tied", Some("2026-08-13T12:05:00Z")),
+                ssh("ssh-unused", "Unused SSH", None)
+            ],
+            "local_terminal_profiles": [
+                local("local-b", "Tied", Some("2026-08-13T12:05:00Z")),
+                local("local-new", "Newest", Some("2026-08-13T12:06:00Z")),
+                local("local-a", "Tied", Some("2026-08-13T12:05:00Z")),
+                local("local-unused", "Unused Local", None)
+            ]
+        });
+        std::fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
+        let store = ConnectionStore::load_read_only(path).unwrap();
+        let recent = welcome_recent_connections(&store, usize::MAX);
+        assert_eq!(
+            recent
+                .iter()
+                .map(|entry| entry.target.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                WelcomeRecentTarget::Local("local-new".into()),
+                WelcomeRecentTarget::Ssh("ssh-tied".into()),
+                WelcomeRecentTarget::Local("local-a".into()),
+                WelcomeRecentTarget::Local("local-b".into()),
+                WelcomeRecentTarget::Ssh("ssh-old".into()),
+                WelcomeRecentTarget::Local("local-unused".into()),
+                WelcomeRecentTarget::Ssh("ssh-unused".into()),
+            ]
+        );
+        assert_eq!(
+            (recent[0].kind, recent[0].subtitle.as_str()),
+            (WelcomeRecentKind::Local, "C:/work")
         );
     }
 

@@ -42,7 +42,7 @@
       "new_local_terminal_hint": "Abrir un terminal en este dispositivo",
       "keyboard_shortcuts": "Atajos de teclado",
       "recent_connections": "Continuar trabajando",
-      "recent_connections_hint": "Abre una conexión guardada usada recientemente",
+      "recent_connections_hint": "Abre conexiones SSH y locales guardadas; los perfiles nunca usados aparecen al final.",
       "recent_connections_empty": "Las conexiones guardadas usadas recientemente aparecerán aquí.",
       "saved_count": "{{count}} guardadas",
       "get_started": "Iniciar y administrar",

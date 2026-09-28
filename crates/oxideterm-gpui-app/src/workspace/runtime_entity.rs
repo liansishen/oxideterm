@@ -63,6 +63,8 @@ pub(in crate::workspace) struct PendingSshTerminalOpen {
     pub(in crate::workspace) save_after_open: Option<SaveConnectionRequest>,
     pub(in crate::workspace) cleanup_node_id: Option<NodeId>,
     pub(in crate::workspace) title: String,
+    pub(in crate::workspace) restore_profile_id: Option<String>,
+    pub(in crate::workspace) restore_terminal_workspace: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -556,6 +558,10 @@ impl WorkspaceRuntimeEntity {
             if existing.post_connect_command.is_none() {
                 existing.post_connect_command = request.post_connect_command.take();
             }
+            if existing.restore_profile_id.is_none() {
+                existing.restore_profile_id = request.restore_profile_id.take();
+            }
+            existing.restore_terminal_workspace |= request.restore_terminal_workspace;
             QueueSshTerminalOpenOutcome::Coalesced
         } else {
             self.pending_ssh_terminal_opens.push_back(request);
@@ -3692,6 +3698,8 @@ mod tests {
                     save_after_open: None,
                     cleanup_node_id: None,
                     title: "First terminal".to_string(),
+                    restore_profile_id: None,
+                    restore_terminal_workspace: false,
                 },
                 cx,
             );
@@ -3703,6 +3711,8 @@ mod tests {
                     save_after_open: None,
                     cleanup_node_id: None,
                     title: "Ignored duplicate".to_string(),
+                    restore_profile_id: None,
+                    restore_terminal_workspace: false,
                 },
                 cx,
             );
@@ -3733,6 +3743,8 @@ mod tests {
                     save_after_open: None,
                     cleanup_node_id: None,
                     title: "Ready terminal".to_string(),
+                    restore_profile_id: None,
+                    restore_terminal_workspace: false,
                 },
                 cx,
             );

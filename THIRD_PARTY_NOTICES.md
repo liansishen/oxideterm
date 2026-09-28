@@ -1475,3 +1475,7 @@ The CC BY-SA 4.0 text is from the Rocky Linux branding repository LICENSE at com
 - License data is generated from crate metadata through cargo-deny and may include multiple licenses per crate.
 - This notice list is for attribution and compliance tracking. It does not replace upstream license texts.
 - GPUI-CE's complete Apache-2.0 text is shipped as `GPUI-CE-LICENSE-APACHE`.
+
+## Brand Artwork
+
+- Windows four-pane mark: adapted as a simplified vector from the Windows logo shape documented by Microsoft. Windows is a trademark of Microsoft Corporation. The mark is used only as an optional session identifier; no affiliation is implied. Source guidance: https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks

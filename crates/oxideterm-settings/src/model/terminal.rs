@@ -12,6 +12,11 @@ pub struct GeneralSettings {
     )]
     pub minimize_to_tray_on_close: bool,
     #[serde(
+        rename = "restoreTerminalWorkspace",
+        default = "default_restore_terminal_workspace"
+    )]
+    pub restore_terminal_workspace: bool,
+    #[serde(
         rename = "externalConnectionUrisEnabled",
         default = "default_external_connection_uris_enabled"
     )]
@@ -30,6 +35,7 @@ impl Default for GeneralSettings {
             update_repository: default_update_repository(),
             update_public_key: default_update_public_key(),
             minimize_to_tray_on_close: default_minimize_to_tray_on_close(),
+            restore_terminal_workspace: default_restore_terminal_workspace(),
             external_connection_uris_enabled: default_external_connection_uris_enabled(),
             update_proxy: UpdateProxySettings::default(),
             extra: ExtraFields::new(),
@@ -50,6 +56,10 @@ fn default_update_public_key() -> String {
 }
 
 fn default_minimize_to_tray_on_close() -> bool {
+    true
+}
+
+fn default_restore_terminal_workspace() -> bool {
     true
 }
 

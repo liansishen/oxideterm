@@ -25,7 +25,7 @@ impl LocalTerminalInstance {
 }
 
 impl WorkspaceApp {
-    fn local_profile_config(
+    pub(super) fn local_profile_config(
         &self,
         shell_id: Option<&str>,
         cwd: Option<&str>,

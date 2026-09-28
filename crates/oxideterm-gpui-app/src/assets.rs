@@ -401,6 +401,12 @@ pub(crate) struct DistroIcon {
 // Distribution artwork is bundled with source attribution and brand usage notes.
 pub(crate) const DISTRO_ICONS: &[DistroIcon] = &[
     DistroIcon {
+        id: "windows",
+        name: "Windows",
+        path: "distro-icons/windows.svg",
+        bytes: include_bytes!("../resources/distro-icons/windows.svg"),
+    },
+    DistroIcon {
         id: "ubuntu",
         name: "Ubuntu",
         path: "distro-icons/ubuntu.svg",

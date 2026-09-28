@@ -436,6 +436,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn windows_icon_id_resolves_to_color_brand_asset() {
+        let Some(SessionIcon::Distro(icon)) = session_icon_from_id(Some("windows")) else {
+            panic!("windows id did not resolve to a brand asset");
+        };
+        assert_eq!(icon.id, "windows");
+        assert_eq!(icon.path, "distro-icons/windows.svg");
+        let svg = std::str::from_utf8(icon.bytes).unwrap();
+        assert!(svg.contains("fill=\"#0078D4\""));
+        assert_eq!(
+            resolved_session_icon(Some("windows"), None),
+            SessionIcon::Distro(icon)
+        );
+    }
+
+    #[test]
     fn distro_resolution_preserves_manual_icons_and_does_not_guess_derivatives() {
         for (name, id) in [
             ("Ubuntu 24.04 LTS", "ubuntu"),

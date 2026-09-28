@@ -756,6 +756,28 @@ mod tests {
     }
 
     #[test]
+    fn terminal_workspace_restore_defaults_on_and_persists_opt_out() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("settings.json");
+        fs::write(&path, r#"{"general":{"minimizeToTrayOnClose":false}}"#).unwrap();
+        let mut store = SettingsStore::load_from_path(&path).unwrap();
+        assert!(store.settings().general.restore_terminal_workspace);
+        assert!(!store.settings().general.minimize_to_tray_on_close);
+
+        for enabled in [false, true] {
+            store.settings_mut().general.restore_terminal_workspace = enabled;
+            store.save().unwrap();
+            let raw: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            assert_eq!(
+                raw["settings"]["general"]["restoreTerminalWorkspace"],
+                enabled
+            );
+            store = SettingsStore::load_from_path(&path).unwrap();
+            assert_eq!(store.settings().general.restore_terminal_workspace, enabled);
+        }
+    }
+
+    #[test]
     fn corrupt_settings_are_preserved_and_block_later_saves() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("settings.json");

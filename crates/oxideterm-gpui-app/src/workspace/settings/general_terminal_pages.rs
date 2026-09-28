@@ -445,6 +445,16 @@ impl WorkspaceApp {
                     .child(description)
                     .child(manage_button)
                     .into_any_element(),
+                self.general_checkbox_row(
+                    "settings_view.general.restore_terminal_workspace",
+                    "settings_view.general.restore_terminal_workspace_hint",
+                    self.settings_store
+                        .settings()
+                        .general
+                        .restore_terminal_workspace,
+                    |settings, enabled| settings.general.restore_terminal_workspace = enabled,
+                    cx,
+                ),
             ],
         )
     }
@@ -541,6 +551,16 @@ impl WorkspaceApp {
                     .child(label)
                     .child(control)
                     .into_any_element(),
+                self.general_checkbox_row(
+                    "settings_view.general.restore_terminal_workspace",
+                    "settings_view.general.restore_terminal_workspace_hint",
+                    self.settings_store
+                        .settings()
+                        .general
+                        .restore_terminal_workspace,
+                    |settings, enabled| settings.general.restore_terminal_workspace = enabled,
+                    cx,
+                ),
             ],
         )
     }

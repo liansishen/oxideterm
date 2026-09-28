@@ -42,7 +42,7 @@
       "new_local_terminal_hint": "在此裝置上開啟終端",
       "keyboard_shortcuts": "鍵盤快捷鍵",
       "recent_connections": "繼續工作",
-      "recent_connections_hint": "開啟最近使用的已儲存連線",
+      "recent_connections_hint": "開啟已儲存的 SSH 與本機連線；從未使用的設定會列在最後。",
       "recent_connections_empty": "最近使用的已儲存連線會顯示在這裡。",
       "saved_count": "已儲存 {{count}} 個",
       "get_started": "開始與管理",

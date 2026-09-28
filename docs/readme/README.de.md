@@ -59,6 +59,21 @@ Verbindungen und Betriebsdaten bleiben unter Ihrer Kontrolle. Für OxideSens ver
 
 ---
 
+## Speicherverbrauch
+
+**Nach der nativen Neuentwicklung sank der Speicherverbrauch im Leerlauf unter macOS auf etwa ein Viertel und unter Windows auf etwa ein Achtel des vorherigen Werts.** Die folgenden Werte hat der Autor auf seinen eigenen Rechnern beim Wechsel von Tauri 1.x zur nativen GPUI-Version 2.0 erfasst:
+
+| Plattform | Tauri 1.x — im Leerlauf | Native Version 2.0 — im Leerlauf | Rückgang |
+|---|---:|---:|---:|
+| macOS | 318,7 MB | 81,3 MB | Etwa 74 % |
+| Windows | 182,4 MB | 23,5 MB | Etwa 87 % |
+
+![Speichervergleich im Leerlauf zwischen Tauri 1.x und der nativen Version 2.0 mit Screenshots der Systemprozesse](../screenshots/oxideterm-memory-comparison.png)
+
+Der Gesamtwert der alten Version umfasst OxideTerm und die zugehörigen WebView-Prozesse auf den Screenshots. Die native Version benötigt diese Browserprozesse nicht mehr.
+
+---
+
 ## Screenshots
 
 Die folgenden Screenshots zeigen Terminal-, Datei-, Editor- und Weiterleitungsabläufe in OxideTerm.
@@ -123,7 +138,7 @@ OxideTerm hält Verbindungen, Dateien, Weiterleitungen, Host-Werkzeuge, Automati
 
 - macOS: Laden Sie die passende `.dmg`-Datei für Apple Silicon oder Intel herunter.
 - Windows: Verwenden Sie das Installationsprogramm für x64 oder ARM64.
-- Linux: Wählen Sie AppImage, `.deb` oder `.rpm`.
+- Linux: Wählen Sie AppImage, `.deb`, `.rpm` oder führen Sie es über Nix aus (`nix run github:AnalyseDeCircuit/oxideterm`; Updates werden von Nix verwaltet).
 - Prüfen Sie Downloads mit der Datei `sha256sums.txt` auf der Release-Seite.
 
 Zum Bauen aus dem Quellcode siehe den Abschnitt „Aus dem Quellcode ausführen“ weiter unten.

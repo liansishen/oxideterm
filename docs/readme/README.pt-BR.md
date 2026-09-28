@@ -59,6 +59,21 @@ Suas conexões e dados operacionais permanecem sob seu controle. OxideSens usa s
 
 ---
 
+## Uso de memória
+
+**Após a reescrita nativa, o uso de memória em repouso caiu para cerca de um quarto do valor anterior no macOS e um oitavo no Windows.** Estas são as medições registradas pelo autor em seus próprios computadores na transição do Tauri 1.x para a versão nativa com GPUI 2.0:
+
+| Plataforma | Tauri 1.x — em repouso | Versão nativa 2.0 — em repouso | Redução |
+|---|---:|---:|---:|
+| macOS | 318,7 MB | 81,3 MB | Cerca de 74% |
+| Windows | 182,4 MB | 23,5 MB | Cerca de 87% |
+
+![Comparação da memória em repouso entre Tauri 1.x e a versão nativa 2.0, com capturas dos processos do sistema](../screenshots/oxideterm-memory-comparison.png)
+
+O total da versão anterior inclui o OxideTerm e os processos WebView associados que aparecem nas capturas. A versão nativa não precisa mais desses processos de navegador.
+
+---
+
 ## Capturas de tela
 
 As capturas mostram os fluxos de terminal, arquivos, edição e encaminhamento do OxideTerm.
@@ -123,7 +138,7 @@ OxideTerm mantém conexões, arquivos, encaminhamentos, ferramentas do host, aut
 
 - macOS: escolha o arquivo `.dmg` para Apple Silicon ou Intel.
 - Windows: use o instalador x64 ou ARM64.
-- Linux: escolha AppImage, `.deb` ou `.rpm`.
+- Linux: escolha AppImage, `.deb`, `.rpm` ou execute via Nix (`nix run github:AnalyseDeCircuit/oxideterm`; as atualizações são gerenciadas pelo Nix).
 - Verifique os downloads com o arquivo `sha256sums.txt` na página da versão.
 
 Para compilar a partir do código-fonte, consulte a seção « Executar a partir do código-fonte » abaixo.

@@ -183,5 +183,14 @@ mod tests {
                 )
                 .is_none()
         );
+        assert!(
+            manifest
+                .select_package(
+                    "1.0.0",
+                    &PlatformTarget::new("linux", "x86_64"),
+                    InstallFlavor::LinuxNix,
+                )
+                .is_none()
+        );
     }
 }

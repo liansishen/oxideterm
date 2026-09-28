@@ -59,6 +59,21 @@ OxideTerm 是面向 SSH 與遠端維運的開源工作區。終端、檔案、�
 
 ---
 
+## 記憶體用量
+
+**原生重寫後，閒置記憶體用量降至舊版的約四分之一（macOS）和約八分之一（Windows）。** 以下是作者在自己的電腦上記錄的 Tauri 1.x 與原生 GPUI 2.0 對比：
+
+| 平台 | Tauri 1.x 閒置時 | 原生 2.0 閒置時 | 降幅 |
+|---|---:|---:|---:|
+| macOS | 318.7 MB | 81.3 MB | 約 74% |
+| Windows | 182.4 MB | 23.5 MB | 約 87% |
+
+![Tauri 1.x 與原生 2.0 的閒置記憶體用量對比，附系統處理程序截圖](../screenshots/oxideterm-memory-comparison.png)
+
+舊版合計截圖中 OxideTerm 及其相關 WebView 處理程序的記憶體用量；原生版不再需要這些瀏覽器處理程序。
+
+---
+
 ## 截圖
 
 以下截圖展示了 OxideTerm 的終端、檔案、編輯與連接埠轉發工作流程。
@@ -123,7 +138,7 @@ OxideTerm 將連線、檔案、轉發、主機工具、自動化與 AI 上下文
 
 - macOS：選擇適合 Apple Silicon 或 Intel 的 `.dmg`。
 - Windows：選擇 x64 或 ARM64 安裝程式。
-- Linux：選擇 AppImage、`.deb` 或 `.rpm`。
+- Linux：選擇 AppImage、`.deb`、`.rpm`，或透過 Nix 執行（`nix run github:AnalyseDeCircuit/oxideterm`；更新由 Nix 管理）。
 - 可使用發布頁中的 `sha256sums.txt` 驗證下載檔案。
 
 需要從原始碼建置？請繼續閱讀下方的「從原始碼執行」章節。

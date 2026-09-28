@@ -59,6 +59,21 @@ OxideTerm 是面向 SSH 与远程运维的开源工作区。终端、文件、�
 
 ---
 
+## 内存占用
+
+**原生重写后，空载内存降到了旧版的约四分之一（macOS）和约八分之一（Windows）。** 以下是作者在自己的机器上记录的 Tauri 1.x 与原生 GPUI 2.0 对比：
+
+| 平台 | Tauri 1.x 空载 | 原生 2.0 空载 | 降幅 |
+|---|---:|---:|---:|
+| macOS | 318.7 MB | 81.3 MB | 约 74% |
+| Windows | 182.4 MB | 23.5 MB | 约 87% |
+
+![Tauri 1.x 与原生 2.0 的空载内存对比，附系统进程截图](../screenshots/oxideterm-memory-comparison.png)
+
+旧版按截图中 OxideTerm 及其相关 WebView 进程的内存合计；原生版不再需要这些浏览器进程。
+
+---
+
 ## 截图
 
 以下截图展示了 OxideTerm 的终端、文件、编辑与端口转发工作流。
@@ -123,7 +138,7 @@ OxideTerm 将连接、文件、转发、主机工具、自动化与 AI 上下文
 
 - macOS：选择适合 Apple Silicon 或 Intel 的 `.dmg`。
 - Windows：选择 x64 或 ARM64 安装程序。
-- Linux：选择 AppImage、`.deb` 或 `.rpm`。
+- Linux：选择 AppImage、`.deb`、`.rpm`，或通过 Nix 运行（`nix run github:AnalyseDeCircuit/oxideterm`；更新由 Nix 管理）。
 - 可使用发布页中的 `sha256sums.txt` 校验下载文件。
 
 需要从源码构建？请继续阅读下方的“从源码运行”章节。

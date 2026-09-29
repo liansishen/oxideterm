@@ -324,6 +324,9 @@ impl WorkspaceApp {
                     ConnectionFlowEvent::ConnectionFormClosed => {
                         // Apply runtime cleanup after the Entity has already cleared ownership.
                         workspace.cleanup_cancelled_proxy_connect_runs(cx);
+                        if workspace.active_pane(cx).is_some() {
+                            workspace.needs_active_pane_focus = true;
+                        }
                     }
                     ConnectionFlowEvent::WorkerResultsReady => {
                         workspace.enqueue_connection_flow_window_effect(cx);
@@ -1236,6 +1239,12 @@ impl WorkspaceApp {
                 ymodem_receive: self.i18n.t("terminal.modem.ymodem_receive"),
                 zmodem_upload: self.i18n.t("terminal.modem.zmodem_upload"),
                 zmodem_receive: self.i18n.t("terminal.modem.zmodem_receive"),
+                timeout: self.i18n.t("terminal.modem.timeout"),
+                protocol_error: self.i18n.t("terminal.modem.protocol_error"),
+                file_error: self.i18n.t("terminal.modem.file_error"),
+                file_too_large: self.i18n.t("terminal.modem.file_too_large"),
+                buffer_overflow: self.i18n.t("terminal.modem.buffer_overflow"),
+                worker_stopped: self.i18n.t("terminal.modem.worker_stopped"),
             },
             control_bar_expand_label: self.i18n.t("terminal.control_bar.show_controls"),
             control_bar_collapse_label: self.i18n.t("terminal.control_bar.hide_controls"),

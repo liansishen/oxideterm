@@ -560,12 +560,17 @@ class ReleaseDocumentTests(unittest.TestCase):
 
         notice = (package_native.THIRD_PARTY_LICENSE_DIR / "DISTRO-ICONS-NOTICE.md").read_text()
         assets = re.findall(r"Bundled file: `([^`]+)`\.\n- SHA-256: `([0-9a-f]+)`", notice)
-        self.assertEqual([Path(path).stem for path, _ in assets], ["ubuntu", "archlinux", "debian", "gentoo", "nixos", "rocky", "linuxmint"])
+        self.assertEqual(
+            [Path(path).stem for path, _ in assets],
+            ["ubuntu", "archlinux", "debian", "gentoo", "nixos", "rocky", "linuxmint", "windows"],
+        )
         asset_directory = package_native.ROOT_DIR / "crates/oxideterm-gpui-app/resources/distro-icons"
         self.assertEqual({Path(path).name for path, _ in assets}, {path.name for path in asset_directory.glob("*.svg")})
         for path, expected_hash in assets:
             with self.subTest(asset=path):
                 self.assertEqual(hashlib.sha256((package_native.ROOT_DIR / path).read_bytes()).hexdigest(), expected_hash)
+        notices = (package_native.ROOT_DIR / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+        self.assertIn("## Distribution Icon Assets\n\n" + notice + "\n## Notes\n\n", notices)
 
     def test_release_documents_include_native_and_agent_notices(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

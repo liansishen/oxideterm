@@ -115,6 +115,7 @@ impl NativeUpdateRequest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NativeUpdateStatus {
     UpToDate,
+    ManagedByNix,
     Available(NativeUpdatePackage),
 }
 
@@ -152,6 +153,10 @@ impl NativeUpdateClient {
         &self,
         request: NativeUpdateRequest,
     ) -> Result<NativeUpdateStatus, NativeUpdateError> {
+        if request.install_flavor == InstallFlavor::LinuxNix {
+            return Ok(NativeUpdateStatus::ManagedByNix);
+        }
+
         let (manifest_url, verification_key) = if request.channel == UpdateChannel::Custom {
             let repository = request
                 .custom_repository
@@ -173,7 +178,9 @@ impl NativeUpdateClient {
                 Some(key),
             )
         } else {
-            (endpoint_for_channel(request.channel)?.url.to_string(), None)
+            let endpoint = endpoint_for_channel(request.channel)?;
+            let key = crate::integrity::configured_updater_public_key()?;
+            (endpoint.url.to_string(), Some(key.to_string()))
         };
         let response = self
             .http
@@ -820,6 +827,80 @@ fn compute_retry_delay(attempt: u32) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn nix_install_flavor_skips_remote_update_check() {
+        // Pointing the client at a loopback mock proxy ensures no external network
+        // is contacted, while allowing deterministic verification that non-Nix requests
+        // attempt network I/O.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let proxy_settings = UpdateProxySettings {
+            mode: oxideterm_settings::UpdateProxyMode::Custom,
+            protocol: oxideterm_settings::UpdateProxyProtocol::Http,
+            host: "127.0.0.1".to_string(),
+            port,
+            no_proxy: String::new(),
+            extra: oxideterm_settings::ExtraFields::default(),
+        };
+        let client = NativeUpdateClient::with_update_proxy(&proxy_settings).unwrap();
+
+        // The Nix install flavor must short-circuit without attempting network I/O.
+        let result = client
+            .check(NativeUpdateRequest {
+                channel: oxideterm_settings::UpdateChannel::Stable,
+                current_version: "1.0.0".into(),
+                target: PlatformTarget::new("linux", "x86_64"),
+                install_flavor: InstallFlavor::LinuxNix,
+                custom_repository: None,
+                custom_public_key: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result, NativeUpdateStatus::ManagedByNix);
+
+        // Verify that the listener received zero connections for the Nix request.
+        let connection_attempt =
+            tokio::time::timeout(Duration::from_millis(50), listener.accept()).await;
+        assert!(
+            connection_attempt.is_err(),
+            "Nix check must not connect to proxy"
+        );
+        // A configured updater key permits the non-Nix request to reach the proxy.
+        let client_clone = client.clone();
+        let non_nix_task = tokio::spawn(async move {
+            client_clone
+                .check(NativeUpdateRequest {
+                    channel: oxideterm_settings::UpdateChannel::Stable,
+                    current_version: "1.0.0".into(),
+                    target: PlatformTarget::new("linux", "x86_64"),
+                    install_flavor: InstallFlavor::LinuxDeb,
+                    custom_repository: None,
+                    custom_public_key: None,
+                })
+                .await
+        });
+
+        if crate::integrity::configured_updater_public_key().is_ok() {
+            let accept_result =
+                tokio::time::timeout(Duration::from_secs(2), listener.accept()).await;
+            let (stream, _) = accept_result
+                .expect("configured key should allow network access")
+                .expect("listener accept succeeded");
+            drop(stream);
+            assert!(non_nix_task.await.unwrap().is_err());
+        } else {
+            assert!(non_nix_task.await.unwrap().is_err());
+            let connection_attempt =
+                tokio::time::timeout(Duration::from_millis(50), listener.accept()).await;
+            assert!(
+                connection_attempt.is_err(),
+                "missing or invalid updater key must fail before network access"
+            );
+        }
+    }
 
     #[test]
     fn package_file_name_keeps_version_and_removes_path_unsafe_chars() {

@@ -57,6 +57,7 @@ use crate::{
 };
 
 mod gssapi;
+mod totp;
 
 pub fn kerberos_credentials_available() -> bool {
     gssapi::credentials_available()
@@ -442,6 +443,7 @@ pub trait SshPromptHandler: Send + Sync {
 }
 
 pub struct SshPtyHandle {
+    audit: Option<oxideterm_audit::AuditContext>,
     pub session_id: String,
     pub command_tx: mpsc::Sender<SshTransportCommand>,
     pub output_rx: SshOutputReceiver,
@@ -765,6 +767,10 @@ impl SshShellChannel {
 }
 
 impl SshPtyHandle {
+    pub fn audit_context(&self) -> Option<oxideterm_audit::AuditContext> {
+        self.audit.clone()
+    }
+
     pub fn shell_started(&self) -> bool {
         self.shell_started.load(Ordering::Acquire)
     }
@@ -788,6 +794,7 @@ impl Drop for SshPtyHandle {
 
 #[derive(Clone)]
 pub struct SshTransportClient {
+    audit: Option<oxideterm_audit::AuditContext>,
     config: SshConfig,
     prompt_handler: Option<Arc<dyn SshPromptHandler>>,
     managed_key_resolver: Option<ManagedKeyResolver>,
@@ -800,6 +807,7 @@ include!("transport/output.rs");
 include!("transport/x11.rs");
 include!("transport/client.rs");
 include!("transport/handler.rs");
+include!("transport/auth_audit.rs");
 include!("transport/auth.rs");
 include!("transport/paths.rs");
 include!("transport/proxy_command.rs");

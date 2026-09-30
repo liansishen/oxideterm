@@ -1,5 +1,34 @@
 {
   "settings_view": {
+    "credentials": {
+      "title": "認証情報",
+      "description": "権限昇格用パスワードと SSH 確認コードを管理します。"
+    },
+    "totp": {
+      "title": "TOTP 認証情報",
+      "description": "確認コードのシークレットを保存し、SSH ホストや踏み台ごとに選択します。",
+      "add": "認証情報を追加",
+      "name": "名前",
+      "secret": "シークレット",
+      "keep_secret": "空欄にすると保存済みのシークレットを保持",
+      "secret_hint": "Base32 シークレットまたは otpauth:// URI",
+      "uri_hint": "URI の読み込み時は URI 内の設定を使用します。保存後に変更できます。",
+      "pattern": "プロンプトの一致条件（正規表現）",
+      "algorithm": "アルゴリズム",
+      "digits": "桁数",
+      "period": "更新間隔（秒）",
+      "enabled": "有効",
+      "disabled": "無効",
+      "invalid_secret": "有効な Base32 シークレットまたは TOTP URI を入力してください。",
+      "invalid_parameters": "名前、6 桁または 8 桁、1～300 秒の更新間隔を指定してください。",
+      "invalid_pattern": "空の文字列に一致しない有効な正規表現を入力してください。",
+      "in_use": "この認証情報を使用中の接続があります。先に割り当てを解除してください。",
+      "unavailable": "認証情報または保護されたシークレットを利用できません。",
+      "save_failed": "認証情報を保存できません。保護されたストレージを確認して再試行してください。",
+      "none": "使用しない",
+      "connection_label": "TOTP 認証情報",
+      "connection_hint": "設定 → 認証情報で作成し、ホストごとに選択します。"
+    },
     "title": "設定",
     "search": {
       "open": "設定を検索",
@@ -73,7 +102,7 @@
       "ai": "OxideSens",
       "knowledge": "ナレッジベース",
       "local": "ローカルターミナル",
-      "privilege": "権限昇格資格情報",
+      "privilege": "認証情報",
       "reconnect": "自動再接続",
       "help": "ヘルプと詳細",
       "keybindings": "キーバインド",
@@ -88,7 +117,9 @@
       "title": "一般",
       "description": "一般的なアプリケーション設定。",
       "startup": "起動",
-      "startup_hint": "OSとともにOxideTermを起動する方法を設定します。",
+      "startup_hint": "起動時の動作とログイン時の自動起動を設定します。",
+      "restore_terminal_workspace": "起動時に前回のターミナルを復元",
+      "restore_terminal_workspace_hint": "次回の起動時に SSH とローカルターミナルを開き直し、タブと分割レイアウトを復元します。シェルと設定済みの起動コマンドは再実行されます。",
       "connection_uri_integration": "外部接続リンク",
       "connection_uri_integration_hint": "ブラウザーや他のアプリからの接続 URI を OxideTerm が受け付けるかを設定します。",
       "external_connection_uris": "外部接続 URI を開く",
@@ -223,6 +254,9 @@
       "keep_running_on_close_hint": "ウィンドウを閉じても、OxideTerm はバックグラウンドで実行し続けます。"
     },
     "terminal": {
+      "cjk_font_custom": "カスタム…",
+      "custom_cjk_font": "カスタム CJK フォント",
+      "custom_cjk_font_hint": "インストール済みフォントの正式な名前を入力してください。空欄にすると自動フォールバックを使用します。",
       "input_keyboard": "キーボードと入力候補",
       "input_mouse_links": "マウスとリンク",
       "input_clipboard": "コピーと貼り付け",
@@ -1392,6 +1426,7 @@
       "check_update": "更新を確認",
       "checking": "更新を確認中...",
       "up_to_date": "最新バージョンです",
+      "managed_by_nix": "この Nix インストールの更新は Nix で管理されています。",
       "update_available": "新しいバージョンが利用可能",
       "update_available_toast": "新しいバージョンが利用可能です。設定 → ヘルプから更新できます。",
       "download_install": "ダウンロードしてインストール",

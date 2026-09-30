@@ -42,7 +42,7 @@
       "new_local_terminal_hint": "Mở terminal trên thiết bị này",
       "keyboard_shortcuts": "Phím tắt",
       "recent_connections": "Tiếp tục công việc",
-      "recent_connections_hint": "Mở kết nối đã lưu được dùng gần đây",
+      "recent_connections_hint": "Mở các kết nối SSH và cục bộ đã lưu; hồ sơ chưa từng dùng được hiển thị cuối cùng.",
       "recent_connections_empty": "Các kết nối đã lưu dùng gần đây sẽ xuất hiện tại đây.",
       "saved_count": "Đã lưu {{count}}",
       "get_started": "Bắt đầu và quản lý",

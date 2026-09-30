@@ -31,6 +31,14 @@ pub(crate) fn request_app_quit(cx: &mut App) {
     };
     let i18n = first.read(cx).i18n.clone();
     for session in &sessions {
+        let result = session.update(cx, |workspace, cx| {
+            workspace.save_terminal_workspace_snapshot(cx)
+        });
+        if let Err(error) = result {
+            eprintln!("failed to save terminal workspace snapshot: {error}");
+        }
+    }
+    for session in &sessions {
         session.update(cx, |workspace, cx| workspace.stop_ai_for_quit(cx));
     }
     let task = cx.spawn(async move |cx| {

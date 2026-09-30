@@ -51,6 +51,7 @@ pub fn persisted_settings_input_value(
         }
         SettingsInput::TerminalPaddingVertical => settings.terminal.padding_vertical.to_string(),
         SettingsInput::IdeCustomFontFamily => settings.ide.custom_font_family.clone(),
+        SettingsInput::IdeCjkFontFamily => settings.ide.cjk_font_family.clone().unwrap_or_default(),
         SettingsInput::IdeFontWeight => settings
             .ide
             .font_weight
@@ -378,6 +379,10 @@ pub fn apply_persisted_settings_input_draft(
             .into(),
         SettingsInput::IdeCustomFontFamily => {
             settings.ide.custom_font_family = draft.trim().to_string();
+            SettingsInputDraftApply::Applied
+        }
+        SettingsInput::IdeCjkFontFamily => {
+            settings.ide.cjk_font_family = Some(draft.trim().to_string());
             SettingsInputDraftApply::Applied
         }
         SettingsInput::IdeFontWeight => {
@@ -987,6 +992,29 @@ mod tests {
                 "fontSize":null,"lineHeight":null,"agentMode":"ask","wordWrap":false
             })
         );
+        let mut settings = PersistedSettings::default();
+        apply_persisted_settings_input_draft(
+            &mut settings,
+            SettingsInput::TerminalCustomCjkFontFamily,
+            "  Custom Terminal CJK  ",
+        );
+        apply_persisted_settings_input_draft(
+            &mut settings,
+            SettingsInput::IdeCjkFontFamily,
+            "  自定义编辑器字体  ",
+        );
+        assert_eq!(settings.terminal.cjk_font_family, "Custom Terminal CJK");
+        assert_eq!(
+            settings.ide.cjk_font_family.as_deref(),
+            Some("自定义编辑器字体")
+        );
+        assert_eq!(
+            persisted_settings_input_value(&settings, SettingsInput::IdeCjkFontFamily).as_deref(),
+            Some("自定义编辑器字体")
+        );
+        apply_persisted_settings_input_draft(&mut settings, SettingsInput::IdeCjkFontFamily, " ");
+        assert_eq!(settings.ide.cjk_font_family, Some(String::new()));
+        assert_eq!(settings.terminal.cjk_font_family, "Custom Terminal CJK");
     }
 
     #[test]

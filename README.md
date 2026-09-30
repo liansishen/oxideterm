@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1.0+fork.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.2.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License">
   <img src="https://img.shields.io/badge/rust-2024%20edition-orange" alt="Rust 2024">
@@ -57,6 +57,21 @@ Your connections and operational data stay under your control. OxideTerm require
 | BYOK OxideSens AI instead of platform credits | OxideSens uses your OpenAI/Anthropic/Gemini/Ollama/OpenAI-compatible endpoint with MCP, RAG, provider-aware reasoning controls, and approved workspace actions |
 | Reconnect stability | Grace Period probes the old connection for 30s before replacing it, so TUI apps can survive short network drops |
 | Pure-Rust SSH and credential safety | The SSH stack uses `russh` + `ring` without OpenSSL/libssh2; stored credentials use the OS keychain, and `.oxide` bundles use ChaCha20-Poly1305 + Argon2id |
+
+---
+
+## Memory Usage
+
+**The native rewrite brought idle memory down to about a quarter of the old version on macOS, and about an eighth on Windows.** These are the maintainer's recorded observations from the transition from Tauri 1.x to native GPUI 2.0:
+
+| Platform | Tauri 1.x — idle | Native 2.0 — idle | Reduction |
+|---|---:|---:|---:|
+| macOS | 318.7 MB | 81.3 MB | About 74% |
+| Windows | 182.4 MB | 23.5 MB | About 87% |
+
+![Idle memory comparison with system process screenshots: Tauri 1.x versus native 2.0](docs/screenshots/oxideterm-memory-comparison.png)
+
+The old version's total includes OxideTerm and its associated WebView processes shown in the screenshots. The native version no longer needs those browser processes.
 
 ---
 
@@ -124,7 +139,7 @@ OxideTerm keeps terminal rendering, connection state, reconnect orchestration, f
 
 - macOS: download the `.dmg` matching Apple Silicon or Intel.
 - Windows: use the x64 or ARM64 installer.
-- Linux: choose AppImage, `.deb`, or `.rpm`.
+- Linux: choose AppImage, `.deb`, `.rpm`, or run via Nix (`nix run github:AnalyseDeCircuit/oxideterm`; updates are managed by Nix).
 - Verify downloads with the `sha256sums.txt` asset on the release page.
 
 Need to build from source? Continue to [Run From Source](#run-from-source).
@@ -363,6 +378,18 @@ Bug reports are most useful with a redacted CLI bundle:
 ```sh
 cargo run -p oxideterm-cli -- report --bundle ./oxideterm-report.zip
 ```
+
+---
+
+## Contributors
+
+Thanks to everyone who helps make OxideTerm better.
+
+<p align="center">
+  <a href="https://github.com/AnalyseDeCircuit/oxideterm/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=AnalyseDeCircuit/oxideterm" alt="OxideTerm contributors">
+  </a>
+</p>
 
 ---
 

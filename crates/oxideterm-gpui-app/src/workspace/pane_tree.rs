@@ -51,6 +51,12 @@ fn terminal_split_supported(
     }
 }
 
+fn terminal_auto_closes_on_exit(kind: oxideterm_terminal::TerminalSessionKind) -> bool {
+    // A remote channel or device can end independently of the user's task. Retain
+    // its pane and scrollback until explicitly closed, even if the node stays connected.
+    kind == oxideterm_terminal::TerminalSessionKind::LocalPty
+}
+
 fn serial_profile_line_ending(
     line_ending: oxideterm_terminal::SerialLineEnding,
 ) -> oxideterm_connections::SerialLineEnding {
@@ -110,6 +116,31 @@ impl TerminalInputBroadcastRoute {
             terminal.retain_live_broadcast_targets(&live_panes);
             terminal.filter_broadcast_targets(self.source_pane_id, candidates)
         });
+        if targets.is_empty() {
+            return;
+        }
+        let explicit_send = matches!(kind, TerminalBroadcastInputKind::Paste)
+            || bytes.contains(&b'\r')
+            || bytes.contains(&b'\n');
+        let mut batch = explicit_send.then(|| {
+            let mut context = oxideterm_audit::AuditContext::current_request()
+                .or_else(oxideterm_audit::AuditContext::current);
+            if let Some(context) = &mut context {
+                context.source = oxideterm_audit::AuditSource::Broadcast;
+            }
+            oxideterm_audit::AuditOperation::in_context(
+                context.as_ref(),
+                oxideterm_audit::AuditCategory::Automation,
+                "broadcast_send_batch",
+                None,
+            )
+        });
+        let parent_id = batch
+            .as_ref()
+            .and_then(oxideterm_audit::AuditOperation::id)
+            .map(str::to_string);
+        let target_count = targets.len();
+        let mut sent_count = 0usize;
         for pane_id in targets {
             let session_id = tab_host
                 .read(cx)
@@ -128,11 +159,31 @@ impl TerminalInputBroadcastRoute {
             let Some(pane) = tab_host.read(cx).panes().get(&pane_id).cloned() else {
                 continue;
             };
-            let _ = pane.update(cx, |pane, cx| {
+            if pane.update(cx, |pane, cx| {
                 // Borrowed input is delivered synchronously and never retained
                 // outside the target pane's existing zeroizing write path.
-                pane.send_broadcast_input(kind, bytes, cx);
-            });
+                pane.send_broadcast_input_with_parent(kind, bytes, parent_id.as_deref(), cx)
+            }) {
+                sent_count += 1;
+            }
+        }
+        if let Some(mut batch) = batch.take() {
+            batch.summary(&format!(
+                "targets={target_count}; sent={sent_count}; input_bytes={}",
+                bytes.len()
+            ));
+            batch.finish(
+                if sent_count == target_count {
+                    oxideterm_audit::AuditOutcome::Sent
+                } else if sent_count > 0 {
+                    oxideterm_audit::AuditOutcome::Partial
+                } else {
+                    oxideterm_audit::AuditOutcome::Failed
+                },
+                oxideterm_audit::AuditEvidence::Dispatch,
+                None,
+                None,
+            );
         }
     }
 }
@@ -431,15 +482,24 @@ impl WorkspaceApp {
         session_id: TerminalSessionId,
         cx: &mut Context<Self>,
     ) {
-        // Serial sessions report port failures through the same terminal event;
-        // keep local transport panes visible so users can inspect the error
-        // text and reconnect without recreating the whole tab.
-        if self.serial_terminal_configs.contains_key(&session_id) {
+        if !self.terminal_session_auto_closes_on_exit(session_id, cx) {
             return;
         }
         if self.pending_auto_close_terminal_sessions.insert(session_id) {
             cx.notify();
         }
+    }
+
+    fn terminal_session_auto_closes_on_exit(
+        &self,
+        session_id: TerminalSessionId,
+        cx: &App,
+    ) -> bool {
+        self.tab_host
+            .read(cx)
+            .terminal_location(session_id)
+            .and_then(|location| self.terminal_kind_for_pane(location.pane_id, cx))
+            .is_some_and(terminal_auto_closes_on_exit)
     }
 
     pub(super) fn schedule_pending_auto_close_terminal_sessions(
@@ -469,7 +529,7 @@ impl WorkspaceApp {
     ) {
         let session_ids: Vec<_> = self.pending_auto_close_terminal_sessions.drain().collect();
         for session_id in session_ids {
-            if self.serial_terminal_configs.contains_key(&session_id) {
+            if !self.terminal_session_auto_closes_on_exit(session_id, cx) {
                 continue;
             }
             self.close_terminal_session(session_id, window, cx);
@@ -1364,8 +1424,22 @@ impl WorkspaceApp {
 }
 
 #[cfg(test)]
-mod split_tests {
+mod tests {
     use super::*;
+
+    #[test]
+    fn remote_terminal_exit_does_not_request_auto_close() {
+        use oxideterm_terminal::TerminalSessionKind::*;
+        for (kind, auto_close) in [
+            (LocalPty, true),
+            (SshPty, false),
+            (Telnet, false),
+            (Mosh, false),
+            (Serial, false),
+        ] {
+            assert_eq!(terminal_auto_closes_on_exit(kind), auto_close, "{kind:?}");
+        }
+    }
 
     #[test]
     fn terminal_split_support_matches_transport_ownership() {

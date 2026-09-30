@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1.0+fork.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.2.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License">
   <img src="https://img.shields.io/badge/rust-2024%20edition-orange" alt="Rust 2024">
@@ -52,6 +52,21 @@ OxideTerm는 SSH와 원격 운영을 위한 오픈 소스 작업 공간입니다
 - 짧은 네트워크 중단을 견디는 Grace Period 재연결
 - 자체 AI 자격 증명과 승인된 작업을 사용하는 OxideSens
 - Electron과 번들 브라우저 런타임이 없는 GPUI 인터페이스
+
+---
+
+## 메모리 사용량
+
+**네이티브 전환 후 유휴 상태의 메모리 사용량은 macOS에서 이전 버전의 약 4분의 1, Windows에서 약 8분의 1로 줄었습니다.** 아래는 개발자가 자신의 컴퓨터에서 기록한 Tauri 1.x와 네이티브 GPUI 2.0의 비교입니다.
+
+| 플랫폼 | Tauri 1.x — 유휴 상태 | 네이티브 2.0 — 유휴 상태 | 감소율 |
+|---|---:|---:|---:|
+| macOS | 318.7 MB | 81.3 MB | 약 74% |
+| Windows | 182.4 MB | 23.5 MB | 약 87% |
+
+![Tauri 1.x와 네이티브 2.0의 유휴 메모리 비교 및 시스템 프로세스 스크린샷](../screenshots/oxideterm-memory-comparison.png)
+
+이전 버전의 수치는 스크린샷에 표시된 OxideTerm과 관련 WebView 프로세스의 메모리를 합산한 것입니다. 네이티브 버전에는 이러한 브라우저 프로세스가 필요하지 않습니다.
 
 ---
 
@@ -119,7 +134,7 @@ OxideTerm는 연결, 파일, 포워딩, 호스트 도구, 자동화, AI 컨텍�
 
 - macOS: Apple Silicon 또는 Intel에 맞는 `.dmg`를 선택합니다.
 - Windows: x64 또는 ARM64 설치 프로그램을 사용합니다.
-- Linux: AppImage, `.deb`, `.rpm` 중에서 선택합니다.
+- Linux: AppImage, `.deb`, `.rpm` 중에서 선택하거나 Nix로 실행합니다(`nix run github:AnalyseDeCircuit/oxideterm`; 업데이트는 Nix에서 관리합니다).
 - 릴리스 페이지의 `sha256sums.txt`로 다운로드를 검증할 수 있습니다.
 
 소스에서 빌드하려면 아래의 “소스에서 실행” 섹션을 계속 읽으세요.
@@ -309,6 +324,18 @@ OxideTerm은 추가 라이선스 제한 없이 GPL-3.0-only로 배포됩니다. 
 ```sh
 cargo run -p oxideterm-cli -- report --bundle ./oxideterm-report.zip
 ```
+
+---
+
+## 기여자
+
+OxideTerm을 더 나은 프로젝트로 만들어 주시는 모든 분께 감사드립니다.
+
+<p align="center">
+  <a href="https://github.com/AnalyseDeCircuit/oxideterm/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=AnalyseDeCircuit/oxideterm" alt="OxideTerm 기여자">
+  </a>
+</p>
 
 ---
 

@@ -229,7 +229,10 @@ impl WorkspaceTabHostEntity {
         };
         if !matches!(
             tab.kind,
-            TabKind::LocalTerminal | TabKind::SshTerminal | TabKind::MoshTerminal
+            TabKind::Workspace
+                | TabKind::LocalTerminal
+                | TabKind::SshTerminal
+                | TabKind::MoshTerminal
         ) {
             return false;
         }
@@ -587,6 +590,23 @@ impl WorkspaceTabHostEntity {
         };
         self.insert_and_select_main_tab(tab.clone());
         Some((tab, removed))
+    }
+
+    pub(in crate::workspace) fn update_tab_root_sizes(
+        &mut self,
+        tab_id: TabId,
+        sizes: &[f32],
+    ) -> bool {
+        let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == tab_id) else {
+            return false;
+        };
+        let Some(oxideterm_workspace::PaneNode::Group { id, .. }) = tab.root_pane.as_ref() else {
+            return false;
+        };
+        let group_id = *id;
+        tab.root_pane
+            .as_mut()
+            .is_some_and(|root| root.update_group_sizes(group_id, sizes))
     }
 
     /// Moving a pane preserves its Entity, session, subscriptions, and runtime consumers.

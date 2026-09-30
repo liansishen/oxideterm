@@ -118,6 +118,9 @@ impl TerminalPane {
             }
         }
 
+        if self.paste_editor.is_some() {
+            return false;
+        }
         if self.pending_paste.is_some() && !modifiers.platform && !modifiers.control {
             match key {
                 "enter" => {
@@ -1627,7 +1630,7 @@ impl TerminalPane {
         self.context_menu = Some(TerminalContextMenu {
             x: f32::from(event.position.x - bounds.origin.x),
             y: f32::from(event.position.y - bounds.origin.y),
-            modem_submenu_open: false,
+            serial_transfer_menu: false,
             target: self.terminal_point_for_position(event.position),
             has_selection: self.selected_text_snapshot().is_some(),
             reference_line: navigation_line,

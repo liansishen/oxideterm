@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1.0+fork.2-blue" alt="版本">
+  <img src="https://img.shields.io/badge/version-2.2.0-blue" alt="版本">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="平台">
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="许可证">
   <img src="https://img.shields.io/badge/rust-2024%20edition-orange" alt="Rust 2024">
@@ -56,6 +56,21 @@ OxideTerm 是面向 SSH 与远程运维的开源工作区。终端、文件、�
 | 自带密钥的 OxideSens AI，而非平台额度 | OxideSens 使用你的 OpenAI、Anthropic、Gemini、Ollama 或 OpenAI 兼容端点，并支持 MCP、本地 RAG、按服务商适配的推理控制和经批准的工作区操作 |
 | 重连稳定性 | Grace Period 会在替换连接前探测旧连接 30 秒，让 TUI 应用能穿越短暂的网络中断 |
 | 纯 Rust SSH 与凭证安全 | SSH 栈通过 `russh` + `ring` 提供，不依赖 OpenSSL/libssh2；已保存凭证使用系统钥匙串，`.oxide` 包使用 ChaCha20-Poly1305 + Argon2id |
+
+---
+
+## 内存占用
+
+**原生重写后，空载内存降到了旧版的约四分之一（macOS）和约八分之一（Windows）。** 以下是作者在自己的机器上记录的 Tauri 1.x 与原生 GPUI 2.0 对比：
+
+| 平台 | Tauri 1.x 空载 | 原生 2.0 空载 | 降幅 |
+|---|---:|---:|---:|
+| macOS | 318.7 MB | 81.3 MB | 约 74% |
+| Windows | 182.4 MB | 23.5 MB | 约 87% |
+
+![Tauri 1.x 与原生 2.0 的空载内存对比，附系统进程截图](../screenshots/oxideterm-memory-comparison.png)
+
+旧版按截图中 OxideTerm 及其相关 WebView 进程的内存合计；原生版不再需要这些浏览器进程。
 
 ---
 
@@ -123,7 +138,7 @@ OxideTerm 将连接、文件、转发、主机工具、自动化与 AI 上下文
 
 - macOS：选择适合 Apple Silicon 或 Intel 的 `.dmg`。
 - Windows：选择 x64 或 ARM64 安装程序。
-- Linux：选择 AppImage、`.deb` 或 `.rpm`。
+- Linux：选择 AppImage、`.deb`、`.rpm`，或通过 Nix 运行（`nix run github:AnalyseDeCircuit/oxideterm`；更新由 Nix 管理）。
 - 可使用发布页中的 `sha256sums.txt` 校验下载文件。
 
 需要从源码构建？请继续阅读下方的“从源码运行”章节。
@@ -316,6 +331,18 @@ OxideTerm 按 GPL-3.0-only 许可发布，不附加额外的许可证限制。�
 ```sh
 cargo run -p oxideterm-cli -- report --bundle ./oxideterm-report.zip
 ```
+
+---
+
+## 贡献者
+
+感谢每一位让 OxideTerm 变得更好的贡献者。
+
+<p align="center">
+  <a href="https://github.com/AnalyseDeCircuit/oxideterm/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=AnalyseDeCircuit/oxideterm" alt="OxideTerm 贡献者">
+  </a>
+</p>
 
 ---
 

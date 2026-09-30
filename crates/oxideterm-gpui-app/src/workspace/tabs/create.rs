@@ -250,6 +250,42 @@ fn reusable_direct_root_node_for_saved_config(
 }
 
 impl WorkspaceApp {
+    pub(crate) fn open_native_connection_handoff(
+        &mut self,
+        handoff: oxideterm_ssh_launch::NativeConnectionHandoff,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<()> {
+        let Some(parent_id) = handoff.audit_parent_id else {
+            return self.open_native_connection_launch(handoff.launch, window, cx);
+        };
+        let context = oxideterm_audit::AuditContext::current().map(|mut context| {
+            context.parent_id = Some(parent_id);
+            context.source = oxideterm_audit::AuditSource::Cli;
+            context
+        });
+        oxideterm_audit::AuditContext::with_sync_request(context.as_ref(), || {
+            let audit = oxideterm_audit::AuditOperation::begin(
+                oxideterm_audit::AuditCategory::Connection,
+                "connection_dispatch_receive",
+                None,
+                None,
+            );
+            let result = self.open_native_connection_launch(handoff.launch, window, cx);
+            audit.finish(
+                if result.is_ok() {
+                    oxideterm_audit::AuditOutcome::Sent
+                } else {
+                    oxideterm_audit::AuditOutcome::Failed
+                },
+                oxideterm_audit::AuditEvidence::Dispatch,
+                None,
+                None,
+            );
+            result
+        })
+    }
+
     pub(crate) fn open_native_connection_launch(
         &mut self,
         launch: NativeConnectionLaunch,
@@ -755,6 +791,19 @@ impl WorkspaceApp {
                 .copied()
                 && self.focus_terminal_session(session_id, window, cx)
             {
+                if self
+                    .pending_terminal_workspace_restore
+                    .as_ref()
+                    .is_some_and(|restore| restore.wants_node(&node_id, Some(&saved_connection_id)))
+                {
+                    self.restore_ready_ssh_node(
+                        Some(saved_connection_id.clone()),
+                        node_id.clone(),
+                        window,
+                        cx,
+                    );
+                    return Ok(());
+                }
                 let _ = self.connection_store.mark_used(&saved_connection_id);
                 return Ok(());
             }
@@ -851,6 +900,21 @@ impl WorkspaceApp {
                     .copied()
                     && self.focus_terminal_session(session_id, window, cx)
                 {
+                    if self
+                        .pending_terminal_workspace_restore
+                        .as_ref()
+                        .is_some_and(|restore| {
+                            restore.wants_node(&existing_node_id, Some(&saved_connection_id))
+                        })
+                    {
+                        self.restore_ready_ssh_node(
+                            Some(saved_connection_id.clone()),
+                            existing_node_id.clone(),
+                            window,
+                            cx,
+                        );
+                        return Ok(());
+                    }
                     let _ = self.connection_store.mark_used(&saved_connection_id);
                     return Ok(());
                 }
@@ -1153,6 +1217,8 @@ impl WorkspaceApp {
                     mark_used_connection_id: None,
                     save_after_open: None,
                     cleanup_node_id: Some(node_id.clone()),
+                    restore_profile_id: None,
+                    restore_terminal_workspace: false,
                     title,
                 },
                 runtime_cx,
@@ -1502,7 +1568,7 @@ impl WorkspaceApp {
         )
     }
 
-    fn create_ssh_terminal_tab_for_existing_node_with_policy(
+    pub(in crate::workspace) fn create_ssh_terminal_tab_for_existing_node_with_policy(
         &mut self,
         node_id: &NodeId,
         post_connect_command: Option<String>,
@@ -1612,7 +1678,15 @@ impl WorkspaceApp {
         if let Some(saved_connection_id) = saved_connection_id.as_deref() {
             self.associate_existing_node_with_saved_connection(&node_id, saved_connection_id);
         }
-        if self.node_is_ready_for_terminal(&node_id) {
+        let restore_terminal_workspace = self
+            .pending_terminal_workspace_restore
+            .as_ref()
+            .is_some_and(|restore| restore.wants_node(&node_id, saved_connection_id.as_deref()));
+        if restore_terminal_workspace && self.node_is_ready_for_terminal(&node_id) {
+            self.restore_ready_ssh_node(saved_connection_id.clone(), node_id.clone(), window, cx);
+            return Ok(());
+        }
+        if !restore_terminal_workspace && self.node_is_ready_for_terminal(&node_id) {
             self.create_initial_ssh_terminal_tab_for_existing_node(
                 &node_id,
                 post_connect_command,
@@ -1633,7 +1707,10 @@ impl WorkspaceApp {
             .node_metadata(&node_id)
             .and_then(|snapshot| snapshot.parent_id)
             .is_some();
-        if target_has_parent && self.node_router.connection_id_for_node(&node_id).is_none() {
+        if target_has_parent
+            && !restore_terminal_workspace
+            && self.node_router.connection_id_for_node(&node_id).is_none()
+        {
             let intent = mark_used_connection_id
                 .clone()
                 .or_else(|| saved_connection_id.clone())
@@ -1669,6 +1746,9 @@ impl WorkspaceApp {
                 return Ok(());
             }
         }
+        let restore_profile_id = restore_terminal_workspace
+            .then(|| saved_connection_id.clone())
+            .flatten();
         let queue_outcome = self.workspace_runtime.update(cx, |runtime, runtime_cx| {
             runtime.queue_ssh_terminal_open(
                 runtime_entity::PendingSshTerminalOpen {
@@ -1677,6 +1757,8 @@ impl WorkspaceApp {
                     mark_used_connection_id,
                     save_after_open,
                     cleanup_node_id: None,
+                    restore_profile_id,
+                    restore_terminal_workspace,
                     title,
                 },
                 runtime_cx,
@@ -1702,6 +1784,16 @@ impl WorkspaceApp {
     ) -> bool {
         let mut opened = false;
         for request in requests {
+            if request.restore_terminal_workspace {
+                self.restore_ready_ssh_node(
+                    request.restore_profile_id,
+                    request.node_id,
+                    window,
+                    cx,
+                );
+                opened = true;
+                continue;
+            }
             if self
                 .create_initial_ssh_terminal_tab_for_existing_node(
                     &request.node_id,
@@ -1807,6 +1899,7 @@ impl WorkspaceApp {
 
 fn ssh_config_from_proxy_hop(hop: ProxyHopConfig, connect_timeout_seconds: u64) -> SshConfig {
     let ProxyHopConfig {
+        totp,
         host,
         port,
         username,
@@ -1821,6 +1914,7 @@ fn ssh_config_from_proxy_hop(hop: ProxyHopConfig, connect_timeout_seconds: u64) 
         expected_host_key_fingerprint,
     } = hop;
     SshConfig {
+        totp,
         host,
         port,
         username,
@@ -1880,6 +1974,7 @@ mod create_tests {
         let connect_timeout_seconds = 180;
         let config = ssh_config_from_proxy_hop(
             ProxyHopConfig {
+                totp: None,
                 host: "jump.example.com".to_string(),
                 port: 2202,
                 username: "operator".to_string(),
@@ -2047,6 +2142,7 @@ mod create_tests {
             .unwrap();
         let requested = SshConfig {
             proxy_chain: Some(vec![ProxyHopConfig {
+                totp: None,
                 host: "new-jump.example.com".to_string(),
                 port: 22,
                 username: "ops".to_string(),
@@ -2220,6 +2316,7 @@ mod create_tests {
         connection
             .proxy_chain
             .push(oxideterm_connections::SavedProxyHop {
+                totp_credential_id: None,
                 host: "jump.example.com".to_string(),
                 port: 22,
                 username: "ops".to_string(),

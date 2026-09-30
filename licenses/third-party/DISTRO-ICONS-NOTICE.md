@@ -1,15 +1,15 @@
-# Linux distribution icons
+# Operating system icons
 
-OxideTerm bundles the original SVG files below solely to identify operating systems
-in connection controls. The artwork retains its own license; it is not relicensed
-under OxideTerm's code license. Logos and names remain the trademarks of their
-respective owners. Their inclusion does not imply sponsorship or endorsement.
+OxideTerm bundles the SVG files below solely to identify operating systems
+in connection controls. Each icon retains its own licensing or usage restrictions;
+none is relicensed under OxideTerm's code license. Logos and names remain the
+trademarks of their respective owners. Their inclusion does not imply sponsorship
+or endorsement.
 
-The SVGs listed below were retrieved on 2026-09-23. The Ubuntu and Arch Linux
-SVGs have only their root fill set to the colors recorded by Simple Icons; the
-other SVGs are unmodified. Display scaling preserves their original aspect
-ratios and colors. Unknown distributions use
-OxideTerm's generic icon instead of a related distribution's logo.
+The Linux SVGs listed below were retrieved on 2026-09-23. The Ubuntu and Arch
+Linux SVGs have only their root fill set to the colors recorded by Simple Icons;
+the other Linux SVGs are unmodified. Display scaling preserves their original
+aspect ratios and colors. Unknown distributions use OxideTerm's generic icon.
 
 ## Ubuntu
 
@@ -126,6 +126,17 @@ OxideTerm.
   OxideTerm is not affiliated with or endorsed by Linux Mint.
 - Bundled file: `crates/oxideterm-gpui-app/resources/distro-icons/linuxmint.svg`.
 - SHA-256: `dee702dc5e28aafa4e6c033a6f7381b178036c460c7cfe9dc32c7fde0ccf0387`.
+
+## Windows
+
+**Windows four-pane mark**, adapted as a simplified vector from the Windows
+logo shape documented by Microsoft. Windows is a trademark of Microsoft
+Corporation. OxideTerm uses the mark only as an optional session identifier;
+no affiliation is implied.
+
+- Source guidance: https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks
+- Bundled file: `crates/oxideterm-gpui-app/resources/distro-icons/windows.svg`.
+- SHA-256: `b93cef2a8d6868a72654bb881fc13dbbcd510dcc94841b81abd37536b2411f2a`.
 
 ## License texts
 

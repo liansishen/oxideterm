@@ -5,6 +5,7 @@ mod ai_lazy;
 mod ai_runtime_context;
 mod ai_state;
 mod app_lock;
+mod audit;
 mod breadcrumb_scroll;
 mod browser_behavior;
 mod cloud_sync;
@@ -55,6 +56,7 @@ mod selectable_text;
 mod selection_motion;
 mod session_icons;
 mod session_manager;
+mod session_restore;
 mod settings;
 mod sftp;
 mod sidebar;
@@ -203,10 +205,8 @@ use oxideterm_i18n::{I18n, Locale};
 use oxideterm_ide_fs::NodeAgentIdeFileSystem;
 use oxideterm_notification_center::{
     ActivityView as WorkspaceActivityView, EventCategory as WorkspaceEventCategory,
-    EventCategoryFilter as WorkspaceEventCategoryFilter, EventLogEntry as WorkspaceEventLogEntry,
-    EventSeverity as WorkspaceEventSeverity, EventSeverityFilter as WorkspaceEventSeverityFilter,
-    NotificationCenterState, NotificationEntry as WorkspaceNotificationEntry,
-    NotificationKind as WorkspaceNotificationKind,
+    EventSeverity as WorkspaceEventSeverity, NotificationCenterState,
+    NotificationEntry as WorkspaceNotificationEntry, NotificationKind as WorkspaceNotificationKind,
     NotificationKindFilter as WorkspaceNotificationKindFilter,
     NotificationScope as WorkspaceNotificationScope,
     NotificationSeverity as WorkspaceNotificationSeverity,
@@ -353,8 +353,8 @@ pub(super) use selectable_text::{
 };
 pub(super) use virtual_list::{
     TauriVirtualListSpec, TauriVirtualScrollAlign, scroll_tauri_virtual_list_to_index,
-    tauri_virtual_list, tauri_virtual_list_is_near_bottom, tauri_virtual_list_state,
-    tauri_virtual_uniform_list, uniform_list_edge_autoscroll,
+    tauri_virtual_list, tauri_virtual_list_state, tauri_virtual_uniform_list,
+    uniform_list_edge_autoscroll,
 };
 use virtual_list::{
     VirtualListSignatureCache, sync_tauri_variable_list_state_by_signatures,
@@ -897,6 +897,7 @@ pub(crate) struct WorkspaceApp {
     _connection_flow_observation: Subscription,
     _connection_flow_subscription: Subscription,
     workspace_runtime: Entity<runtime_entity::WorkspaceRuntimeEntity>,
+    pending_terminal_workspace_restore: Option<session_restore::PendingRestore>,
     _workspace_runtime_subscription: Subscription,
     public_mcp: public_mcp::PublicMcpWorkspaceBridge,
     ssh_registry: SshConnectionRegistry,
@@ -908,7 +909,6 @@ pub(crate) struct WorkspaceApp {
     notification_center: NotificationCenterState,
     notification_sidebar_list_state: ListState,
     notification_sidebar_list_cache: RefCell<VirtualListSignatureCache>,
-    event_log_sidebar_scroll_handle: UniformListScrollHandle,
     ssh_nodes: HashMap<NodeId, WorkspaceSshNode>,
     saved_ssh_nodes: HashMap<String, NodeId>,
     expanded_ssh_nodes: HashSet<NodeId>,
@@ -976,6 +976,8 @@ pub(crate) struct WorkspaceApp {
     _terminal_subscription: Subscription,
     overlay: Entity<WorkspaceOverlayEntity>,
     _overlay_observation: Subscription,
+    // Producers release before the writer, so their final cancellation records can drain.
+    audit: audit::AuditState,
 }
 
 impl Drop for WorkspaceApp {

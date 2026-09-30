@@ -37,6 +37,10 @@ mod post_connect;
 mod privilege_prompt;
 mod process;
 mod process_lifecycle;
+mod recording_output;
+#[cfg(test)]
+#[path = "../tests/support/recording.rs"]
+mod recording_test_support;
 mod remote_shell_integration;
 mod search;
 mod selection;

@@ -51,6 +51,11 @@
       "risk_configured": "configurado"
     },
     "paste": {
+      "edit": "Editar",
+      "edit_title": "Editar antes de colar",
+      "strip_fence": "Remover delimitadores do bloco de código",
+      "undo": "Desfazer",
+      "redo": "Refazer",
       "title": "Múltiplas linhas detectadas ({{count}} linhas)",
       "more_lines": "... {{count}} linhas a mais",
       "confirm": "Confirmar",
@@ -84,6 +89,12 @@
       "clear_screen": "Limpar tela"
     },
     "modem": {
+      "timeout": "O outro dispositivo não respondeu a tempo. Inicie o programa de transferência nele e tente novamente.",
+      "protocol_error": "O outro dispositivo enviou dados de transferência inválidos ou inesperados.",
+      "file_error": "Não foi possível ler ou gravar o arquivo. Verifique as permissões e o espaço disponível.",
+      "file_too_large": "O arquivo excede o limite de tamanho deste protocolo.",
+      "buffer_overflow": "O outro dispositivo enviou mais dados do que o buffer de transferência pode armazenar.",
+      "worker_stopped": "O processo de transferência parou inesperadamente. Tente novamente.",
       "binary_transfer": "Transferência binária",
       "xmodem_upload": "Enviar via XMODEM",
       "xmodem_receive": "Receber via XMODEM",
@@ -266,7 +277,8 @@
       "add_group": "Add group",
       "edit_group": "Edit group",
       "delete_group": "Delete group",
-      "delete_group_description": "Os comandos em \"{{name}}\" serão movidos para o grupo padrão antes da exclusão.",
+      "delete_group_description": "Os comandos em \"{{name}}\" serão movidos para \"{{destination}}\" antes da exclusão deste grupo.",
+      "reorder_groups": "Arraste a alça para reordenar os grupos",
       "save_group": "Save group",
       "group_name_placeholder": "Group name",
       "icon_terminal": "Terminal",

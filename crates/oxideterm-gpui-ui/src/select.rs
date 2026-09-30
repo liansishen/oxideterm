@@ -50,6 +50,12 @@ fn readonly_value_trigger_spec() -> SelectTriggerChromeSpec {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum SelectAnchorId {
     ActiveSessionSort,
+    AuditCategory,
+    AuditSeverity,
+    AuditSource,
+    AuditOutcome,
+    AuditTime,
+    AuditSearchField,
     SettingsLanguage,
     SettingsUpdateChannel,
     SettingsAppearanceTheme,
@@ -126,6 +132,8 @@ pub enum SelectAnchorId {
     NewConnectionGroup,
     NewConnectionKeyAuthSource,
     NewConnectionManagedKey,
+    NewConnectionTotp,
+    NewConnectionJumpTotp,
     NewConnectionStandaloneSftpSecondaryKeyAuthSource,
     NewConnectionStandaloneSftpSecondaryManagedKey,
     NewConnectionJumpSavedConnection,
@@ -248,6 +256,8 @@ impl SelectAnchorId {
             Self::NewConnectionGroup
                 | Self::NewConnectionKeyAuthSource
                 | Self::NewConnectionManagedKey
+                | Self::NewConnectionTotp
+                | Self::NewConnectionJumpTotp
                 | Self::NewConnectionStandaloneSftpSecondaryKeyAuthSource
                 | Self::NewConnectionStandaloneSftpSecondaryManagedKey
                 | Self::NewConnectionJumpSavedConnection

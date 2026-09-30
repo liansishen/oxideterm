@@ -118,6 +118,8 @@ pub(super) enum WorkspaceImeTarget {
     CommandPalette,
     ShortcutsModalSearch,
     ActiveSessionSearch,
+    AuditSearch,
+    AuditPolicy(super::audit::AuditPolicyInput),
     KnowledgeSearch,
     KnowledgeRename,
     Search(PaneId),
@@ -493,6 +495,9 @@ impl WorkspaceImeTarget {
             Self::CommandPalette => 4,
             Self::ShortcutsModalSearch => 5,
             Self::ActiveSessionSearch => 22,
+            Self::AuditSearch => 25,
+            Self::AuditPolicy(super::audit::AuditPolicyInput::Retention) => 26,
+            Self::AuditPolicy(super::audit::AuditPolicyInput::Capacity) => 27,
             Self::KnowledgeSearch => 23,
             Self::KnowledgeRename => 24,
             Self::Search(pane_id) => (1_u64 << 63) | pane_id.0,
@@ -1063,8 +1068,9 @@ impl WorkspaceApp {
 
         if let Some(form) = self.connection_form_state(cx).form.as_ref()
             && form.field_focused
-            && self.new_connection_field_accepts_ime(form.focused_field, cx)
         {
+            // Saved passwords expose an empty draft until edited. Keep that draft on the
+            // shared input path from the first character so text and caret advance together.
             return Some(WorkspaceImeTarget::NewConnection(form.focused_field));
         }
 
@@ -1117,6 +1123,27 @@ impl WorkspaceApp {
             return Some(WorkspaceImeTarget::KnowledgeSearch);
         }
 
+        if self.notification_center.active_view == super::WorkspaceActivityView::EventLog
+            && self.audit.settings_open
+            && self.audit.open_filter.is_none()
+            && let Some(target @ WorkspaceImeTarget::AuditPolicy(_)) = self
+                .selected_ime_range
+                .as_ref()
+                .map(|selection| selection.target)
+                .or(self.selected_ime_target)
+        {
+            return Some(target);
+        }
+        if self.notification_center.active_view == super::WorkspaceActivityView::EventLog
+            && self.audit.open_filter.is_none()
+            && (self.selected_ime_target == Some(WorkspaceImeTarget::AuditSearch)
+                || self
+                    .selected_ime_range
+                    .as_ref()
+                    .is_some_and(|selection| selection.target == WorkspaceImeTarget::AuditSearch))
+        {
+            return Some(WorkspaceImeTarget::AuditSearch);
+        }
         if self.session_search_open
             && !self.sidebar_collapsed
             && !self.session_sort_menu_open
@@ -2035,20 +2062,6 @@ impl WorkspaceApp {
         platform_range
     }
 
-    fn new_connection_field_accepts_ime(&self, field: NewConnectionField, cx: &App) -> bool {
-        if field == NewConnectionField::Password
-            && self.saved_connection_form_uses_unloaded_secret(cx)
-            && self
-                .connection_form_state(cx)
-                .form
-                .as_ref()
-                .is_some_and(|form| !form.password_loaded)
-        {
-            return false;
-        }
-        true
-    }
-
     fn ime_index_for_relative_x(
         &self,
         target: WorkspaceImeTarget,
@@ -2159,6 +2172,8 @@ impl WorkspaceApp {
             }
             WorkspaceImeTarget::ShortcutsModalSearch => Some(self.shortcuts_modal.query.clone()),
             WorkspaceImeTarget::ActiveSessionSearch => Some(self.session_search_query.clone()),
+            WorkspaceImeTarget::AuditSearch => Some(self.audit.search.clone()),
+            WorkspaceImeTarget::AuditPolicy(input) => Some(self.audit_policy_input_value(input)),
             WorkspaceImeTarget::KnowledgeSearch => Some(
                 self.knowledge_workspace
                     .read(cx)
@@ -3015,6 +3030,14 @@ impl WorkspaceApp {
                 });
                 self.show_active_input_caret(cx);
                 cx.notify();
+            }
+            WorkspaceImeTarget::AuditSearch => {
+                replace_utf16(&mut self.audit.search, replacement_range, text);
+                self.show_active_input_caret(cx);
+                cx.notify();
+            }
+            WorkspaceImeTarget::AuditPolicy(input) => {
+                self.replace_audit_policy_input(input, replacement_range, text, cx);
             }
             WorkspaceImeTarget::ActiveSessionSearch => {
                 replace_utf16(&mut self.session_search_query, replacement_range, text);

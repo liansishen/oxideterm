@@ -6,13 +6,30 @@ use minisign_verify::{PublicKey, Signature};
 
 use crate::NativeUpdateError;
 
-pub const OXIDETERM_UPDATER_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM2RTE5RDY5OTJCNTdFQkIKUldTN2ZyV1NhWjNoTnJFZ3p6T2s0WEtNaTVTWUhpUW1LdnRjTlpEaGZsTTAzaTJOSll1bVhPem4K";
+pub const OXIDETERM_UPDATER_PUBKEY: Option<&str> = option_env!("OXIDETERM_UPDATER_PUBKEY");
 
 pub fn verify_minisign_signature(
     data: &[u8],
     release_signature: &str,
 ) -> Result<(), NativeUpdateError> {
-    verify_minisign_signature_with_key(data, release_signature, OXIDETERM_UPDATER_PUBKEY)
+    let public_key = OXIDETERM_UPDATER_PUBKEY.ok_or_else(|| {
+        NativeUpdateError::Integrity("updater public key is not configured".to_string())
+    })?;
+    verify_minisign_signature_with_key(data, release_signature, public_key)
+}
+
+pub fn configured_updater_public_key() -> Result<&'static str, NativeUpdateError> {
+    configured_updater_public_key_from(OXIDETERM_UPDATER_PUBKEY)
+}
+
+fn configured_updater_public_key_from(
+    public_key: Option<&'static str>,
+) -> Result<&'static str, NativeUpdateError> {
+    let public_key = public_key.ok_or_else(|| {
+        NativeUpdateError::Integrity("updater public key is not configured".to_string())
+    })?;
+    validate_minisign_public_key(public_key)?;
+    Ok(public_key)
 }
 
 pub fn validate_minisign_public_key(public_key_base64: &str) -> Result<(), NativeUpdateError> {
@@ -66,11 +83,16 @@ mod tests {
         let signature = outer_base64(SIGNATURE);
         verify_minisign_signature_with_key(b"test", &signature, &key)
             .unwrap_or_else(|error| panic!("{error:?}"));
-        validate_minisign_public_key(OXIDETERM_UPDATER_PUBKEY).unwrap();
-        assert!(
-            verify_minisign_signature_with_key(b"test", &signature, OXIDETERM_UPDATER_PUBKEY,)
-                .is_err()
-        );
+        if let Some(key) = OXIDETERM_UPDATER_PUBKEY {
+            validate_minisign_public_key(key).unwrap();
+            assert!(verify_minisign_signature_with_key(b"test", &signature, key).is_err());
+        }
         assert!(verify_minisign_signature_with_key(b"tampered", &signature, &key).is_err());
+    }
+
+    #[test]
+    fn configured_public_key_fails_closed_when_missing_or_invalid() {
+        assert!(configured_updater_public_key_from(None).is_err());
+        assert!(configured_updater_public_key_from(Some("invalid")).is_err());
     }
 }

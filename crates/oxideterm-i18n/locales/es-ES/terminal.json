@@ -51,6 +51,11 @@
       "risk_configured": "configurado"
     },
     "paste": {
+      "edit": "Editar",
+      "edit_title": "Editar antes de pegar",
+      "strip_fence": "Quitar marcadores de bloque de código",
+      "undo": "Deshacer",
+      "redo": "Rehacer",
       "title": "Múltiples líneas detectadas ({{count}} líneas)",
       "more_lines": "... {{count}} líneas más",
       "confirm": "Confirmar",
@@ -84,6 +89,12 @@
       "clear_screen": "Limpiar pantalla"
     },
     "modem": {
+      "timeout": "El equipo remoto no respondió a tiempo. Inicie su programa de transferencia y vuelva a intentarlo.",
+      "protocol_error": "El equipo remoto envió datos de transferencia no válidos o inesperados.",
+      "file_error": "No se puede leer o escribir el archivo. Compruebe los permisos y el espacio disponible.",
+      "file_too_large": "El archivo supera el límite de tamaño de este protocolo.",
+      "buffer_overflow": "El equipo remoto envió más datos de los que puede almacenar el búfer de transferencia.",
+      "worker_stopped": "El proceso de transferencia se detuvo inesperadamente. Vuelva a intentarlo.",
       "binary_transfer": "Transferencia binaria",
       "xmodem_upload": "Subir con XMODEM",
       "xmodem_receive": "Recibir con XMODEM",
@@ -266,7 +277,8 @@
       "add_group": "Add group",
       "edit_group": "Edit group",
       "delete_group": "Delete group",
-      "delete_group_description": "Los comandos de «{{name}}» se moverán al grupo predeterminado antes de eliminarlo.",
+      "delete_group_description": "Los comandos de «{{name}}» se moverán a «{{destination}}» antes de eliminar este grupo.",
+      "reorder_groups": "Arrastra el asa para reordenar los grupos",
       "save_group": "Save group",
       "group_name_placeholder": "Group name",
       "icon_terminal": "Terminal",

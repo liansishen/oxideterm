@@ -1,5 +1,34 @@
 {
   "settings_view": {
+    "credentials": {
+      "title": "凭据",
+      "description": "管理提权密码和 SSH 验证码。"
+    },
+    "totp": {
+      "title": "动态验证码凭据",
+      "description": "保存一次验证码种子，在需要的 SSH 主机或跳板中选择使用。",
+      "add": "添加凭据",
+      "name": "名称",
+      "secret": "密钥",
+      "keep_secret": "留空保留已保存的密钥",
+      "secret_hint": "Base32 密钥或 otpauth:// 链接",
+      "uri_hint": "导入链接时使用其中的参数，保存后可再修改。",
+      "pattern": "提示匹配规则（正则表达式）",
+      "algorithm": "算法",
+      "digits": "位数",
+      "period": "更新周期（秒）",
+      "enabled": "已启用",
+      "disabled": "已停用",
+      "invalid_secret": "请输入有效的 Base32 密钥或动态验证码链接。",
+      "invalid_parameters": "请输入名称，选择 6 位或 8 位，周期为 1–300 秒。",
+      "invalid_pattern": "请输入有效的正则表达式，且不能匹配空文本。",
+      "in_use": "仍有连接使用此凭据，请先解除绑定。",
+      "unavailable": "凭据或受保护的密钥不可用。",
+      "save_failed": "无法保存凭据，请检查受保护存储后重试。",
+      "none": "不使用",
+      "connection_label": "动态验证码凭据",
+      "connection_hint": "在设置 → 凭据中创建，各主机分别选择。"
+    },
     "title": "设置",
     "search": {
       "open": "搜索设置",
@@ -73,7 +102,7 @@
       "ai": "OxideSens",
       "knowledge": "知识库",
       "local": "本地终端",
-      "privilege": "提权凭据",
+      "privilege": "凭据",
       "reconnect": "自动重连",
       "help": "帮助与关于",
       "keybindings": "快捷键",
@@ -88,7 +117,9 @@
       "title": "常规",
       "description": "常规应用程序设置。",
       "startup": "启动",
-      "startup_hint": "控制 OxideTerm 是否随操作系统启动。",
+      "startup_hint": "管理应用启动行为和登录时自动启动。",
+      "restore_terminal_workspace": "启动时恢复上次终端",
+      "restore_terminal_workspace_hint": "下次启动时重新打开 SSH 和本地终端，并恢复标签与分屏布局。Shell 和已配置的启动命令会重新执行。",
       "connection_uri_integration": "外部连接链接",
       "connection_uri_integration_hint": "控制 OxideTerm 是否接收来自浏览器和其他应用的连接 URI。",
       "external_connection_uris": "打开外部连接 URI",
@@ -223,6 +254,9 @@
       "keep_running_on_close_hint": "关闭窗口后，OxideTerm 将继续在后台运行。"
     },
     "terminal": {
+      "cjk_font_custom": "自定义…",
+      "custom_cjk_font": "自定义中文/CJK 字体",
+      "custom_cjk_font_hint": "输入已安装字体的完整名称，留空使用自动回退。",
       "input_keyboard": "键盘与输入提示",
       "input_mouse_links": "鼠标与链接",
       "input_clipboard": "复制与粘贴",
@@ -1392,6 +1426,7 @@
       "check_update": "检查更新",
       "checking": "正在检查更新...",
       "up_to_date": "已是最新版本",
+      "managed_by_nix": "此 Nix 安装的更新由 Nix 管理。",
       "update_available": "发现新版本",
       "update_available_toast": "有新版本可用，前往 设置 → 帮助 页面更新。",
       "download_install": "下载并安装",

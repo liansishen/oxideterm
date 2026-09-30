@@ -104,6 +104,8 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
             &[
                 "settings_view.general.startup_hint",
                 "settings_view.general.launch_at_login",
+                "settings_view.general.restore_terminal_workspace",
+                "settings_view.general.restore_terminal_workspace_hint",
             ],
         ),
         settings_search_entry(
@@ -1252,6 +1254,12 @@ mod settings_search_tests {
                 "OSC 52 Clipboard Read Access",
                 SettingsTab::Terminal,
                 Some(TerminalSettingsPage::Input),
+                1,
+            ),
+            (
+                "Restore previous terminals on startup",
+                SettingsTab::General,
+                None,
                 1,
             ),
             ("Deploy Path", SettingsTab::Ide, None, 3),

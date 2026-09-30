@@ -1,5 +1,34 @@
 {
   "settings_view": {
+    "credentials": {
+      "title": "Identifiants",
+      "description": "Gérez les mots de passe d’élévation et les codes de vérification SSH."
+    },
+    "totp": {
+      "title": "Identifiants TOTP",
+      "description": "Enregistrez une clé secrète, puis sélectionnez-la pour chaque hôte SSH ou serveur de rebond.",
+      "add": "Ajouter un identifiant",
+      "name": "Nom",
+      "secret": "Clé secrète",
+      "keep_secret": "Laisser vide pour conserver la clé enregistrée",
+      "secret_hint": "Clé Base32 ou URI otpauth://",
+      "uri_hint": "L’import utilise les paramètres de l’URI. Vous pouvez les modifier après l’enregistrement.",
+      "pattern": "Motif de l’invite (expression régulière)",
+      "algorithm": "Algorithme",
+      "digits": "Chiffres",
+      "period": "Période (secondes)",
+      "enabled": "Activé",
+      "disabled": "Désactivé",
+      "invalid_secret": "Saisissez une clé Base32 ou une URI TOTP valide.",
+      "invalid_parameters": "Indiquez un nom, 6 ou 8 chiffres et une période de 1 à 300 secondes.",
+      "invalid_pattern": "Saisissez une expression régulière valide qui ne correspond pas au texte vide.",
+      "in_use": "Cet identifiant est encore utilisé par une connexion. Retirez d’abord ses associations.",
+      "unavailable": "L’identifiant ou sa clé protégée est indisponible.",
+      "save_failed": "Impossible d’enregistrer l’identifiant. Vérifiez le stockage protégé et réessayez.",
+      "none": "Aucun",
+      "connection_label": "Identifiant TOTP",
+      "connection_hint": "Créez les identifiants dans Paramètres → Identifiants, puis sélectionnez-les pour chaque hôte."
+    },
     "title": "Paramètres",
     "search": {
       "open": "Rechercher dans les paramètres",
@@ -73,7 +102,7 @@
       "ai": "OxideSens",
       "knowledge": "Base de connaissances",
       "local": "Terminal local",
-      "privilege": "Identifiants d’élévation",
+      "privilege": "Identifiants",
       "reconnect": "Reconnexion",
       "help": "Aide et À propos",
       "keybindings": "Raccourcis clavier",
@@ -88,7 +117,9 @@
       "title": "Général",
       "description": "Paramètres généraux de l'application.",
       "startup": "Démarrage",
-      "startup_hint": "Contrôlez le démarrage d'OxideTerm avec le système d'exploitation.",
+      "startup_hint": "Gérer le comportement au démarrage et le lancement à la connexion.",
+      "restore_terminal_workspace": "Restaurer les terminaux précédents au démarrage",
+      "restore_terminal_workspace_hint": "Rouvrir les terminaux SSH et locaux avec leurs onglets et volets au prochain démarrage. Les shells et les commandes de démarrage configurées seront exécutés à nouveau.",
       "connection_uri_integration": "Liens de connexion externes",
       "connection_uri_integration_hint": "Détermine si OxideTerm accepte les URI de connexion provenant des navigateurs et d'autres applications.",
       "external_connection_uris": "Ouvrir les URI de connexion externes",
@@ -223,6 +254,9 @@
       "keep_running_on_close_hint": "Après la fermeture de la fenêtre, OxideTerm continue de s’exécuter en arrière-plan."
     },
     "terminal": {
+      "cjk_font_custom": "Personnalisée…",
+      "custom_cjk_font": "Police CJK personnalisée",
+      "custom_cjk_font_hint": "Saisissez le nom complet d’une police installée. Laissez vide pour utiliser les polices de substitution automatiques.",
       "input_keyboard": "Clavier et suggestions de saisie",
       "input_mouse_links": "Souris et liens",
       "input_clipboard": "Copier et coller",
@@ -1392,6 +1426,7 @@
       "check_update": "Vérifier les mises à jour",
       "checking": "Vérification des mises à jour...",
       "up_to_date": "Vous êtes à jour",
+      "managed_by_nix": "Les mises à jour de cette installation sont gérées par Nix.",
       "update_available": "Nouvelle version disponible",
       "update_available_toast": "Une nouvelle version est disponible. Allez dans Paramètres → Aide pour mettre à jour.",
       "download_install": "Télécharger et installer",

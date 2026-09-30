@@ -2,12 +2,12 @@
 
 This file lists third-party Rust crates and detected licenses, including transitive dependencies.
 It is generated from `cargo deny list -f json -l crate`.
-Generated: 2026-09-23T15:47:26.994090Z
+Generated: 2026-09-30T14:18:20.806601Z
 
 ## Summary
 
-- MIT: 1095
-- Apache-2.0: 879
+- MIT: 1102
+- Apache-2.0: 884
 - Apache-2.0 WITH LLVM-exception: 59
 - Zlib: 45
 - BSD-3-Clause: 21
@@ -16,10 +16,10 @@ Generated: 2026-09-23T15:47:26.994090Z
 - ISC: 13
 - BSD-2-Clause: 11
 - Unlicense: 9
-- CC0-1.0: 5
+- CC0-1.0: 6
 - BSL-1.0: 3
+- MIT-0: 3
 - LGPL-2.1-or-later: 2
-- MIT-0: 2
 - 0BSD: 1
 - BSD-1-Clause: 1
 - CDLA-Permissive-2.0: 1
@@ -126,6 +126,7 @@ This section is a review prompt for binary distribution; it does not replace leg
 | aws-lc-sys | 0.40.0 | ISC, Apache-2.0, MIT, BSD-3-Clause, MIT-0 | https://crates.io/crates/aws-lc-sys |
 | backtrace | 0.3.76 | MIT, Apache-2.0 | https://crates.io/crates/backtrace |
 | base16ct | 1.0.0 | Apache-2.0, MIT | https://crates.io/crates/base16ct |
+| base32 | 0.5.1 | MIT, Apache-2.0 | https://crates.io/crates/base32 |
 | base64 | 0.21.7 | MIT, Apache-2.0 | https://crates.io/crates/base64 |
 | base64 | 0.22.1 | MIT, Apache-2.0 | https://crates.io/crates/base64 |
 | base64 | 0.23.1 | MIT, Apache-2.0 | https://crates.io/crates/base64 |
@@ -212,6 +213,7 @@ This section is a review prompt for binary distribution; it does not replace leg
 | const-oid | 0.9.6 | Apache-2.0, MIT | https://crates.io/crates/const-oid |
 | const-random | 0.1.18 | MIT, Apache-2.0 | https://crates.io/crates/const-random |
 | const-random-macro | 0.1.16 | MIT, Apache-2.0 | https://crates.io/crates/const-random-macro |
+| constant_time_eq | 0.4.2 | CC0-1.0, MIT-0, Apache-2.0 | https://crates.io/crates/constant_time_eq |
 | convert_case | 0.10.0 | MIT | https://crates.io/crates/convert_case |
 | convert_case | 0.11.0 | MIT | https://crates.io/crates/convert_case |
 | core-foundation | 0.10.0 | MIT, Apache-2.0 | https://crates.io/crates/core-foundation |
@@ -329,6 +331,8 @@ This section is a review prompt for binary distribution; it does not replace leg
 | eventsource-stream | 0.2.3 | MIT, Apache-2.0 | https://crates.io/crates/eventsource-stream |
 | exr | 1.74.0 | BSD-3-Clause | https://crates.io/crates/exr |
 | extended | 0.1.0 | MIT | https://crates.io/crates/extended |
+| fallible-iterator | 0.3.0 | MIT, Apache-2.0 | https://crates.io/crates/fallible-iterator |
+| fallible-streaming-iterator | 0.1.9 | MIT, Apache-2.0 | https://crates.io/crates/fallible-streaming-iterator |
 | fancy-regex | 0.14.0 | MIT | https://crates.io/crates/fancy-regex |
 | fast-srgb8 | 1.0.0 | MIT, Apache-2.0, CC0-1.0 | https://crates.io/crates/fast-srgb8 |
 | fastrand | 1.9.0 | Apache-2.0, MIT | https://crates.io/crates/fastrand |
@@ -436,6 +440,7 @@ This section is a review prompt for binary distribution; it does not replace leg
 | hashbrown | 0.15.5 | MIT, Apache-2.0 | https://crates.io/crates/hashbrown |
 | hashbrown | 0.16.1 | MIT, Apache-2.0 | https://crates.io/crates/hashbrown |
 | hashbrown | 0.17.0 | MIT, Apache-2.0 | https://crates.io/crates/hashbrown |
+| hashlink | 0.10.0 | MIT, Apache-2.0 | https://crates.io/crates/hashlink |
 | hdrhistogram | 7.5.4 | MIT, Apache-2.0 | https://crates.io/crates/hdrhistogram |
 | heapless | 0.7.17 | MIT, Apache-2.0 | https://crates.io/crates/heapless |
 | heapless | 0.9.3 | MIT, Apache-2.0 | https://crates.io/crates/heapless |
@@ -552,6 +557,7 @@ This section is a review prompt for binary distribution; it does not replace leg
 | libloading | 0.8.9 | ISC | https://crates.io/crates/libloading |
 | libm | 0.2.16 | MIT | https://crates.io/crates/libm |
 | libredox | 0.1.16 | MIT | https://crates.io/crates/libredox |
+| libsqlite3-sys | 0.35.0 | MIT | https://crates.io/crates/libsqlite3-sys |
 | libudev | 0.3.0 | MIT | https://crates.io/crates/libudev |
 | libudev-sys | 0.1.4 | MIT | https://crates.io/crates/libudev-sys |
 | libz-sys | 1.1.28 | MIT, Apache-2.0 | https://crates.io/crates/libz-sys |
@@ -837,6 +843,7 @@ This section is a review prompt for binary distribution; it does not replace leg
 | roxmltree | 0.21.1 | MIT, Apache-2.0 | https://crates.io/crates/roxmltree |
 | rsa | 0.10.0-rc.18 | MIT, Apache-2.0 | https://crates.io/crates/rsa |
 | rsasl | 2.3.1 | Apache-2.0, MIT | https://crates.io/crates/rsasl |
+| rusqlite | 0.37.0 | MIT | https://crates.io/crates/rusqlite |
 | russh | 0.63.0 | Apache-2.0 | vendored in repository |
 | russh-cryptovec | 0.62.0 | Apache-2.0 | https://crates.io/crates/russh-cryptovec |
 | russh-util | 0.52.0 | Apache-2.0 | https://crates.io/crates/russh-util |
@@ -1021,6 +1028,7 @@ This section is a review prompt for binary distribution; it does not replace leg
 | toml_parser | 1.1.2+spec-1.1.0 | MIT, Apache-2.0 | https://crates.io/crates/toml_parser |
 | toml_write | 0.1.2 | MIT, Apache-2.0 | https://crates.io/crates/toml_write |
 | toml_writer | 1.1.1+spec-1.1.0 | MIT, Apache-2.0 | https://crates.io/crates/toml_writer |
+| totp-rs | 6.0.0 | MIT | https://crates.io/crates/totp-rs |
 | tower | 0.5.3 | MIT | https://crates.io/crates/tower |
 | tower-http | 0.6.10 | MIT | https://crates.io/crates/tower-http |
 | tower-layer | 0.3.3 | MIT | https://crates.io/crates/tower-layer |
@@ -1291,8 +1299,8 @@ This section is a review prompt for binary distribution; it does not replace leg
 | zerocopy-derive | 0.8.48 | BSD-2-Clause, Apache-2.0, MIT | https://crates.io/crates/zerocopy-derive |
 | zerofrom | 0.1.7 | Unicode-3.0 | https://crates.io/crates/zerofrom |
 | zerofrom-derive | 0.1.7 | Unicode-3.0 | https://crates.io/crates/zerofrom-derive |
-| zeroize | 1.8.2 | Apache-2.0, MIT | https://crates.io/crates/zeroize |
-| zeroize_derive | 1.4.3 | Apache-2.0, MIT | https://crates.io/crates/zeroize_derive |
+| zeroize | 1.9.0 | Apache-2.0, MIT | https://crates.io/crates/zeroize |
+| zeroize_derive | 1.5.0 | Apache-2.0, MIT | https://crates.io/crates/zeroize_derive |
 | zerotrie | 0.2.4 | Unicode-3.0 | https://crates.io/crates/zerotrie |
 | zerovec | 0.11.6 | Unicode-3.0 | https://crates.io/crates/zerovec |
 | zerovec-derive | 0.11.3 | Unicode-3.0 | https://crates.io/crates/zerovec-derive |
@@ -1326,18 +1334,18 @@ This section is a review prompt for binary distribution; it does not replace leg
 
 ## Distribution Icon Assets
 
-# Linux distribution icons
+# Operating system icons
 
-OxideTerm bundles the original SVG files below solely to identify operating systems
-in connection controls. The artwork retains its own license; it is not relicensed
-under OxideTerm's code license. Logos and names remain the trademarks of their
-respective owners. Their inclusion does not imply sponsorship or endorsement.
+OxideTerm bundles the SVG files below solely to identify operating systems
+in connection controls. Each icon retains its own licensing or usage restrictions;
+none is relicensed under OxideTerm's code license. Logos and names remain the
+trademarks of their respective owners. Their inclusion does not imply sponsorship
+or endorsement.
 
-The SVGs listed below were retrieved on 2026-09-23. The Ubuntu and Arch Linux
-SVGs have only their root fill set to the colors recorded by Simple Icons; the
-other SVGs are unmodified. Display scaling preserves their original aspect
-ratios and colors. Unknown distributions use
-OxideTerm's generic icon instead of a related distribution's logo.
+The Linux SVGs listed below were retrieved on 2026-09-23. The Ubuntu and Arch
+Linux SVGs have only their root fill set to the colors recorded by Simple Icons;
+the other Linux SVGs are unmodified. Display scaling preserves their original
+aspect ratios and colors. Unknown distributions use OxideTerm's generic icon.
 
 ## Ubuntu
 
@@ -1454,6 +1462,17 @@ OxideTerm.
   OxideTerm is not affiliated with or endorsed by Linux Mint.
 - Bundled file: `crates/oxideterm-gpui-app/resources/distro-icons/linuxmint.svg`.
 - SHA-256: `dee702dc5e28aafa4e6c033a6f7381b178036c460c7cfe9dc32c7fde0ccf0387`.
+
+## Windows
+
+**Windows four-pane mark**, adapted as a simplified vector from the Windows
+logo shape documented by Microsoft. Windows is a trademark of Microsoft
+Corporation. OxideTerm uses the mark only as an optional session identifier;
+no affiliation is implied.
+
+- Source guidance: https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks
+- Bundled file: `crates/oxideterm-gpui-app/resources/distro-icons/windows.svg`.
+- SHA-256: `b93cef2a8d6868a72654bb881fc13dbbcd510dcc94841b81abd37536b2411f2a`.
 
 ## License texts
 

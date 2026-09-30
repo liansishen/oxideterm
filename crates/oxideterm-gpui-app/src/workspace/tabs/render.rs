@@ -1176,15 +1176,14 @@ impl WorkspaceApp {
     }
 
     fn render_welcome_recent_connections(&self, cx: &mut Context<Self>) -> gpui::Div {
-        const RECENT_CONNECTION_LIMIT: usize = 4;
-
         let theme = self.tokens.ui;
-        let recent = welcome_recent_connections(&self.connection_store, RECENT_CONNECTION_LIMIT);
+        let recent = welcome_recent_connections(&self.connection_store, usize::MAX);
         let saved_count = self.connection_store.connections().len()
             + self.connection_store.serial_profiles().len()
             + self.connection_store.telnet_profiles().len()
             + self.connection_store.mosh_profiles().len()
-            + self.connection_store.remote_desktop_profiles().len();
+            + self.connection_store.remote_desktop_profiles().len()
+            + self.connection_store.local_terminal_profiles().len();
         let count_label = self
             .i18n
             .t("layout.empty.saved_count")
@@ -1483,6 +1482,7 @@ impl WorkspaceApp {
     fn welcome_recent_icon(&self, kind: WelcomeRecentKind) -> LucideIcon {
         match kind {
             WelcomeRecentKind::Ssh => LucideIcon::Server,
+            WelcomeRecentKind::Local => LucideIcon::Terminal,
             WelcomeRecentKind::Serial => LucideIcon::Radio,
             WelcomeRecentKind::Telnet => LucideIcon::Terminal,
             WelcomeRecentKind::Mosh => LucideIcon::Wifi,
@@ -1493,6 +1493,7 @@ impl WorkspaceApp {
     fn welcome_recent_kind_label(&self, kind: WelcomeRecentKind) -> &'static str {
         match kind {
             WelcomeRecentKind::Ssh => "terminal.typeSsh",
+            WelcomeRecentKind::Local => "terminal.typeLocal",
             WelcomeRecentKind::Serial => "modals.new_connection.transport_serial",
             WelcomeRecentKind::Telnet => "modals.new_connection.transport_telnet",
             WelcomeRecentKind::Mosh => "terminal.typeMosh",
@@ -1509,6 +1510,9 @@ impl WorkspaceApp {
     ) {
         match target {
             WelcomeRecentTarget::Ssh(id) => self.open_saved_connection(&id, window, cx),
+            WelcomeRecentTarget::Local(id) => {
+                self.open_saved_local_terminal_profile(&id, window, cx)
+            }
             WelcomeRecentTarget::Serial(id) => self.open_saved_serial_profile(&id, window, cx),
             WelcomeRecentTarget::Telnet(id) => self.open_saved_telnet_profile(&id, window, cx),
             WelcomeRecentTarget::Mosh(id) => self.open_saved_mosh_profile(&id, window, cx),

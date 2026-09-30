@@ -30,6 +30,7 @@ impl WorkspaceApp {
         }
         let version_migration = VersionMigrationState::from_settings_path(settings_store.path())?;
         let connection_store = ConnectionStore::load(default_connections_path())?;
+        let audit = audit::AuditState::new(settings_store.path().with_file_name("audit.sqlite3"));
         let settings = settings_store.settings().clone();
         let i18n = I18n::new(locale_from_settings(settings.general.language));
         // Shell history is already the user's persistence boundary; OxideTerm keeps only a
@@ -323,6 +324,9 @@ impl WorkspaceApp {
                     ConnectionFlowEvent::ConnectionFormClosed => {
                         // Apply runtime cleanup after the Entity has already cleared ownership.
                         workspace.cleanup_cancelled_proxy_connect_runs(cx);
+                        if workspace.active_pane(cx).is_some() {
+                            workspace.needs_active_pane_focus = true;
+                        }
                     }
                     ConnectionFlowEvent::WorkerResultsReady => {
                         workspace.enqueue_connection_flow_window_effect(cx);
@@ -755,6 +759,7 @@ impl WorkspaceApp {
             _connection_flow_observation: connection_flow_observation,
             _connection_flow_subscription: connection_flow_subscription,
             workspace_runtime,
+            pending_terminal_workspace_restore: None,
             _workspace_runtime_subscription: workspace_runtime_subscription,
             public_mcp,
             ssh_registry,
@@ -764,6 +769,7 @@ impl WorkspaceApp {
             sftp_progress_store,
             node_router,
             notification_center: NotificationCenterState::default(),
+            audit,
             notification_sidebar_list_state: tauri_virtual_list_state(
                 0,
                 ListAlignment::Top,
@@ -773,7 +779,6 @@ impl WorkspaceApp {
                 ),
             ),
             notification_sidebar_list_cache: RefCell::new(VirtualListSignatureCache::default()),
-            event_log_sidebar_scroll_handle: UniformListScrollHandle::new(),
             ssh_nodes: HashMap::new(),
             saved_ssh_nodes: HashMap::new(),
             expanded_ssh_nodes: HashSet::new(),
@@ -865,7 +870,9 @@ impl WorkspaceApp {
         workspace.bootstrap_cloud_sync_controller(cx);
         workspace.start_public_mcp_delivery(cx);
         workspace.sync_ssh_config_sync_service();
+        workspace.start_audit_delivery(cx);
         workspace.restore_session_tree_snapshot();
+        workspace.restore_terminal_workspace(window, cx);
         workspace.standalone_connections =
             standalone_connections::StandaloneConnectionRegistry::restore(
                 default_session_tree_path().with_file_name("standalone_sessions.json"),
@@ -878,6 +885,11 @@ impl WorkspaceApp {
         workspace.refresh_terminal_trigger_runtime(cx);
         workspace.schedule_automatic_native_update_check(cx);
         cx.on_release(|workspace, cx| {
+            if let Err(error) = workspace.save_terminal_workspace_snapshot(cx) {
+                eprintln!(
+                    "failed to save terminal workspace snapshot during workspace release: {error}"
+                );
+            }
             workspace.flush_main_window_state(cx);
             workspace.shutdown_terminal_trigger_runtime();
             // Shutdown ordering is security-sensitive: late broker callbacks
@@ -1170,6 +1182,17 @@ impl WorkspaceApp {
             background: self.terminal_background_preferences(background_key),
             transparent_background: self.window_background_preferences().is_some(),
             paste_labels: TerminalPasteLabels {
+                edit: self.i18n.t("terminal.paste.edit"),
+                edit_title: self.i18n.t("terminal.paste.edit_title"),
+                strip_fence: self.i18n.t("terminal.paste.strip_fence"),
+                undo: self.i18n.t("terminal.paste.undo"),
+                redo: self.i18n.t("terminal.paste.redo"),
+                editor_menu: oxideterm_gpui_editor::EditorContextMenuLabels {
+                    copy: self.i18n.t("menu.copy"),
+                    cut: self.i18n.t("fileManager.cut"),
+                    paste: self.i18n.t("menu.paste"),
+                    select_all: self.i18n.t("fileManager.selectAll"),
+                },
                 title_template: self.i18n.t("terminal.paste.title"),
                 more_lines_template: self.i18n.t("terminal.paste.more_lines"),
                 confirm: self.i18n.t("terminal.paste.confirm"),
@@ -1227,6 +1250,12 @@ impl WorkspaceApp {
                 ymodem_receive: self.i18n.t("terminal.modem.ymodem_receive"),
                 zmodem_upload: self.i18n.t("terminal.modem.zmodem_upload"),
                 zmodem_receive: self.i18n.t("terminal.modem.zmodem_receive"),
+                timeout: self.i18n.t("terminal.modem.timeout"),
+                protocol_error: self.i18n.t("terminal.modem.protocol_error"),
+                file_error: self.i18n.t("terminal.modem.file_error"),
+                file_too_large: self.i18n.t("terminal.modem.file_too_large"),
+                buffer_overflow: self.i18n.t("terminal.modem.buffer_overflow"),
+                worker_stopped: self.i18n.t("terminal.modem.worker_stopped"),
             },
             control_bar_expand_label: self.i18n.t("terminal.control_bar.show_controls"),
             control_bar_collapse_label: self.i18n.t("terminal.control_bar.hide_controls"),

@@ -950,6 +950,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd307490d624467aa6f74b0eabb77633d1f758a7b25f12bceb0b22e08d9726f6"
 
 [[package]]
+name = "base32"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "022dfe9eb35f19ebbcb51e0b40a5ab759f46ad60cadf7297e0bd085afb50e076"
+
+[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1827,6 +1833,12 @@ dependencies = [
  "once_cell",
  "tiny-keccak",
 ]
+
+[[package]]
+name = "constant_time_eq"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
 name = "convert_case"
@@ -7406,7 +7418,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-acp-adapter"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "agent-client-protocol",
  "clap",
@@ -7419,7 +7431,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-acp-host-tools"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "agent-client-protocol",
  "bytes",
@@ -7439,7 +7451,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-ai"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
@@ -7479,7 +7491,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-ai-tasks"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7497,7 +7509,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-app-lock"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "argon2 0.5.3",
@@ -7520,14 +7532,14 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-atomic-file"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "tempfile",
 ]
 
 [[package]]
 name = "oxideterm-audit"
-version = "2.1.0+fork.1"
+version = "2.2.0"
 dependencies = [
  "async-channel",
  "base64 0.22.1",
@@ -7553,11 +7565,11 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-backend-classification"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 
 [[package]]
 name = "oxideterm-cli"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "chrono",
  "clap",
@@ -7582,7 +7594,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-cloud-sync"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -7611,7 +7623,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-connection-monitor"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "chrono",
  "serde",
@@ -7622,7 +7634,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-connections"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "argon2 0.5.3",
@@ -7639,6 +7651,7 @@ dependencies = [
  "quick-xml 0.39.4",
  "rand 0.10.2",
  "rand 0.8.6",
+ "regex",
  "rmp-serde",
  "russh",
  "serde",
@@ -7646,6 +7659,7 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.20",
+ "totp-rs",
  "uuid",
  "whoami",
  "zeroize",
@@ -7654,7 +7668,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-desktop-presence"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "gpui",
@@ -7667,7 +7681,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-editor-core"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "thiserror 2.0.20",
  "unicode-segmentation",
@@ -7675,7 +7689,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-editor-syntax"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "oxideterm-editor-core",
  "thiserror 2.0.20",
@@ -7719,14 +7733,14 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-environment"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "oxideterm-forwarding"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "chrono",
  "dashmap",
@@ -7750,7 +7764,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-ftp"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "oxideterm-atomic-file",
  "oxideterm-audit",
@@ -7770,7 +7784,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-gpui-app"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7873,7 +7887,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-gpui-cloud-sync"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -7898,7 +7912,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-gpui-editor"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "gpui",
  "oxideterm-editor-core",
@@ -7912,7 +7926,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-gpui-ide"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "gpui",
  "oxideterm-audit",
@@ -7929,7 +7943,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-gpui-markdown"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "ego-tree",
  "gpui",
@@ -7950,7 +7964,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-gpui-platform"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -7970,7 +7984,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-gpui-remote-desktop"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "gpui",
  "image",
@@ -7981,7 +7995,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-gpui-settings-view"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "gpui",
  "oxideterm-ai",
@@ -7997,7 +8011,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-gpui-terminal"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -8038,7 +8052,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-gpui-ui"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "gpui",
  "oxideterm-theme",
@@ -8046,14 +8060,14 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-i18n"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "oxideterm-ide-core"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -8063,7 +8077,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-ide-fs"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "base64 0.22.1",
  "dashmap",
@@ -8087,7 +8101,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-local-files"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
@@ -8101,7 +8115,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-modem-transfer"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "criterion 0.5.1",
  "thiserror 2.0.20",
@@ -8109,7 +8123,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-mosh"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "fernomade-crypto",
  "fernomade-runtime",
@@ -8122,7 +8136,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-network-proxy"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "base64 0.22.1",
  "oxideterm-connections",
@@ -8136,18 +8150,18 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-notification-center"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 
 [[package]]
 name = "oxideterm-pcm-audio"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "cpal",
 ]
 
 [[package]]
 name = "oxideterm-plugin-host-api"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -8179,7 +8193,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-plugin-manifest"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -8187,7 +8201,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-plugin-protocol"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "oxideterm-plugin-manifest",
  "serde",
@@ -8197,7 +8211,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-plugin-registry"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "oxideterm-ai",
  "oxideterm-network-proxy",
@@ -8212,7 +8226,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-plugin-wasm-runtime"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "oxideterm-plugin-manifest",
  "oxideterm-plugin-protocol",
@@ -8226,7 +8240,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-portable-runtime"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "argon2 0.5.3",
  "base64 0.22.1",
@@ -8246,7 +8260,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-preview"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -8264,7 +8278,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-public-mcp"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -8292,7 +8306,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-quick-commands"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "oxideterm-atomic-file",
  "oxideterm-audit",
@@ -8304,7 +8318,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-rdp-helper"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "cpal",
  "ironrdp",
@@ -8331,7 +8345,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-remote-desktop"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "base64 0.22.1",
  "oxideterm-atomic-file",
@@ -8345,14 +8359,14 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-render-policy"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "oxideterm-secret-store"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -8366,7 +8380,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-session-adapter"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "chrono",
  "oxideterm-connections",
@@ -8379,7 +8393,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-settings"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "oxideterm-atomic-file",
@@ -8395,7 +8409,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-settings-model"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "oxideterm-ai",
  "oxideterm-cloud-sync",
@@ -8408,7 +8422,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-sftp"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -8441,7 +8455,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-skills"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "dirs 5.0.1",
  "serde",
@@ -8452,7 +8466,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-ssh"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "base64 0.22.1",
  "dashmap",
@@ -8487,7 +8501,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-ssh-launch"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "percent-encoding",
  "serde",
@@ -8498,7 +8512,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-terminal"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -8534,14 +8548,14 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-terminal-encoding"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "encoding_rs",
 ]
 
 [[package]]
 name = "oxideterm-terminal-graphics"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -8557,18 +8571,18 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-terminal-model"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 
 [[package]]
 name = "oxideterm-terminal-recording"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "oxideterm-terminal-semantic"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "criterion 0.5.1",
  "oxideterm-editor-syntax",
@@ -8580,7 +8594,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-terminal-triggers"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "criterion 0.5.1",
  "oxideterm-atomic-file",
@@ -8594,7 +8608,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-terminal-unicode"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "oxideterm-terminal-model",
  "unicode-bidi",
@@ -8603,21 +8617,21 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-theme"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "oxideterm-tmux"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "memchr",
 ]
 
 [[package]]
 name = "oxideterm-topology"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "chrono",
  "serde",
@@ -8625,7 +8639,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-trzsz"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "base64 0.22.1",
  "flate2",
@@ -8644,7 +8658,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-update"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -8671,7 +8685,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-vnc-helper"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "des",
  "flate2",
@@ -8691,11 +8705,11 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-workspace"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 
 [[package]]
 name = "oxideterm-wsl-graphics"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "serde",
  "thiserror 2.0.20",
@@ -8706,7 +8720,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm-x11-forwarding"
-version = "2.1.0+fork.2"
+version = "2.2.0"
 dependencies = [
  "rand 0.8.6",
  "serde",
@@ -12834,6 +12848,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
+name = "totp-rs"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49d0f9b7aa5def86d3a8d8ba926fe8c1990924dd715d2b5fc54a4aa3788c11c1"
+dependencies = [
+ "base32",
+ "constant_time_eq",
+ "hmac 0.13.0",
+ "percent-encoding",
+ "rand 0.10.2",
+ "serde",
+ "sha1 0.11.0",
+ "sha2 0.11.0",
+ "url",
+ "zeroize",
+]
+
+[[package]]
 name = "tower"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15909,9 +15941,9 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.8.2"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
+checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
 dependencies = [
  "serde",
  "zeroize_derive",
@@ -15919,9 +15951,9 @@ dependencies = [
 
 [[package]]
 name = "zeroize_derive"
-version = "1.4.3"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85a5b4158499876c763cb03bc4e49185d3cccbabb15b33c627f7884f43db852e"
+checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
 dependencies = [
  "proc-macro2",
  "quote",

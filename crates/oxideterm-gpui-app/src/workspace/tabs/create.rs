@@ -1899,6 +1899,7 @@ impl WorkspaceApp {
 
 fn ssh_config_from_proxy_hop(hop: ProxyHopConfig, connect_timeout_seconds: u64) -> SshConfig {
     let ProxyHopConfig {
+        totp,
         host,
         port,
         username,
@@ -1913,6 +1914,7 @@ fn ssh_config_from_proxy_hop(hop: ProxyHopConfig, connect_timeout_seconds: u64) 
         expected_host_key_fingerprint,
     } = hop;
     SshConfig {
+        totp,
         host,
         port,
         username,
@@ -1972,6 +1974,7 @@ mod create_tests {
         let connect_timeout_seconds = 180;
         let config = ssh_config_from_proxy_hop(
             ProxyHopConfig {
+                totp: None,
                 host: "jump.example.com".to_string(),
                 port: 2202,
                 username: "operator".to_string(),
@@ -2139,6 +2142,7 @@ mod create_tests {
             .unwrap();
         let requested = SshConfig {
             proxy_chain: Some(vec![ProxyHopConfig {
+                totp: None,
                 host: "new-jump.example.com".to_string(),
                 port: 22,
                 username: "ops".to_string(),
@@ -2312,6 +2316,7 @@ mod create_tests {
         connection
             .proxy_chain
             .push(oxideterm_connections::SavedProxyHop {
+                totp_credential_id: None,
                 host: "jump.example.com".to_string(),
                 port: 22,
                 username: "ops".to_string(),

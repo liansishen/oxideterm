@@ -178,7 +178,9 @@ impl NativeUpdateClient {
                 Some(key),
             )
         } else {
-            (endpoint_for_channel(request.channel)?.url.to_string(), None)
+            let endpoint = endpoint_for_channel(request.channel)?;
+            let key = crate::integrity::configured_updater_public_key()?;
+            (endpoint.url.to_string(), Some(key.to_string()))
         };
         let response = self
             .http
@@ -866,8 +868,7 @@ mod tests {
             connection_attempt.is_err(),
             "Nix check must not connect to proxy"
         );
-
-        // Counter-check: a non-Nix flavor does attempt network I/O and connects to the proxy.
+        // A configured updater key permits the non-Nix request to reach the proxy.
         let client_clone = client.clone();
         let non_nix_task = tokio::spawn(async move {
             client_clone
@@ -882,14 +883,23 @@ mod tests {
                 .await
         });
 
-        let accept_result = tokio::time::timeout(Duration::from_secs(2), listener.accept()).await;
-        let (stream, _) = accept_result
-            .expect("non-nix check must attempt network connection")
-            .expect("listener accept succeeded");
-        drop(stream);
-
-        let non_nix_result = non_nix_task.await.unwrap();
-        assert!(non_nix_result.is_err());
+        if crate::integrity::configured_updater_public_key().is_ok() {
+            let accept_result =
+                tokio::time::timeout(Duration::from_secs(2), listener.accept()).await;
+            let (stream, _) = accept_result
+                .expect("configured key should allow network access")
+                .expect("listener accept succeeded");
+            drop(stream);
+            assert!(non_nix_task.await.unwrap().is_err());
+        } else {
+            assert!(non_nix_task.await.unwrap().is_err());
+            let connection_attempt =
+                tokio::time::timeout(Duration::from_millis(50), listener.accept()).await;
+            assert!(
+                connection_attempt.is_err(),
+                "missing or invalid updater key must fail before network access"
+            );
+        }
     }
 
     #[test]

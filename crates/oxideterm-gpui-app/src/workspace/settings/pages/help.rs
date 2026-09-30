@@ -1,14 +1,14 @@
 use super::*;
 
-pub(in crate::workspace) const HELP_WEBSITE_URL: &str = "https://oxideterm.app";
-pub(in crate::workspace) const HELP_DOCUMENTATION_URL: &str = "https://oxideterm.app/docs";
-pub(in crate::workspace) const HELP_GITHUB_URL: &str =
-    "https://github.com/AnalyseDeCircuit/oxideterm";
+pub(in crate::workspace) const HELP_WEBSITE_URL: &str = "https://github.com/liansishen/oxideterm";
+pub(in crate::workspace) const HELP_DOCUMENTATION_URL: &str =
+    "https://github.com/liansishen/oxideterm/tree/main/docs";
+pub(in crate::workspace) const HELP_GITHUB_URL: &str = "https://github.com/liansishen/oxideterm";
 pub(in crate::workspace) const HELP_ISSUES_URL: &str =
-    "https://github.com/AnalyseDeCircuit/oxideterm/issues";
+    "https://github.com/liansishen/oxideterm/issues";
 // Keep the in-app legal link aligned with the repository-level multilingual notice.
 pub(in crate::workspace) const HELP_LEGAL_URL: &str =
-    "https://github.com/AnalyseDeCircuit/oxideterm/blob/main/LEGAL.md";
+    "https://github.com/liansishen/oxideterm/blob/main/LEGAL.md";
 pub(in crate::workspace) const HELP_LEGAL_MARKDOWN: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../LEGAL.md"));
 const HELP_THIRD_PARTY_MARKDOWN: &str = include_str!(concat!(

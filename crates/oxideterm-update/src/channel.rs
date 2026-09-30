@@ -4,9 +4,7 @@
 use oxideterm_settings::UpdateChannel;
 
 pub const STABLE_UPDATE_ENDPOINT: &str =
-    "https://github.com/AnalyseDeCircuit/oxideterm/releases/latest/download/latest.json";
-pub const BETA_UPDATE_ENDPOINT: &str =
-    "https://github.com/AnalyseDeCircuit/oxideterm/releases/download/updater-beta/latest.json";
+    "https://github.com/liansishen/oxideterm/releases/latest/download/latest.json";
 
 pub fn normalize_update_repository(input: &str) -> Option<String> {
     let input = input.trim();
@@ -36,6 +34,7 @@ fn valid_repository_part(part: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::normalize_update_repository;
+    use oxideterm_settings::UpdateChannel;
 
     #[test]
     fn normalizes_github_repository_forms_and_rejects_unsafe_urls() {
@@ -61,6 +60,17 @@ mod tests {
             assert_eq!(normalize_update_repository(input), None, "{input}");
         }
     }
+
+    #[test]
+    fn stable_uses_fork_release_manifest_and_unsupported_channels_fail() {
+        let endpoint = super::endpoint_for_channel(UpdateChannel::Stable).unwrap();
+        assert_eq!(
+            endpoint.url,
+            "https://github.com/liansishen/oxideterm/releases/latest/download/latest.json"
+        );
+        assert!(super::endpoint_for_channel(UpdateChannel::Beta).is_err());
+        assert!(super::endpoint_for_channel(UpdateChannel::Custom).is_err());
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -74,7 +84,11 @@ pub fn endpoint_for_channel(
 ) -> Result<UpdateEndpoint, crate::NativeUpdateError> {
     let url = match channel {
         UpdateChannel::Stable => STABLE_UPDATE_ENDPOINT,
-        UpdateChannel::Beta => BETA_UPDATE_ENDPOINT,
+        UpdateChannel::Beta => {
+            return Err(crate::NativeUpdateError::General(
+                "beta update channel is unavailable".to_string(),
+            ));
+        }
         UpdateChannel::Custom => {
             return Err(crate::NativeUpdateError::General(
                 "custom update channel requires a repository and public key".to_string(),

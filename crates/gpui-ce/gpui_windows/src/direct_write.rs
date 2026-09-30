@@ -335,6 +335,7 @@ impl DirectWriteState {
                         font_collection,
                         &components.factory,
                         &this.system_font_collection,
+                        &this.custom_font_collection,
                         &components.system_ui_font_name,
                     )
                 })?;
@@ -409,6 +410,7 @@ impl DirectWriteState {
         fallbacks: &FontFallbacks,
         factory: &IDWriteFactory5,
         system_font_collection: &IDWriteFontCollection1,
+        custom_font_collection: &IDWriteFontCollection1,
     ) -> Result<Option<IDWriteFontFallback>> {
         let fallback_list = fallbacks.fallback_list();
         if fallback_list.is_empty() {
@@ -416,21 +418,28 @@ impl DirectWriteState {
         }
         unsafe {
             let builder = factory.CreateFontFallbackBuilder()?;
-            let font_set = &system_font_collection.GetFontSet()?;
             let mut unicode_ranges = Vec::new();
             for family_name in fallback_list {
                 let family_name = HSTRING::from(family_name);
-                let Some(fonts) = font_set
-                    .GetMatchingFonts(
-                        &family_name,
-                        DWRITE_FONT_WEIGHT_NORMAL,
-                        DWRITE_FONT_STRETCH_NORMAL,
-                        DWRITE_FONT_STYLE_NORMAL,
-                    )
-                    .log_err()
+                let Some((font_collection, fonts)) =
+                    [&custom_font_collection, &system_font_collection]
+                        .into_iter()
+                        .find_map(|font_collection| {
+                            let font_set = font_collection.GetFontSet().log_err()?;
+                            let fonts = font_set
+                                .GetMatchingFonts(
+                                    &family_name,
+                                    DWRITE_FONT_WEIGHT_NORMAL,
+                                    DWRITE_FONT_STRETCH_NORMAL,
+                                    DWRITE_FONT_STYLE_NORMAL,
+                                )
+                                .log_err()?;
+                            (fonts.GetFontCount() > 0).then(|| ((*font_collection).clone(), fonts))
+                        })
                 else {
                     continue;
                 };
+                let font_collection: IDWriteFontCollection = font_collection.cast()?;
                 let Ok(font_face) = fonts.GetFontFaceReference(0) else {
                     continue;
                 };
@@ -451,7 +460,7 @@ impl DirectWriteState {
                 builder.AddMapping(
                     &unicode_ranges,
                     &[family_name.as_ptr()],
-                    None,
+                    Some(&font_collection),
                     None,
                     None,
                     1.0,
@@ -483,6 +492,7 @@ impl DirectWriteState {
         collection: &IDWriteFontCollection1,
         factory: &IDWriteFactory5,
         system_font_collection: &IDWriteFontCollection1,
+        custom_font_collection: &IDWriteFontCollection1,
         system_ui_font_name: &SharedString,
     ) -> Option<FontInfo> {
         const SYSTEM_UI_FONT_NAME: &str = ".SystemUIFont";
@@ -511,9 +521,14 @@ impl DirectWriteState {
                 let direct_write_features =
                     unsafe { Self::generate_font_features(factory, features).log_err()? };
                 let fallbacks = fallbacks.as_ref().and_then(|fallbacks| {
-                    Self::generate_font_fallbacks(fallbacks, factory, system_font_collection)
-                        .log_err()
-                        .flatten()
+                    Self::generate_font_fallbacks(
+                        fallbacks,
+                        factory,
+                        system_font_collection,
+                        custom_font_collection,
+                    )
+                    .log_err()
+                    .flatten()
                 });
                 let font_info = FontInfo {
                     font_family_h: font_family_h.clone(),

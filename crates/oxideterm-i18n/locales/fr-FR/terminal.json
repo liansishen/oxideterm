@@ -51,6 +51,11 @@
       "risk_configured": "configuré"
     },
     "paste": {
+      "edit": "Modifier",
+      "edit_title": "Modifier avant de coller",
+      "strip_fence": "Retirer les délimiteurs du bloc de code",
+      "undo": "Annuler",
+      "redo": "Rétablir",
       "title": "Lignes multiples détectées ({{count}} lignes)",
       "more_lines": "... {{count}} lignes supplémentaires",
       "confirm": "Confirmer",
@@ -272,7 +277,8 @@
       "add_group": "Add group",
       "edit_group": "Edit group",
       "delete_group": "Delete group",
-      "delete_group_description": "Les commandes de « {{name}} » seront déplacées vers le groupe par défaut avant sa suppression.",
+      "delete_group_description": "Les commandes de « {{name}} » seront déplacées vers « {{destination}} » avant la suppression de ce groupe.",
+      "reorder_groups": "Faites glisser la poignée pour réorganiser les groupes",
       "save_group": "Save group",
       "group_name_placeholder": "Group name",
       "icon_terminal": "Terminal",

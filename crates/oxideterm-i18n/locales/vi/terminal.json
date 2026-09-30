@@ -51,6 +51,11 @@
       "risk_configured": "đã cấu hình"
     },
     "paste": {
+      "edit": "Chỉnh sửa",
+      "edit_title": "Chỉnh sửa trước khi dán",
+      "strip_fence": "Xóa dấu phân cách khối mã",
+      "undo": "Hoàn tác",
+      "redo": "Làm lại",
       "title": "Phát hiện nhiều dòng ({{count}} dòng)",
       "more_lines": "... {{count}} dòng nữa",
       "confirm": "Xác nhận",
@@ -272,7 +277,8 @@
       "add_group": "Add group",
       "edit_group": "Edit group",
       "delete_group": "Delete group",
-      "delete_group_description": "Các lệnh trong “{{name}}” sẽ được chuyển sang nhóm mặc định trước khi xóa nhóm.",
+      "delete_group_description": "Các lệnh trong “{{name}}” sẽ được chuyển sang “{{destination}}” trước khi xóa nhóm này.",
+      "reorder_groups": "Kéo tay cầm để sắp xếp lại các nhóm",
       "save_group": "Save group",
       "group_name_placeholder": "Group name",
       "icon_terminal": "Terminal",

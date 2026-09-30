@@ -51,6 +51,11 @@
       "risk_configured": "設定済み"
     },
     "paste": {
+      "edit": "編集",
+      "edit_title": "貼り付け前に編集",
+      "strip_fence": "コードブロックの記号を削除",
+      "undo": "元に戻す",
+      "redo": "やり直す",
       "title": "複数行が検出されました ({{count}}行)",
       "more_lines": "... さらに{{count}}行",
       "confirm": "確認",
@@ -272,7 +277,8 @@
       "add_group": "Add group",
       "edit_group": "Edit group",
       "delete_group": "Delete group",
-      "delete_group_description": "「{{name}}」内のコマンドは、グループを削除する前にデフォルトグループへ移動されます。",
+      "delete_group_description": "このグループを削除する前に、「{{name}}」内のコマンドを「{{destination}}」へ移動します。",
+      "reorder_groups": "ハンドルをドラッグしてグループを並べ替え",
       "save_group": "Save group",
       "group_name_placeholder": "Group name",
       "icon_terminal": "Terminal",

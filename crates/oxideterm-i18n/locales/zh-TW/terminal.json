@@ -51,6 +51,11 @@
       "risk_configured": "依設定需確認"
     },
     "paste": {
+      "edit": "編輯",
+      "edit_title": "貼上前編輯",
+      "strip_fence": "移除程式碼區塊標記",
+      "undo": "復原",
+      "redo": "重做",
       "title": "偵測到多行內容（{{count}} 行）",
       "more_lines": "... 還有 {{count}} 行",
       "confirm": "確認",
@@ -272,7 +277,8 @@
       "add_group": "新增组",
       "edit_group": "编辑组",
       "delete_group": "删除组",
-      "delete_group_description": "刪除前，「{{name}}」中的快速命令會移至預設群組。",
+      "delete_group_description": "刪除此群組前，「{{name}}」中的快速命令會移至「{{destination}}」。",
+      "reorder_groups": "拖曳把手調整群組順序",
       "save_group": "保存组",
       "group_name_placeholder": "组名称",
       "icon_terminal": "终端",

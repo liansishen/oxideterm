@@ -376,8 +376,23 @@ fn sync_oxide_host_calls_export_validate_and_preview_without_workspace_mutation(
     else {
         panic!("expected sync.validateOxide to return metadata");
     };
-    assert_eq!(metadata["description"], "Plugin export");
-    assert_eq!(metadata["connection_names"], serde_json::json!(["Home"]));
+    assert_eq!(metadata, serde_json::json!({"metadataEncrypted": true}));
+    let file = OxideFile::from_bytes(&exported_bytes).unwrap();
+    let (decrypted_metadata, _) =
+        oxideterm_connections::oxide_file::decrypt_oxide_archive_with_context_and_progress(
+            &file,
+            &mut oxideterm_connections::oxide_file::OxideBatchDecryptionContext::new(
+                "StrongPass!123",
+            )
+            .unwrap(),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(
+        decrypted_metadata.description.as_deref(),
+        Some("Plugin export")
+    );
+    assert_eq!(decrypted_metadata.connection_names, vec!["Home"]);
 
     let preview_response = native_plugin_sync_response(
         "com.example.demo",
@@ -442,7 +457,17 @@ fn sync_plugin_settings_export_filters_selected_plugins_and_revisions() {
     };
     let bytes = native_plugin_u8_array(value.as_array().unwrap()).unwrap();
     let file = OxideFile::from_bytes(&bytes).unwrap();
-    assert_eq!(file.metadata.plugin_settings_count, Some(1));
+    let (metadata, _) =
+        oxideterm_connections::oxide_file::decrypt_oxide_archive_with_context_and_progress(
+            &file,
+            &mut oxideterm_connections::oxide_file::OxideBatchDecryptionContext::new(
+                "StrongPass!123",
+            )
+            .unwrap(),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(metadata.plugin_settings_count, Some(1));
 
     let revisions = native_plugin_settings_revision_map(&plugin_settings);
     assert!(

@@ -833,6 +833,7 @@ impl WorkspaceApp {
                 for result in results {
                     match result {
                         ThemeImportResult::Imported {
+                            target,
                             theme_id,
                             name,
                             value,
@@ -843,7 +844,7 @@ impl WorkspaceApp {
                             self.edit_settings(
                                 move |settings| {
                                     settings.custom_themes.insert(theme_id, value);
-                                    settings.terminal.theme = selected_theme_id;
+                                    target.apply(settings, selected_theme_id);
                                 },
                                 cx,
                             );

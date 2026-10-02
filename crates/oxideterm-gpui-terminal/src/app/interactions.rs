@@ -228,6 +228,9 @@ impl TerminalPane {
         }
 
         let mode = self.terminal.lock().mode();
+        if !mode.contains(TermMode::WIN32_INPUT) {
+            self.win32_pressed_keys.clear();
+        }
         if self.handle_editor_free_type_clipboard_shortcut(event, mode, cx) {
             return true;
         }
@@ -313,7 +316,44 @@ impl TerminalPane {
             self.settings.delete_sequence,
             key_event_type,
         ) {
-            self.send_user_protocol_bytes(sequence.as_bytes(), cx);
+            if mode.contains(TermMode::WIN32_INPUT)
+                && sequence.starts_with("\x1b[")
+                && sequence.ends_with('_')
+            {
+                let legacy_mode = mode & !TermMode::WIN32_INPUT;
+                let semantic_sequence = configurable_key_escape_sequence(
+                    &event.keystroke,
+                    &legacy_mode,
+                    false,
+                    self.settings.backspace_sequence,
+                    self.settings.delete_sequence,
+                    key_event_type,
+                );
+                let semantic_bytes = semantic_sequence
+                    .as_deref()
+                    .unwrap_or(if event.keystroke.key == "enter" {
+                        "\n"
+                    } else {
+                        ""
+                    })
+                    .as_bytes();
+                let secret_entry = self.input_answers_privilege_prompt(semantic_bytes);
+                if self.send_user_encoded_key_without_broadcast(
+                    semantic_bytes,
+                    Some((&event.keystroke.key, sequence.as_bytes())),
+                    cx,
+                ) && !secret_entry
+                {
+                    // Other panes can use SSH or a different keyboard protocol.
+                    self.broadcast_user_input(
+                        super::TerminalBroadcastInputKind::Protocol,
+                        semantic_bytes,
+                        cx,
+                    );
+                }
+            } else {
+                self.send_user_protocol_bytes(sequence.as_bytes(), cx);
+            }
             return true;
         }
 
@@ -439,6 +479,15 @@ impl TerminalPane {
 
     pub(crate) fn handle_key_up(&mut self, event: &KeyUpEvent, cx: &mut Context<Self>) {
         let mode = self.terminal.lock().mode();
+        if mode.contains(TermMode::WIN32_INPUT) {
+            // Modifiers may have changed since key-down. The delivered key identity,
+            // not the current chord, determines whether ConPTY needs a release.
+            if !self.win32_pressed_keys.remove(&event.keystroke.key) {
+                return;
+            }
+        } else {
+            self.win32_pressed_keys.clear();
+        }
         if let Some(sequence) = configurable_key_escape_sequence(
             &event.keystroke,
             &mode,
@@ -473,7 +522,7 @@ impl TerminalPane {
         self.pending_search_reveal = false;
 
         if mouse_mode(mode, event.modifiers.shift) {
-            self.clear_smooth_scroll_remainder();
+            self.clear_smooth_scroll_animation();
             let rows = scroll_delta.rows;
             if rows == 0 {
                 return;
@@ -491,7 +540,7 @@ impl TerminalPane {
         if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL)
             && !event.modifiers.shift
         {
-            self.clear_smooth_scroll_remainder();
+            self.clear_smooth_scroll_animation();
             if scroll_delta.rows == 0 {
                 return;
             }
@@ -590,13 +639,18 @@ impl TerminalPane {
     }
 
     pub(super) fn clear_smooth_scroll_remainder(&mut self) -> bool {
-        let had_remainder = f32::from(self.scroll_input_remainder_px).abs() > f32::EPSILON
-            || f32::from(self.smooth_scroll_offset_px).abs() > f32::EPSILON
-            || self.smooth_scroll_animation.is_some();
+        let had_remainder = f32::from(self.scroll_input_remainder_px).abs() > f32::EPSILON;
         self.scroll_input_remainder_px = px(0.0);
+        self.clear_smooth_scroll_animation() || had_remainder
+    }
+
+    fn clear_smooth_scroll_animation(&mut self) -> bool {
+        // Application mouse and alternate-scroll input must accumulate sub-row touchpad deltas.
+        let had_animation = f32::from(self.smooth_scroll_offset_px).abs() > f32::EPSILON
+            || self.smooth_scroll_animation.is_some();
         self.smooth_scroll_offset_px = px(0.0);
         self.smooth_scroll_animation = None;
-        had_remainder
+        had_animation
     }
 
     fn start_smooth_scroll_row_animation(&mut self, applied_rows: f32) {
@@ -3283,13 +3337,13 @@ mod tests {
     use gpui::{AppContext, IntoElement, Render, ScrollDelta, TestAppContext, Window, div, point};
     #[cfg(unix)]
     use oxideterm_terminal::{
-        GraphicsOptions, LocalPtyConfig, ShellInfo, TerminalEncoding, TerminalEvent,
-        TerminalSession, VIM_FREE_TYPE_INTEGRATION_SOURCE,
+        GraphicsOptions, LocalPtyConfig, ShellInfo, TerminalEditorClipboardOperation,
+        TerminalEncoding, TerminalEvent, TerminalSession, VIM_FREE_TYPE_INTEGRATION_SOURCE,
     };
     use oxideterm_terminal::{TerminalAttrs, TerminalCell, TerminalColor, TerminalCursorShape};
     use oxideterm_terminal::{
-        TerminalEditorApplication, TerminalEditorCapabilities, TerminalEditorClipboardOperation,
-        TerminalEditorIntegrationEvent, TerminalEditorMode, TerminalEditorSelection,
+        TerminalEditorApplication, TerminalEditorCapabilities, TerminalEditorIntegrationEvent,
+        TerminalEditorMode, TerminalEditorSelection,
     };
 
     struct TerminalScrollTestRoot;

@@ -13,7 +13,7 @@ use alacritty_terminal::{
     grid::{Dimensions, Scroll},
     index::Line,
     sync::FairMutex,
-    term::{Config, Osc52, Term, TermDamage, cell::Flags},
+    term::{Config, Osc52, Term, TermDamage, cell::Flags, color::Colors},
     tty::{self, Shell},
 };
 use anyhow::{Context, Result};
@@ -115,11 +115,9 @@ pub use shell_integration::{
     TerminalCommandMarkEvent,
 };
 
-pub use terminal_notification::{TerminalNotification, TerminalNotificationSource};
-
+pub use color::TerminalPalette;
 use color::{
-    OXIDETERM_DARK_THEME, attrs_from_flags, color_for_alacritty_request_with_override,
-    style_colors_for_cell, style_origin_for_cell,
+    attrs_from_flags, color_for_alacritty_request, style_colors_for_cell, style_origin_for_cell,
 };
 use local_graphics_event_loop::{
     LocalGraphicsEventLoop, LocalGraphicsMsg, LocalGraphicsNotifier, LocalPtyReadReport,
@@ -135,6 +133,7 @@ use process_lifecycle::cleanup_local_pty_process_tree;
 use search::search_logical_line_matches;
 pub(crate) use search::search_matches_from_term;
 use search::{append_grid_line_text, viewport_row_for_grid_line};
+pub use terminal_notification::{TerminalNotification, TerminalNotificationSource};
 
 fn interactive_terminal_config(scrollback_lines: usize) -> Config {
     let mut config = Config::default();

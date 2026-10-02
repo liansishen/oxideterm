@@ -3,7 +3,9 @@
 
 from pathlib import Path
 import codecs
+import hashlib
 import plistlib
+import zipfile
 import shutil
 import subprocess
 import sys
@@ -15,6 +17,7 @@ from unittest.mock import call, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "release"))
 
 import package_native
+import conpty_runtime
 
 
 class WindowsInstallerScriptTests(unittest.TestCase):
@@ -620,20 +623,44 @@ class ReleaseDocumentTests(unittest.TestCase):
 class WindowsConptyRuntimeTests(unittest.TestCase):
     def test_windows_package_installs_conpty_runtime_beside_executable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            destination = Path(directory)
-            package_native.copy_windows_conpty_runtime(
-                destination, "x86_64-pc-windows-msvc"
-            )
-
-            sources = {
-                "conpty.dll": package_native.CONPTY_RUNTIME_DIR / "conpty.dll",
-                "OpenConsole.exe": package_native.CONPTY_RUNTIME_DIR
-                / "x64"
-                / "OpenConsole.exe",
+            root = Path(directory)
+            package = root / "runtime.nupkg"
+            targets = {
+                "x86_64-pc-windows-msvc": ("x64", b"fixture x64 DLL", b"fixture x64 host"),
+                "aarch64-pc-windows-msvc": ("arm64", b"fixture arm64 DLL", b"fixture arm64 host"),
             }
-            for name in package_native.CONPTY_RUNTIME_FILES:
-                copied = destination / name
-                self.assertEqual(copied.read_bytes(), sources[name].read_bytes())
+            runtimes = {}
+            with zipfile.ZipFile(package, "w") as archive:
+                for target, (arch, dll, host) in targets.items():
+                    archive.writestr(f"runtimes/win-{arch}/native/conpty.dll", dll)
+                    archive.writestr(f"build/native/runtimes/{arch}/OpenConsole.exe", host)
+                    runtimes[target] = (
+                        arch,
+                        hashlib.sha256(dll).hexdigest(),
+                        hashlib.sha256(host).hexdigest(),
+                    )
+            package_digest = hashlib.sha256(package.read_bytes()).hexdigest()
+
+            with (
+                patch.object(conpty_runtime, "RUNTIMES", runtimes),
+                patch.object(conpty_runtime, "PACKAGE_SHA256", package_digest),
+                patch.object(conpty_runtime, "cached_package", return_value=package),
+            ):
+                for target, (_arch, expected_dll, expected_host) in targets.items():
+                    with self.subTest(target=target):
+                        destination = root / target
+                        package_native.copy_windows_conpty_runtime(destination, target)
+                        self.assertEqual((destination / "conpty.dll").read_bytes(), expected_dll)
+                        self.assertEqual((destination / "OpenConsole.exe").read_bytes(), expected_host)
+                        self.assertEqual(
+                            {
+                                path.relative_to(destination).as_posix()
+                                for path in destination.rglob("*")
+                                if path.is_file()
+                            },
+                            {"conpty.dll", "OpenConsole.exe"},
+                        )
+                        self.assertFalse((destination / "resources" / "conpty").exists())
 
     def test_non_windows_package_omits_conpty_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

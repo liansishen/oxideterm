@@ -1092,7 +1092,7 @@ mod tests {
     }
 
     #[test]
-    fn persisted_number_drafts_clamp_in_model_layer() {
+    fn persisted_number_drafts_clamp_valid_values_and_reject_invalid_text() {
         let mut settings = PersistedSettings::default();
 
         assert_eq!(
@@ -1125,6 +1125,16 @@ mod tests {
             SettingsInputDraftApply::Applied
         );
         assert_eq!(settings.terminal.scrollback, 20_000);
+        let original_port = settings.connection_defaults.port;
+        assert_eq!(
+            apply_persisted_settings_input_draft(
+                &mut settings,
+                SettingsInput::ConnectionDefaultPort,
+                "not-a-port",
+            ),
+            SettingsInputDraftApply::Invalid
+        );
+        assert_eq!(settings.connection_defaults.port, original_port);
     }
 
     #[test]
@@ -1196,23 +1206,6 @@ mod tests {
             settings.terminal.command_bar.focus_handoff_commands,
             ["codex", "vim", "custom-new"]
         );
-    }
-
-    #[test]
-    fn invalid_persisted_number_draft_is_reported_without_mutation() {
-        let mut settings = PersistedSettings::default();
-        let original = settings.connection_defaults.port;
-
-        assert_eq!(
-            apply_persisted_settings_input_draft(
-                &mut settings,
-                SettingsInput::ConnectionDefaultPort,
-                "not-a-port",
-            ),
-            SettingsInputDraftApply::Invalid
-        );
-
-        assert_eq!(settings.connection_defaults.port, original);
     }
 
     #[test]

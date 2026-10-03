@@ -279,7 +279,7 @@ Les sessions SFTP portent une génération de connexion : après une reconnexion
 
 Ce fork possède un versionnage et des publications distincts du [projet amont](https://github.com/AnalyseDeCircuit/oxideterm). Ses versions sont disponibles dans les [publications OxideTerm](https://github.com/liansishen/oxideterm/releases). L’application permet de configurer un proxy de mises à jour.
 
-Ses modifications comprennent les fichiers Windows ConPTY `conpty.dll` et `OpenConsole.exe` à côté de l’exécutable, la restauration de l’arborescence des sessions, les polices de secours CJK et l’intégration de la barre de titre à la fenêtre.
+Ses modifications comprennent la restauration de l’arborescence des sessions, les polices de secours CJK et l’intégration de la barre de titre à la fenêtre.
 
 <a id="install"></a>
 

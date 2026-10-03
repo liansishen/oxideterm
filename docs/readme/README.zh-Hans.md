@@ -279,7 +279,7 @@ SFTP 会话带有连接世代标识：重连后，符合条件的会话会重新
 
 本分支独立于[上游项目](https://github.com/AnalyseDeCircuit/oxideterm)进行版本管理和发布。本分支构建版本可从 [OxideTerm Releases](https://github.com/liansishen/oxideterm/releases)下载。应用支持配置更新代理。
 
-本分支特有改动包括：将 Windows ConPTY 文件 `conpty.dll` 和 `OpenConsole.exe` 放在可执行文件旁、恢复会话树、CJK 字体回退，以及将标题栏与窗口界面合并显示。
+本分支特有改动包括：恢复会话树、CJK 字体回退，以及将标题栏与窗口界面合并显示。
 
 <a id="install"></a>
 

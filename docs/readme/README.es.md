@@ -279,7 +279,7 @@ Las sesiones SFTP llevan una generación de conexión: tras una reconexión, se 
 
 Esta bifurcación tiene versiones y publicaciones independientes del [proyecto original](https://github.com/AnalyseDeCircuit/oxideterm). Sus compilaciones están en las [versiones de OxideTerm](https://github.com/liansishen/oxideterm/releases). La aplicación permite configurar un proxy de actualizaciones.
 
-Entre sus cambios propios están los archivos Windows ConPTY `conpty.dll` y `OpenConsole.exe` junto al ejecutable, la restauración del árbol de sesiones, las fuentes alternativas CJK y la integración de la barra de título en la ventana.
+Entre sus cambios propios están la restauración del árbol de sesiones, las fuentes alternativas CJK y la integración de la barra de título en la ventana.
 
 <a id="install"></a>
 

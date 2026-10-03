@@ -279,7 +279,7 @@ SFTP-Sitzungen tragen eine Verbindungsgeneration: Nach einer Wiederverbindung wi
 
 Dieser Fork wird unabhängig vom [Upstream-Projekt](https://github.com/AnalyseDeCircuit/oxideterm) versioniert und veröffentlicht. Builds dieses Forks finden Sie in den [OxideTerm-Releases](https://github.com/liansishen/oxideterm/releases). Die Anwendung unterstützt einen konfigurierbaren Update-Proxy.
 
-Fork-spezifische Änderungen: Die Windows-ConPTY-Dateien `conpty.dll` und `OpenConsole.exe` liegen neben der ausführbaren Datei; außerdem gibt es die Wiederherstellung des Sitzungsbaums, CJK-Schrift-Fallbacks und eine integrierte Fenster-/Titelleistenansicht.
+Fork-spezifische Änderungen: die Wiederherstellung des Sitzungsbaums, CJK-Schrift-Fallbacks und eine integrierte Fenster-/Titelleistenansicht.
 
 <a id="install"></a>
 

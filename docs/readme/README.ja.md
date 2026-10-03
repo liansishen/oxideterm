@@ -279,7 +279,7 @@ SFTP セッションには接続の世代情報が含まれます。再接続後
 
 このフォークは[上流プロジェクト](https://github.com/AnalyseDeCircuit/oxideterm)とは別にバージョン管理・リリースされています。ビルドは[OxideTerm のリリース](https://github.com/liansishen/oxideterm/releases)から入手できます。アプリでは更新プロキシを設定できます。
 
-フォーク固有の変更には、実行ファイルと同じディレクトリに置く Windows ConPTY ファイル `conpty.dll` と `OpenConsole.exe`、セッションツリーの復元、CJK フォントのフォールバック、タイトルバーとウィンドウの統合表示があります。
+フォーク固有の変更には、セッションツリーの復元、CJK フォントのフォールバック、タイトルバーとウィンドウの統合表示があります。
 
 <a id="install"></a>
 

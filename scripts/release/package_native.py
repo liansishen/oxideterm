@@ -54,9 +54,6 @@ AGENT_RESOURCE_DIR = "agents"
 AGENT_BINARY_PREFIX = "oxideterm-agent-"
 ENCODED_AGENT_SUFFIX = ".b64"
 HELPER_RESOURCE_DIR = "helpers"
-# Installed beside the executable and listed in the portable update manifest so
-# in-place updates replace them along with the rest of the package.
-CONPTY_RUNTIME_FILES = ("conpty.dll", "OpenConsole.exe")
 UPDATE_HELPER_DIR = "tools"
 WINDOWS_UPDATE_STAGING_DIR = "install"
 WINDOWS_UPDATE_FLAG = "OXIDETERM_UPDATE"
@@ -430,10 +427,6 @@ def copy_runtime_resources(dst: Path, target: str, *, encode_agent_binaries: boo
     if not helper_source.exists():
         raise FileNotFoundError(f"target helper resource directory not found: {helper_source}")
     copy_tree(helper_source, dst / HELPER_RESOURCE_DIR / target)
-
-
-def copy_windows_conpty_runtime(dst: Path, target: str) -> None:
-    """Install the pinned ConPTY runtime beside the executable for Windows packages."""
     if "windows" in target:
         stage_conpty_runtime(dst, target)
 
@@ -978,9 +971,6 @@ def write_portable_update_manifest(
     """Declare exactly which package-owned entries may be replaced in place."""
     managed_entries = [
         binary.name,
-        # Windows packages install the ConPTY runtime beside the executable, so
-        # in-place updates have to replace those files as well.
-        *(name for name in CONPTY_RUNTIME_FILES if (package_root / name).is_file()),
         "resources",
         *(destination_name for _source, destination_name in RELEASE_DOCUMENTS),
         PACKAGE_VERSION_FILENAME,
@@ -1020,7 +1010,6 @@ def create_portable_package(
     shutil.copy2(update_helper, helper_dest)
     make_executable(helper_dest)
     copy_runtime_resources(package_root / "resources", target)
-    copy_windows_conpty_runtime(package_root, target)
     copy_release_documents(package_root)
     write_package_version(package_root, version)
     (package_root / PORTABLE_MARKER_FILENAME).touch()
@@ -1059,7 +1048,6 @@ def stage_windows_installer_root(
     shutil.copy2(binary, installer_root / binary.name)
     shutil.copy2(update_helper, installer_root / UPDATE_HELPER_DIR / update_helper.name)
     copy_runtime_resources(installer_root / "resources", target)
-    copy_windows_conpty_runtime(installer_root, target)
     copy_release_documents(installer_root)
     write_package_version(installer_root, version)
     return installer_root

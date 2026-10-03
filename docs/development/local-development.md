@@ -40,15 +40,15 @@ Use a supported macOS release with Xcode Command Line Tools available. Native wi
 
 Use the MSVC Rust target and a Visual Studio C++ build environment with a Windows SDK. Run the application from a Developer PowerShell when diagnosing linker or SDK problems. The CI platform check compiles `gpui-pre-windows` and `oxideterm-gpui-app`; it does not replace manual validation of IME, pointer capture, DirectWrite, titlebar, or Direct3D behavior.
 
-Before opening local shells in a development build, stage the pinned ConPTY runtime beside the executable:
+Before opening local shells in a development build, stage the pinned ConPTY runtime under the executable's resources directory:
 
 ```sh
 python scripts/release/conpty_runtime.py --target x86_64-pc-windows-msvc --destination target/debug
 ```
 
-Use `aarch64-pc-windows-msvc` for ARM64 and adjust the destination when using `--target` or `--release`. The script downloads Microsoft ConPTY `1.24.260710001` from NuGet and verifies its SHA-256 digest. Windows installers and portable packages include `conpty.dll` and `OpenConsole.exe` beside the executable; the application requires that bundled pair. A missing runtime is an error, so an unrelated DLL on `PATH` cannot change local shell behavior.
+Use `aarch64-pc-windows-msvc` for ARM64 and adjust the destination when using `--target` or `--release`. The script downloads Microsoft ConPTY `1.24.260710001` from NuGet and verifies its SHA-256 digest. The runtime files are `resources/conpty/conpty.dll` and the architecture-specific `resources/conpty/x64/OpenConsole.exe` (or `arm64/OpenConsole.exe`). Windows installers and portable packages retain this directory layout and update its files in place. A missing runtime is an error.
 
-The Windows keyboard integration test launches an isolated console reader. Stage the runtime beside the test executable before running it:
+The Windows keyboard integration test launches an isolated console reader. Stage the runtime in the test executable's resources directory before running it:
 
 ```sh
 python scripts/release/conpty_runtime.py --target x86_64-pc-windows-msvc --destination target/debug/deps

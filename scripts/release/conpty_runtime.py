@@ -10,6 +10,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+
 PACKAGE_VERSION = "1.24.260710001"
 PACKAGE_SHA256 = "175640566a3b59c4b132070ee96c2c77e5ab7edd2e92732a5eb3610bbf63d90e"
 PACKAGE_NAME = f"microsoft.windows.console.conpty.{PACKAGE_VERSION}.nupkg"
@@ -33,13 +34,12 @@ RUNTIMES = {
 
 
 def runtime_files(target: str) -> dict[str, tuple[str, str]]:
-    """Map package-relative source paths to root-level files and pinned digests."""
+    """Map bundle-relative paths to package entries and their pinned digests."""
     arch, dll_digest, host_digest = RUNTIMES[target]
     return {
         "conpty.dll": (f"runtimes/win-{arch}/native/conpty.dll", dll_digest),
-        "OpenConsole.exe": (
-            f"build/native/runtimes/{arch}/OpenConsole.exe",
-            host_digest,
+        f"{arch}/OpenConsole.exe": (
+            f"build/native/runtimes/{arch}/OpenConsole.exe", host_digest
         ),
     }
 
@@ -67,17 +67,19 @@ def cached_package() -> Path:
     return package
 
 
-def stage_runtime(destination: Path, target: str, package: Path | None = None) -> None:
+def stage_runtime(resources: Path, target: str, package: Path | None = None) -> None:
     files = runtime_files(target)
     package = package if package is not None else cached_package()
     verify_digest(package.read_bytes(), PACKAGE_SHA256, package.name)
     with zipfile.ZipFile(package) as archive:
+        # Validate both files before changing a development or package directory.
         payloads = {name: archive.read(entry) for name, (entry, _) in files.items()}
     for name, payload in payloads.items():
         verify_digest(payload, files[name][1], name)
-    destination.mkdir(parents=True, exist_ok=True)
     for name, payload in payloads.items():
-        (destination / name).write_bytes(payload)
+        destination = resources / "conpty" / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(payload)
     print(f"Bundled Microsoft ConPTY {PACKAGE_VERSION} for {target}", flush=True)
 
 
@@ -86,7 +88,7 @@ def main() -> None:
     parser.add_argument("--target", choices=RUNTIMES, required=True)
     parser.add_argument("--destination", type=Path, required=True, help="Directory containing the application executable")
     args = parser.parse_args()
-    stage_runtime(args.destination, args.target)
+    stage_runtime(args.destination / "resources", args.target)
 
 
 if __name__ == "__main__":

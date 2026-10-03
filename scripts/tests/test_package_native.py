@@ -3,9 +3,7 @@
 
 from pathlib import Path
 import codecs
-import hashlib
 import plistlib
-import zipfile
 import shutil
 import subprocess
 import sys
@@ -17,7 +15,6 @@ from unittest.mock import call, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "release"))
 
 import package_native
-import conpty_runtime
 
 
 class WindowsInstallerScriptTests(unittest.TestCase):
@@ -493,81 +490,27 @@ class ReleaseDocumentTests(unittest.TestCase):
             self.assertNotIn("data", manifest["managedEntries"])
             self.assertNotIn("portable.json", manifest["managedEntries"])
 
-    def test_portable_update_manifest_tracks_windows_conpty_runtime(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            package_root = Path(directory)
-            binary = package_root / "oxideterm-native.exe"
-            update_helper = package_root / "oxideterm-update-helper.exe"
-            manifest_path = package_root / "portable-update.json"
 
-            package_native.write_portable_update_manifest(
-                package_root, binary, update_helper
-            )
-            absent = package_native.json.loads(manifest_path.read_text(encoding="utf-8"))
-            for name in package_native.CONPTY_RUNTIME_FILES:
-                self.assertNotIn(name, absent["managedEntries"])
-
-            for name in package_native.CONPTY_RUNTIME_FILES:
-                (package_root / name).write_bytes(b"runtime")
-
-            package_native.write_portable_update_manifest(
-                package_root, binary, update_helper
-            )
-            present = package_native.json.loads(manifest_path.read_text(encoding="utf-8"))
-            for name in package_native.CONPTY_RUNTIME_FILES:
-                self.assertIn(name, present["managedEntries"])
-
-
-class WindowsConptyRuntimeTests(unittest.TestCase):
-    def test_windows_package_installs_conpty_runtime_beside_executable(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            package = root / "runtime.nupkg"
-            targets = {
-                "x86_64-pc-windows-msvc": ("x64", b"fixture x64 DLL", b"fixture x64 host"),
-                "aarch64-pc-windows-msvc": ("arm64", b"fixture arm64 DLL", b"fixture arm64 host"),
-            }
-            runtimes = {}
-            with zipfile.ZipFile(package, "w") as archive:
-                for target, (arch, dll, host) in targets.items():
-                    archive.writestr(f"runtimes/win-{arch}/native/conpty.dll", dll)
-                    archive.writestr(f"build/native/runtimes/{arch}/OpenConsole.exe", host)
-                    runtimes[target] = (
-                        arch,
-                        hashlib.sha256(dll).hexdigest(),
-                        hashlib.sha256(host).hexdigest(),
-                    )
-            package_digest = hashlib.sha256(package.read_bytes()).hexdigest()
-
-            with (
-                patch.object(conpty_runtime, "RUNTIMES", runtimes),
-                patch.object(conpty_runtime, "PACKAGE_SHA256", package_digest),
-                patch.object(conpty_runtime, "cached_package", return_value=package),
-            ):
-                for target, (_arch, expected_dll, expected_host) in targets.items():
-                    with self.subTest(target=target):
-                        destination = root / target
-                        package_native.copy_windows_conpty_runtime(destination, target)
-                        self.assertEqual((destination / "conpty.dll").read_bytes(), expected_dll)
-                        self.assertEqual((destination / "OpenConsole.exe").read_bytes(), expected_host)
-                        self.assertEqual(
-                            {
-                                path.relative_to(destination).as_posix()
-                                for path in destination.rglob("*")
-                                if path.is_file()
-                            },
-                            {"conpty.dll", "OpenConsole.exe"},
-                        )
-                        self.assertFalse((destination / "resources" / "conpty").exists())
-
+class RuntimeResourceTests(unittest.TestCase):
     def test_non_windows_package_omits_conpty_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            destination = Path(directory)
-            package_native.copy_windows_conpty_runtime(
-                destination, "aarch64-apple-darwin"
+            root = Path(directory)
+            source = root / "source"
+            target = "aarch64-apple-darwin"
+            for relative in ["agents", "icons", f"cli-bin/{target}", f"helpers/{target}"]:
+                (source / relative).mkdir(parents=True)
+            (source / f"helpers/{target}/helper").write_bytes(b"macOS helper fixture")
+            destination = root / "resources"
+            with (
+                patch.object(package_native, "RESOURCE_DIR", source),
+                patch.object(package_native, "stage_conpty_runtime") as stage_runtime,
+            ):
+                package_native.copy_runtime_resources(destination, target)
+            self.assertEqual(
+                (destination / f"helpers/{target}/helper").read_bytes(),
+                b"macOS helper fixture",
             )
-
-            self.assertEqual(list(destination.iterdir()), [])
+            stage_runtime.assert_not_called()
 
 
 class ReleaseVersionTests(unittest.TestCase):

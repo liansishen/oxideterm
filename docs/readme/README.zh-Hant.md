@@ -279,7 +279,7 @@ SFTP 工作階段帶有連線世代識別碼：重新連線後，符合條件的
 
 本分支獨立於[上游專案](https://github.com/AnalyseDeCircuit/oxideterm)進行版本管理與發布。本分支建置版本可從 [OxideTerm Releases](https://github.com/liansishen/oxideterm/releases)下載。應用程式支援設定更新 Proxy。
 
-本分支特有變更包括：將 Windows ConPTY 檔案 `conpty.dll` 和 `OpenConsole.exe` 放在可執行檔旁、還原工作階段樹、CJK 字型 fallback，以及將標題列與視窗介面整合顯示。
+本分支特有變更包括：還原工作階段樹、CJK 字型 fallback，以及將標題列與視窗介面整合顯示。
 
 <a id="install"></a>
 

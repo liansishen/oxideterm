@@ -106,7 +106,7 @@ fn win32_input_leaves_printable_and_ime_text_on_the_platform_commit_path() {
 
 #[cfg(windows)]
 #[test]
-#[ignore = "requires ConPTY staged beside the test executable; see local-development.md"]
+#[ignore = "requires ConPTY staged in the test executable's resources directory; see local-development.md"]
 fn bundled_conpty_delivers_distinct_ctrl_j_and_enter_events() {
     use crate::TerminalPane;
     use oxideterm_terminal::{LocalPtyConfig, ShellInfo};

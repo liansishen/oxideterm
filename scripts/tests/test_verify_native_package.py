@@ -81,19 +81,16 @@ class PortableArchiveTests(unittest.TestCase):
             *(f"{root}/{name}" for name in verify_native_package.REQUIRED_DOCUMENTS),
         ]
         if executable.endswith(".exe"):
-            # Windows packages keep the ConPTY runtime beside the executable.
-            entries.extend(
-                f"{root}/{name}"
-                for name in sorted(verify_native_package.WINDOWS_CONPTY_RUNTIME_FILES)
-            )
+            entries.extend([
+                f"{root}/resources/conpty/conpty.dll",
+                f"{root}/resources/conpty/x64/OpenConsole.exe",
+            ])
         return entries
 
     def entry_bytes(
         self,
         name: str,
         executable: str,
-        *,
-        manifest_conpty_runtime: bool = True,
     ) -> bytes:
         if name.endswith("VERSION"):
             return b"2.0.0\n"
@@ -111,10 +108,6 @@ class PortableArchiveTests(unittest.TestCase):
                 "VERSION",
                 "portable-update.json",
             ]
-            if executable.endswith(".exe") and manifest_conpty_runtime:
-                managed_entries.extend(
-                    sorted(verify_native_package.WINDOWS_CONPTY_RUNTIME_FILES)
-                )
             entries = ",".join(f'"{entry}"' for entry in managed_entries)
             return (
                 "{"
@@ -132,6 +125,8 @@ class PortableArchiveTests(unittest.TestCase):
             ("version", None, "VERSION", "contains version"),
             ("plugins", "/data/plugins/", None, "data/plugins"),
             ("manifest", None, "portable-update.json", "includes user data"),
+            ("runtime update scope", None, "portable-update.json", "manifest is incomplete"),
+            ("root-level runtime", None, None, "conpty"),
             ("wrong architecture", None, None, "conpty"),
         ]
         for entry in ("conpty.dll", "OpenConsole.exe"):
@@ -151,12 +146,17 @@ class PortableArchiveTests(unittest.TestCase):
                             if replaced == "VERSION":
                                 content = b"1.9.0\n"
                             elif replaced == "portable-update.json":
-                                content = content.replace(
-                                    b'"managedEntries":[',
-                                    b'"managedEntries":["data",',
-                                )
+                                if name == "runtime update scope":
+                                    content = content.replace(b'"resources",', b'')
+                                else:
+                                    content = content.replace(
+                                        b'"managedEntries":[',
+                                        b'"managedEntries":["data",',
+                                    )
                             else:
                                 content = b"corrupt runtime"
+                        if name == "root-level runtime":
+                            entry = entry.replace("/resources/conpty/x64/", "/").replace("/resources/conpty/", "/")
                         archive.writestr(entry, content)
                 target = (
                     "aarch64-pc-windows-msvc" if name == "wrong architecture"
@@ -168,26 +168,6 @@ class PortableArchiveTests(unittest.TestCase):
                 else:
                     verify_native_package.verify_portable_archive(path, target, "2.0.0")
 
-    def test_windows_portable_archive_rejects_manifest_without_conpty_runtime(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "portable.zip"
-            with zipfile.ZipFile(path, "w") as archive:
-                for name in self.required_entries("OxideTerm", "oxideterm-native.exe"):
-                    archive.writestr(
-                        name,
-                        self.entry_bytes(
-                            name,
-                            "oxideterm-native.exe",
-                            manifest_conpty_runtime=False,
-                        ),
-                    )
-
-            with self.assertRaisesRegex(RuntimeError, "manifest is incomplete"):
-                verify_native_package.verify_portable_archive(
-                    path, "x86_64-pc-windows-msvc", "2.0.0"
-                )
 
     def test_linux_portable_archive_rejects_missing_agent_notice(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

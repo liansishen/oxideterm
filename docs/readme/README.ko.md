@@ -279,7 +279,7 @@ SFTP 세션에는 연결 세대 정보가 포함됩니다. 재연결 후에는 �
 
 이 포크는 [업스트림 프로젝트](https://github.com/AnalyseDeCircuit/oxideterm)와 별도로 버전을 관리하고 릴리스합니다. 빌드는 [OxideTerm 릴리스](https://github.com/liansishen/oxideterm/releases)에서 받을 수 있습니다. 앱에서 업데이트 프록시를 설정할 수 있습니다.
 
-포크 전용 변경 사항에는 실행 파일과 같은 디렉터리에 두는 Windows ConPTY 파일 `conpty.dll` 및 `OpenConsole.exe`, 세션 트리 복원, CJK 글꼴 대체, 창과 제목 표시줄을 통합한 레이아웃이 포함됩니다.
+포크 전용 변경 사항에는 세션 트리 복원, CJK 글꼴 대체, 창과 제목 표시줄을 통합한 레이아웃이 포함됩니다.
 
 <a id="install"></a>
 

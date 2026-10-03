@@ -277,7 +277,7 @@ Phiên SFTP mang số thế hệ kết nối: sau khi kết nối lại, một p
 
 Nhánh này có quy trình đánh phiên bản và phát hành riêng, tách biệt với [dự án upstream](https://github.com/AnalyseDeCircuit/oxideterm). Các bản dựng có trong [bản phát hành OxideTerm](https://github.com/liansishen/oxideterm/releases). Ứng dụng cho phép cấu hình proxy cập nhật.
 
-Các thay đổi riêng gồm các tệp Windows ConPTY `conpty.dll` và `OpenConsole.exe` đặt cạnh tệp thực thi, khôi phục cây phiên, phông chữ dự phòng CJK và bố cục tích hợp thanh tiêu đề vào cửa sổ.
+Các thay đổi riêng gồm khôi phục cây phiên, phông chữ dự phòng CJK và bố cục tích hợp thanh tiêu đề vào cửa sổ.
 
 <a id="install"></a>
 

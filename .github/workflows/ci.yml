@@ -114,13 +114,13 @@ jobs:
           cache-on-failure: false
 
       - name: Check Windows GPUI backend
-        run: cargo check -p gpui_windows
+        run: cargo check -p gpui-pre-windows
 
       - name: Test Windows frame and quit message handling
-        run: cargo test -p gpui_windows --lib windows_message_
+        run: cargo test -p gpui-pre-windows --lib windows_message_
 
       - name: Test Windows text fallback identity
-        run: cargo test -p gpui_windows --lib windows_text_
+        run: cargo test -p gpui-pre-windows --lib windows_text_
 
       - name: Test Windows terminal pipe readiness and EOF
         run: cargo test -p alacritty_terminal --lib tty::windows::blocking::tests

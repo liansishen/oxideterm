@@ -40,7 +40,7 @@ If packaging succeeds but publication fails, dispatch **Native Package** from `m
    python3 scripts/release/bump_version.py <version> --dry-run
    ```
 
-7. Apply the version update with `scripts/release/bump_version.py <version>`. It updates the workspace version, localized README badges, and lockfile; do not hand-edit those outputs.
+7. Apply the version update with `scripts/release/bump_version.py <version>`. It updates the workspace version and lockfile; do not hand-edit those outputs. README badges display the latest GitHub release automatically and need no version edits.
 8. Compose the release body into a temporary file with `.github/scripts/compose_release_notes.py`, then verify channel, language-block order, version section, and stable download links.
 9. Review the complete release diff and stage only the intended release files. Commit and push the release preparation before creating an annotated tag on that verified commit.
 

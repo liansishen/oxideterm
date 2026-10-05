@@ -20,6 +20,7 @@ pub struct NativePluginRegistry {
     contributions: NativePluginContributionStore,
     config: NativePluginGlobalConfig,
     config_path: PathBuf,
+    catalog_tags: HashMap<String, Vec<String>>,
 }
 
 impl NativePluginRegistry {
@@ -47,8 +48,14 @@ impl NativePluginRegistry {
                 }],
             ),
         };
+        let mut catalog_tags = HashMap::new();
         match load_catalog_cache(settings_path) {
             Ok(Some(catalog)) => {
+                catalog_tags = catalog
+                    .plugins
+                    .iter()
+                    .map(|entry| (entry.id.clone(), entry.tags.clone().unwrap_or_default()))
+                    .collect();
                 for plugin in &mut plugins {
                     apply_catalog_compatibility(&mut plugin.manifest, &catalog);
                     plugin.config = config
@@ -80,11 +87,47 @@ impl NativePluginRegistry {
             contributions,
             config,
             config_path,
+            catalog_tags,
         }
     }
 
     pub fn plugins(&self) -> &[NativePluginInfo] {
         &self.plugins
+    }
+
+    pub fn preserve_unchanged_runtimes(&mut self, previous: &Self) {
+        for plugin in &mut self.plugins {
+            if !matches!(
+                plugin.state,
+                NativePluginState::ReadyWasm
+                    | NativePluginState::ReadyProcess
+                    | NativePluginState::Loading
+                    | NativePluginState::Active
+            ) {
+                continue;
+            }
+            let Some(old) = previous.plugins.iter().find(|old| {
+                old.manifest == plugin.manifest
+                    && old.install_dir == plugin.install_dir
+                    && old.runtime_plan == plugin.runtime_plan
+                    && matches!(
+                        old.state,
+                        NativePluginState::Loading | NativePluginState::Active
+                    )
+            }) else {
+                continue;
+            };
+            plugin.state = old.state;
+            self.contributions
+                .copy_runtime_plugin_from(&previous.contributions, &plugin.manifest.id);
+        }
+    }
+
+    pub fn catalog_tags(&self, plugin_id: &str) -> &[String] {
+        self.catalog_tags
+            .get(plugin_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
     }
 
     pub fn diagnostics(&self) -> &[NativePluginDiagnostic] {
@@ -123,6 +166,29 @@ impl NativePluginRegistry {
                 })
             })
             .collect()
+    }
+
+    pub fn file_preview_provider(&self, mime_type: &str) -> Option<(NativePluginInfo, String)> {
+        self.plugins.iter().find_map(|plugin| {
+            if !native_plugin_state_is_active_like(plugin.state)
+                || native_plugin_requires_permission_review(
+                    &plugin.manifest,
+                    &plugin.runtime_plan,
+                    &plugin.config,
+                )
+            {
+                return None;
+            }
+            let preview = plugin
+                .manifest
+                .contributes
+                .as_ref()?
+                .file_previews
+                .as_ref()?
+                .iter()
+                .find(|preview| preview.mime_types.iter().any(|value| value == mime_type))?;
+            Some((plugin.clone(), preview.command.clone()))
+        })
     }
 
     pub fn wasm_activation_plans(&self) -> Vec<NativePluginWasmActivationPlan> {
@@ -380,7 +446,9 @@ impl NativePluginRegistry {
         }
         save_native_plugin_config(&self.config_path, &self.config)?;
         let settings_path = settings_path_from_native_plugin_config_path(&self.config_path);
-        *self = NativePluginRegistry::discover(&settings_path);
+        let mut refreshed = NativePluginRegistry::discover(&settings_path);
+        refreshed.preserve_unchanged_runtimes(self);
+        *self = refreshed;
         Ok(())
     }
 
@@ -616,7 +684,18 @@ impl NativePluginRegistry {
 
         save_native_plugin_config(&self.config_path, &self.config)?;
         self.refresh_plugin_state(plugin_id);
-        self.contributions = NativePluginContributionStore::from_plugins(&self.plugins);
+        let mut contributions = NativePluginContributionStore::from_plugins(&self.plugins);
+        for plugin in &self.plugins {
+            if plugin.manifest.id != plugin_id
+                && matches!(
+                    plugin.state,
+                    NativePluginState::Loading | NativePluginState::Active
+                )
+            {
+                contributions.copy_runtime_plugin_from(&self.contributions, &plugin.manifest.id);
+            }
+        }
+        self.contributions = contributions;
         Ok(())
     }
 

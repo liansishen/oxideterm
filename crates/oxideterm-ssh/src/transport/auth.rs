@@ -8,6 +8,11 @@ fn should_retry_password_auth(result: &client::AuthResult) -> bool {
     )
 }
 
+enum PasswordFallbackOutcome {
+    NotAuthenticated,
+    Authenticated { password_confirmed: bool },
+}
+
 async fn try_password_as_keyboard_interactive(
     handle: &mut client::Handle<NativeClientHandler>,
     config: &SshConfig,
@@ -15,18 +20,18 @@ async fn try_password_as_keyboard_interactive(
     password_result: &client::AuthResult,
     prompt_handler: Option<&dyn SshPromptHandler>,
     audit: &mut AuthenticationAudit,
-) -> Result<bool, SshTransportError> {
+) -> Result<PasswordFallbackOutcome, SshTransportError> {
     let client::AuthResult::Failure {
         partial_success: false,
         remaining_methods,
     } = password_result
     else {
-        return Ok(false);
+        return Ok(PasswordFallbackOutcome::NotAuthenticated);
     };
     if !remaining_methods.contains(&MethodKind::KeyboardInteractive)
         || remaining_methods.contains(&MethodKind::Password)
     {
-        return Ok(false);
+        return Ok(PasswordFallbackOutcome::NotAuthenticated);
     }
     tracing::debug!("SSH attempting password-as-keyboard-interactive fallback");
 
@@ -56,8 +61,14 @@ async fn try_password_as_keyboard_interactive(
 
     for _ in 0..MAX_PASSWORD_KBI_FALLBACK_ROUNDS {
         match response {
-            client::KeyboardInteractiveAuthResponse::Success => return Ok(true),
-            client::KeyboardInteractiveAuthResponse::Failure { .. } => return Ok(false),
+            client::KeyboardInteractiveAuthResponse::Success => {
+                return Ok(PasswordFallbackOutcome::Authenticated {
+                    password_confirmed: password_prompt_consumed,
+                });
+            }
+            client::KeyboardInteractiveAuthResponse::Failure { .. } => {
+                return Ok(PasswordFallbackOutcome::NotAuthenticated);
+            }
             client::KeyboardInteractiveAuthResponse::InfoRequest {
                 name,
                 instructions,
@@ -81,9 +92,9 @@ async fn try_password_as_keyboard_interactive(
                     vec![password.to_string()]
                 } else {
                     let Some(prompt_handler) = prompt_handler else {
-                        return Ok(false);
+                        return Ok(PasswordFallbackOutcome::NotAuthenticated);
                     };
-                    return continue_keyboard_interactive_flow(
+                    let authenticated = continue_keyboard_interactive_flow(
                         handle,
                         prompt_handler,
                         client::KeyboardInteractiveAuthResponse::InfoRequest {
@@ -94,7 +105,15 @@ async fn try_password_as_keyboard_interactive(
                         false,
                         audit,
                     )
-                    .await;
+                    .await?;
+                    // Further user answers can replace a rejected password; success alone cannot confirm it.
+                    return Ok(if authenticated {
+                        PasswordFallbackOutcome::Authenticated {
+                            password_confirmed: false,
+                        }
+                    } else {
+                        PasswordFallbackOutcome::NotAuthenticated
+                    });
                 };
                 response = audit
                     .interactive("response", async {
@@ -119,7 +138,7 @@ async fn try_password_as_keyboard_interactive(
             }
         }
     }
-    Ok(false)
+    Ok(PasswordFallbackOutcome::NotAuthenticated)
 }
 
 async fn authenticate_keyboard_interactive(
@@ -804,34 +823,17 @@ mod private_key_auth_error_tests {
     }
 
     #[test]
-    fn private_key_auth_errors_distinguish_missing_and_invalid_passphrases() {
+    fn private_key_auth_errors_distinguish_passphrases_and_unsupported_material() {
         let key = generated_key_text(Some("secret-pass"));
-
-        let missing = decode_private_key_for_auth(&key, None).unwrap_err();
-        let invalid = decode_private_key_for_auth(&key, Some("wrong-pass")).unwrap_err();
-
-        assert!(
-            missing.to_string().contains("requires a passphrase"),
-            "missing passphrase error: {missing}"
-        );
-        assert!(
-            invalid.to_string().contains("Invalid SSH key passphrase"),
-            "invalid passphrase error: {invalid}"
-        );
-    }
-
-    #[test]
-    fn private_key_auth_errors_distinguish_unsupported_formats() {
-        let error = decode_private_key_for_auth("not a private key", None).unwrap_err();
-
-        assert!(error.to_string().contains("Unsupported SSH private key format"));
-    }
-
-    #[test]
-    fn private_key_auth_errors_distinguish_hardware_key_material() {
-        let error = decode_private_key_for_auth("sk-ssh-ed25519", None).unwrap_err();
-
-        assert!(error.to_string().contains("FIDO/security-key"));
+        for (input, passphrase, diagnostic) in [
+            (key.as_str(), None, "requires a passphrase"),
+            (key.as_str(), Some("wrong-pass"), "Invalid SSH key passphrase"),
+            ("not a private key", None, "Unsupported SSH private key format"),
+            ("sk-ssh-ed25519", None, "FIDO/security-key"),
+        ] {
+            let error = decode_private_key_for_auth(input, passphrase).unwrap_err();
+            assert!(error.to_string().contains(diagnostic), "{diagnostic}: {error}");
+        }
     }
 }
 

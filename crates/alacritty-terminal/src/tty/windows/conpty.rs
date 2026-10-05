@@ -7,16 +7,16 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::IntoRawHandle;
 use std::{mem, ptr};
 
-use windows_sys::Win32::Foundation::{HANDLE, S_OK};
+use windows_sys::Win32::Foundation::{FreeLibrary, HANDLE, HMODULE, S_OK};
 use windows_sys::Win32::Globalization::{
     CSTR_EQUAL, CSTR_GREATER_THAN, CSTR_LESS_THAN, CompareStringOrdinal,
 };
-use windows_sys::Win32::System::Console::{
-    COORD, ClosePseudoConsole, CreatePseudoConsole, HPCON, ResizePseudoConsole,
+use windows_sys::Win32::System::Console::{COORD, HPCON};
+use windows_sys::Win32::System::LibraryLoader::{
+    GetProcAddress, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW,
 };
-use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows_sys::core::{HRESULT, PWSTR};
-use windows_sys::{s, w};
+use windows_sys::s;
 
 use windows_sys::Win32::System::Threading::{
     CREATE_UNICODE_ENVIRONMENT, CreateProcessW, EXTENDED_STARTUPINFO_PRESENT,
@@ -32,58 +32,73 @@ use crate::tty::windows::{Pty, cmdline, win32_string};
 
 const PIPE_CAPACITY: usize = crate::event_loop::READ_BUFFER_SIZE;
 
-/// Load the pseudoconsole API from conpty.dll if possible, otherwise use the
-/// standard Windows API.
-///
-/// The conpty.dll from the Windows Terminal project
-/// supports loading OpenConsole.exe, which offers many improvements and
-/// bugfixes compared to the standard conpty that ships with Windows.
-///
-/// The conpty.dll and OpenConsole.exe files will be searched in PATH and in
-/// the directory where Alacritty's executable is located.
+// All Windows distributions stage the same pinned runtime. Searching PATH or
+// falling back to the OS would make keyboard behavior depend on unrelated installs.
 type CreatePseudoConsoleFn =
     unsafe extern "system" fn(COORD, HANDLE, HANDLE, u32, *mut HPCON) -> HRESULT;
 type ResizePseudoConsoleFn = unsafe extern "system" fn(HPCON, COORD) -> HRESULT;
 type ClosePseudoConsoleFn = unsafe extern "system" fn(HPCON);
 
 struct ConptyApi {
+    _library: ConptyLibrary,
     create: CreatePseudoConsoleFn,
     resize: ResizePseudoConsoleFn,
     close: ClosePseudoConsoleFn,
 }
 
-impl ConptyApi {
-    fn new() -> Self {
-        match Self::load_conpty() {
-            Some(conpty) => {
-                info!("Using conpty.dll for pseudoconsole");
-                conpty
-            },
-            None => {
-                // Cannot load conpty.dll - use the standard Windows API.
-                info!("Using Windows API for pseudoconsole");
-                Self {
-                    create: CreatePseudoConsole,
-                    resize: ResizePseudoConsole,
-                    close: ClosePseudoConsole,
-                }
-            },
-        }
+struct ConptyLibrary(HMODULE);
+
+impl Drop for ConptyLibrary {
+    fn drop(&mut self) {
+        // Conpty owns this reference until after ClosePseudoConsole returns.
+        unsafe { FreeLibrary(self.0) };
     }
+}
 
-    /// Try loading ConptyApi from conpty.dll library.
-    fn load_conpty() -> Option<Self> {
+impl ConptyApi {
+    fn new() -> Result<Self> {
         type LoadedFn = unsafe extern "system" fn() -> isize;
+        let executable = std::env::current_exe()?;
+        let directory = executable
+            .parent()
+            .ok_or_else(|| Error::other("Missing executable directory"))?;
+        let runtime = directory.join("resources").join("conpty");
+        let architecture = match std::env::consts::ARCH {
+            "x86_64" => "x64",
+            "aarch64" => "arm64",
+            _ => return Err(Error::other("Unsupported bundled ConPTY architecture")),
+        };
+        if !runtime.join(architecture).join("OpenConsole.exe").is_file() {
+            return Err(Error::new(
+                std::io::ErrorKind::NotFound,
+                "Missing bundled resources/conpty console host",
+            ));
+        }
+        let library_path = win32_string(&runtime.join("conpty.dll"));
         unsafe {
-            let hmodule = LoadLibraryW(w!("conpty.dll"));
+            let hmodule = LoadLibraryExW(
+                library_path.as_ptr(),
+                ptr::null_mut(),
+                LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32,
+            );
             if hmodule.is_null() {
-                return None;
+                let error = Error::last_os_error();
+                return Err(Error::new(
+                    error.kind(),
+                    format!("Cannot load bundled resources/conpty/conpty.dll: {error}"),
+                ));
             }
-            let create_fn = GetProcAddress(hmodule, s!("CreatePseudoConsole"))?;
-            let resize_fn = GetProcAddress(hmodule, s!("ResizePseudoConsole"))?;
-            let close_fn = GetProcAddress(hmodule, s!("ClosePseudoConsole"))?;
+            let library = ConptyLibrary(hmodule);
+            let create_fn = GetProcAddress(hmodule, s!("CreatePseudoConsole"))
+                .ok_or_else(Error::last_os_error)?;
+            let resize_fn = GetProcAddress(hmodule, s!("ResizePseudoConsole"))
+                .ok_or_else(Error::last_os_error)?;
+            let close_fn = GetProcAddress(hmodule, s!("ClosePseudoConsole"))
+                .ok_or_else(Error::last_os_error)?;
 
-            Some(Self {
+            info!("Using bundled resources/conpty/conpty.dll for pseudoconsole");
+            Ok(Self {
+                _library: library,
                 create: mem::transmute::<LoadedFn, CreatePseudoConsoleFn>(create_fn),
                 resize: mem::transmute::<LoadedFn, ResizePseudoConsoleFn>(resize_fn),
                 close: mem::transmute::<LoadedFn, ClosePseudoConsoleFn>(close_fn),
@@ -111,17 +126,8 @@ impl Drop for Conpty {
 // The ConPTY handle can be sent between threads.
 unsafe impl Send for Conpty {}
 
-/// `PSEUDOCONSOLE_PASSTHROUGH_MODE` from `conpty.h`.
-///
-/// The default mode re-renders the client's output and keeps its own view of the
-/// terminal-facing input state, so mouse-mode changes the client writes can be
-/// reordered or dropped against that view. Passthrough forwards the client's VT
-/// verbatim, which keeps the terminal's mouse tracking equal to what the client
-/// last requested.
-const PSEUDOCONSOLE_PASSTHROUGH_MODE: u32 = 0x0000_0008;
-
 pub fn new(config: &Options, window_size: WindowSize) -> Result<Pty> {
-    let api = ConptyApi::new();
+    let api = ConptyApi::new()?;
     let mut pty_handle: HPCON = 0;
 
     // Passing 0 as the size parameter allows the "system default" buffer
@@ -131,34 +137,23 @@ pub fn new(config: &Options, window_size: WindowSize) -> Result<Pty> {
     let (conout, conout_pty_handle) = miow::pipe::anonymous(0)?;
     let (conin_pty_handle, conin) = miow::pipe::anonymous(0)?;
 
-    // Create the Pseudo Console, using the pipes. Passthrough mode only exists
-    // on newer ConPTY builds, so fall back to the default mode when rejected.
-    let conin_handle: HANDLE = conin_pty_handle.into_raw_handle() as HANDLE;
-    let conout_handle: HANDLE = conout_pty_handle.into_raw_handle() as HANDLE;
-    let mut result = unsafe {
+    // Create the Pseudo Console, using the pipes.
+    let result = unsafe {
         (api.create)(
             window_size.into(),
-            conin_handle,
-            conout_handle,
-            PSEUDOCONSOLE_PASSTHROUGH_MODE,
+            conin_pty_handle.into_raw_handle() as HANDLE,
+            conout_pty_handle.into_raw_handle() as HANDLE,
+            0,
             &mut pty_handle as *mut _,
         )
     };
 
     if result != S_OK {
-        info!("ConPTY rejected passthrough mode; using the default mode");
-        result = unsafe {
-            (api.create)(
-                window_size.into(),
-                conin_handle,
-                conout_handle,
-                0,
-                &mut pty_handle as *mut _,
-            )
-        };
+        return Err(Error::other(format!(
+            "Bundled ConPTY creation failed: HRESULT {result:#010x}"
+        )));
     }
-
-    assert_eq!(result, S_OK);
+    let conpty = Conpty { handle: pty_handle, api };
 
     let mut success;
 
@@ -263,11 +258,9 @@ pub fn new(config: &Options, window_size: WindowSize) -> Result<Pty> {
         }
     }
 
+    let child_watcher = ChildExitWatcher::new(proc_info.hProcess)?;
     let conin = UnblockedWriter::new(conin, PIPE_CAPACITY);
     let conout = UnblockedReader::new(conout, PIPE_CAPACITY);
-
-    let child_watcher = ChildExitWatcher::new(proc_info.hProcess)?;
-    let conpty = Conpty { handle: pty_handle as HPCON, api };
 
     Ok(Pty::new(conpty, conout, conin, child_watcher))
 }

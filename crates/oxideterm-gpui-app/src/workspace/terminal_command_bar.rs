@@ -54,7 +54,8 @@ const TERMINAL_COMMAND_CONTEXT_CHIP_MAX_WIDTH: f32 = 260.0; // Keep context chip
 const TERMINAL_COMMAND_PROJECT_CHIP_MAX_WIDTH: f32 = 240.0; // Project labels are shorter than cwd/git labels in Tauri.
 const TERMINAL_COMMAND_TOOLBAR_HEIGHT: f32 = 32.0;
 pub(in crate::workspace) const TERMINAL_SYNC_HEADER_HEIGHT: f32 = 26.0;
-pub(in crate::workspace) const TERMINAL_SENDER_COMPACT_HEIGHT: f32 = 32.0;
+pub(in crate::workspace) const TERMINAL_SENDER_COMPACT_HEIGHT: f32 =
+    oxideterm_gpui_ui::WORKSPACE_STATUS_BAR_HEIGHT;
 const PRIVILEGE_PROMPT_DEBUG_ENV: &str = "OXIDETERM_PRIVILEGE_DEBUG";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -565,19 +566,7 @@ mod privilege_prompt_helper_tests {
     }
 
     #[test]
-    fn ssh_privilege_scope_prefers_explicit_node_saved_owner() {
-        let origin = NodeOrigin::Restored {
-            saved_connection_id: "restored-conn".to_string(),
-        };
-
-        assert_eq!(
-            saved_ssh_privilege_scope_id(Some("node-owner"), Some(&origin)).as_deref(),
-            Some("node-owner")
-        );
-    }
-
-    #[test]
-    fn ssh_privilege_scope_uses_restored_or_manual_preset_origin() {
+    fn ssh_privilege_scope_prefers_explicit_owner_and_uses_only_saved_origins() {
         let restored = NodeOrigin::Restored {
             saved_connection_id: "restored-conn".to_string(),
         };
@@ -586,18 +575,6 @@ mod privilege_prompt_helper_tests {
             hop_index: 1,
         };
 
-        assert_eq!(
-            saved_ssh_privilege_scope_id(None, Some(&restored)).as_deref(),
-            Some("restored-conn")
-        );
-        assert_eq!(
-            saved_ssh_privilege_scope_id(None, Some(&manual_preset)).as_deref(),
-            Some("jump-chain")
-        );
-    }
-
-    #[test]
-    fn ssh_privilege_scope_does_not_guess_unsaved_node_owner() {
         let direct = NodeOrigin::Direct;
         let legacy_auto_route = NodeOrigin::AutoRoute {
             target_host: "db.internal".to_string(),
@@ -605,12 +582,20 @@ mod privilege_prompt_helper_tests {
             hop_index: 0,
         };
 
-        assert_eq!(saved_ssh_privilege_scope_id(None, Some(&direct)), None);
-        assert_eq!(
-            saved_ssh_privilege_scope_id(None, Some(&legacy_auto_route)),
-            None
-        );
-        assert_eq!(saved_ssh_privilege_scope_id(None, None), None);
+        for (owner, origin, expected) in [
+            (Some("node-owner"), Some(&restored), Some("node-owner")),
+            (None, Some(&restored), Some("restored-conn")),
+            (None, Some(&manual_preset), Some("jump-chain")),
+            (None, Some(&direct), None),
+            (None, Some(&legacy_auto_route), None),
+            (None, None, None),
+        ] {
+            assert_eq!(
+                saved_ssh_privilege_scope_id(owner, origin).as_deref(),
+                expected,
+                "owner={owner:?}, origin={origin:?}"
+            );
+        }
     }
 
     #[test]

@@ -90,29 +90,284 @@ fn manifest_json(id: &str, version: &str) -> String {
 }
 
 #[test]
-fn native_wasm_runtime_uses_explicit_runtime_block() {
-    let mut manifest = minimal_manifest();
-    manifest.runtime = Some(NativePluginRuntime {
-        kind: NativePluginRuntimeKind::Wasm,
-        entry: "plugin.wasm".to_string(),
-    });
-
-    let plan = native_runtime_plan_for_manifest(&manifest).unwrap();
-    assert_eq!(
-        plan,
-        NativePluginRuntimePlan::Wasm {
-            entry: "plugin.wasm".to_string()
-        }
-    );
-}
-
-#[test]
 fn plugin_paths_cannot_escape_install_directory() {
     assert!(validate_plugin_relative_path("panel/native.json").is_ok());
     assert!(validate_plugin_relative_path("../secret").is_err());
     assert!(validate_plugin_relative_path("/tmp/plugin.wasm").is_err());
     assert!(validate_native_plugin_package_url("https://example.invalid/plugin.zip").is_ok());
     assert!(validate_native_plugin_package_url("file:///tmp/plugin.zip").is_err());
+}
+
+#[test]
+fn language_packages_validate_assets_and_follow_install_update_disable_uninstall() {
+    let directory = unique_temp_dir("language-package");
+    let settings = directory.join("settings.json");
+    let package = include_bytes!("../../oxideterm-editor-syntax/tests/fixtures/elixir.zip");
+    let id = "com.oxideterm.language.elixir";
+    NativePluginRegistry::install_managed_plugin_package(&settings, id, None, package, false)
+        .unwrap();
+    let mut registry = NativePluginRegistry::discover(&settings);
+    assert_eq!(
+        registry.plugins()[0]
+            .manifest
+            .contributes
+            .as_ref()
+            .unwrap()
+            .language
+            .as_ref()
+            .unwrap()
+            .id,
+        "elixir"
+    );
+    registry.set_plugin_enabled(id, false).unwrap();
+    assert_eq!(registry.plugins()[0].state, NativePluginState::Disabled);
+    registry.set_plugin_enabled(id, true).unwrap();
+    assert_eq!(
+        registry.plugins()[0].state,
+        NativePluginState::ReadyManifestOnly
+    );
+    for corrupt in [true, false] {
+        use std::io::Read as _;
+        let mut source = zip::ZipArchive::new(Cursor::new(package)).unwrap();
+        let mut updated = ZipWriter::new(Cursor::new(Vec::new()));
+        for index in 0..source.len() {
+            let mut entry = source.by_index(index).unwrap();
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes).unwrap();
+            if entry.name() == "plugin.json" {
+                let mut manifest: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                manifest["version"] = serde_json::json!("0.2.0");
+                bytes = serde_json::to_vec(&manifest).unwrap();
+            }
+            if corrupt && entry.name() == "highlights.scm" {
+                bytes = b"(integer) @string".to_vec();
+            }
+            updated
+                .start_file(entry.name(), SimpleFileOptions::default())
+                .unwrap();
+            updated.write_all(&bytes).unwrap();
+        }
+        let updated = updated.finish().unwrap().into_inner();
+        let result = NativePluginRegistry::install_managed_plugin_package(
+            &settings, id, None, &updated, true,
+        );
+        if corrupt {
+            assert!(result.unwrap_err().contains("checksum mismatch"));
+            assert_eq!(
+                NativePluginRegistry::discover(&settings).plugins()[0]
+                    .manifest
+                    .version,
+                "0.1.0"
+            );
+        } else {
+            result.unwrap();
+            registry = NativePluginRegistry::discover(&settings);
+            assert_eq!(registry.plugins()[0].manifest.version, "0.2.0");
+        }
+    }
+    registry.uninstall_plugin(id, false).unwrap();
+    assert!(!native_plugins_dir(&settings).join(id).exists());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn cached_catalog_corrections_apply_on_offline_restart_and_install() {
+    let temp_dir = unique_temp_dir("plugin-catalog-corrections");
+    let settings_path = temp_dir.join("settings.json");
+    let original = manifest_json("com.example.demo", "1.0.0");
+    let package = plugin_package(&[("plugin.json", original.clone())]);
+    NativePluginRegistry::install_plugin_package_from_bytes(&settings_path, &package, None, false)
+        .unwrap();
+    let mut registry = NativePluginRegistry::discover(&settings_path);
+    registry
+        .set_plugin_enabled("com.example.demo", true)
+        .unwrap();
+    registry
+        .set_plugin_setting_value("com.example.demo", "enabled", serde_json::json!(false))
+        .unwrap();
+    let config_before = fs::read(registry.config_path()).unwrap();
+    let plugin_dir = registry.plugins()[0].install_dir.clone();
+    // A correction may also relax the requirement embedded in an older package.
+    let mut declared: serde_json::Value = serde_json::from_str(&original).unwrap();
+    declared["engines"] = serde_json::json!({"oxideterm": ">=999.0.0"});
+    let original = declared.to_string();
+    fs::write(plugin_dir.join("plugin.json"), &original).unwrap();
+    let package = plugin_package(&[("plugin.json", original.clone())]);
+    let package_record = serde_json::json!({
+        "target": "any", "downloadUrl": "https://example.com/plugin/1.0.0.zip",
+        "checksum": native_plugin_sha256_hex(&package), "size": package.len()
+    });
+    let mut catalog: NativePluginRegistryIndex = serde_json::from_value(serde_json::json!({
+        "version": 1, "plugins": [{
+            "id": "com.example.demo", "name": "Demo", "version": "1.0.0",
+            "packages": [package_record.clone()],
+            "releases": [{
+                "version": "1.0.0", "engines": {"oxideterm": ">=999.0.0"},
+                "packages": [package_record],
+                "compatibilityCorrections": [{
+                    "engines": {"oxideterm": ">=999.0.0"},
+                    "reason": "Requires a newer host", "recordedAt": "2026-10-04T00:00:00Z"
+                }]
+            }]
+        }]
+    }))
+    .unwrap();
+    NativePluginRegistry::cache_official_catalog(&settings_path, &catalog).unwrap();
+    let offline = NativePluginRegistry::discover(&settings_path);
+    assert_eq!(offline.plugins()[0].state, NativePluginState::Error);
+    assert_eq!(offline.contributions().total_count(), 0);
+    assert!(NativePluginRegistry::select_registry_release(&catalog.plugins[0]).is_none());
+    assert!(
+        NativePluginRegistry::install_plugin_package_from_bytes(
+            &settings_path,
+            &package,
+            None,
+            true
+        )
+        .unwrap_err()
+        .contains("plugin_host_incompatible")
+    );
+    assert_eq!(
+        fs::read_to_string(plugin_dir.join("plugin.json")).unwrap(),
+        original
+    );
+    assert_eq!(fs::read(offline.config_path()).unwrap(), config_before);
+
+    catalog.plugins[0].releases[0]
+        .compatibility_corrections
+        .push(
+            serde_json::from_value(serde_json::json!({
+                "engines": {"oxideterm": format!("={}", env!("CARGO_PKG_VERSION"))},
+                "reason": "Verified on this host", "recordedAt": "2026-10-04T01:00:00Z"
+            }))
+            .unwrap(),
+        );
+    NativePluginRegistry::cache_official_catalog(&settings_path, &catalog).unwrap();
+    let restored = NativePluginRegistry::discover(&settings_path);
+    assert_eq!(
+        restored.plugins()[0].state,
+        NativePluginState::ReadyManifestOnly
+    );
+    assert_eq!(
+        restored.plugin_setting_value("com.example.demo", "enabled"),
+        Some(serde_json::json!(false))
+    );
+    assert_eq!(
+        restored.contributions().settings[0].definition.id,
+        "enabled"
+    );
+    assert_eq!(
+        NativePluginRegistry::select_registry_release(&catalog.plugins[0])
+            .unwrap()
+            .version,
+        "1.0.0"
+    );
+    assert_eq!(
+        fs::read_to_string(plugin_dir.join("plugin.json")).unwrap(),
+        original
+    );
+    let cached = fs::read(catalog_cache_path(&settings_path)).unwrap();
+    catalog.plugins[0].releases[0].compatibility_corrections[1]
+        .reason
+        .clear();
+    assert!(NativePluginRegistry::cache_official_catalog(&settings_path, &catalog).is_err());
+    assert_eq!(
+        fs::read(catalog_cache_path(&settings_path)).unwrap(),
+        cached
+    );
+    fs::remove_dir_all(temp_dir).unwrap();
+}
+
+#[test]
+fn cached_catalog_tags_are_available_offline_and_follow_catalog_updates() {
+    let directory = unique_temp_dir("plugin-catalog-tags");
+    fs::create_dir_all(&directory).unwrap();
+    let settings = directory.join("settings.json");
+    let mut catalog: NativePluginRegistryIndex = serde_json::from_value(serde_json::json!({
+        "version": 1,
+        "plugins": [{"id": "com.example.demo", "name": "Demo", "version": "1.0.0", "tags": ["preview", "future-tag"]}]
+    })).unwrap();
+    NativePluginRegistry::cache_official_catalog(&settings, &catalog).unwrap();
+    let registry = NativePluginRegistry::discover(&settings);
+    assert_eq!(
+        registry.catalog_tags("com.example.demo"),
+        &["preview", "future-tag"]
+    );
+    assert_eq!(registry.catalog_tags("com.example.local"), &[] as &[String]);
+
+    catalog.plugins[0].tags = Some(vec!["utilities".into()]);
+    NativePluginRegistry::cache_official_catalog(&settings, &catalog).unwrap();
+    let registry = NativePluginRegistry::discover(&settings);
+    assert_eq!(registry.catalog_tags("com.example.demo"), &["utilities"]);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn host_incompatibility_blocks_install_and_restart_without_losing_plugin_state() {
+    let temp_dir = unique_temp_dir("plugin-host-compatibility");
+    let settings_path = temp_dir.join("settings.json");
+    let original = manifest_json("com.example.demo", "1.0.0");
+    let package = plugin_package(&[("plugin.json", original.clone())]);
+    NativePluginRegistry::install_plugin_package_from_bytes(&settings_path, &package, None, false)
+        .unwrap();
+    let mut registry = NativePluginRegistry::discover(&settings_path);
+    registry
+        .set_plugin_enabled("com.example.demo", true)
+        .unwrap();
+    registry
+        .set_plugin_setting_value("com.example.demo", "enabled", serde_json::json!(false))
+        .unwrap();
+    let plugin_dir = registry.plugins()[0].install_dir.clone();
+    let saved_config = fs::read(registry.config_path()).unwrap();
+    for requirement in [">=999.0.0", "<1.0.0", "invalid"] {
+        let mut incompatible: serde_json::Value = serde_json::from_str(&original).unwrap();
+        incompatible["engines"] = serde_json::json!({"oxideterm": requirement});
+        let package = plugin_package(&[("plugin.json", incompatible.to_string())]);
+        let error = NativePluginRegistry::install_plugin_package_from_bytes(
+            &settings_path,
+            &package,
+            None,
+            true,
+        )
+        .unwrap_err();
+        assert!(error.contains("plugin_host_incompatible"), "{error}");
+        assert_eq!(
+            fs::read_to_string(plugin_dir.join("plugin.json")).unwrap(),
+            original
+        );
+
+        // A copied package must be checked again, even when previously enabled.
+        fs::write(plugin_dir.join("plugin.json"), incompatible.to_string()).unwrap();
+        let mut restarted = NativePluginRegistry::discover(&settings_path);
+        assert_eq!(restarted.plugins()[0].state, NativePluginState::Error);
+        assert_eq!(restarted.contributions().total_count(), 0);
+        assert!(
+            restarted
+                .set_plugin_enabled("com.example.demo", true)
+                .unwrap_err()
+                .contains("plugin_host_incompatible")
+        );
+        assert!(
+            restarted
+                .mark_runtime_active("com.example.demo")
+                .unwrap_err()
+                .contains("plugin_host_incompatible")
+        );
+        assert_eq!(fs::read(restarted.config_path()).unwrap(), saved_config);
+
+        fs::write(plugin_dir.join("plugin.json"), &original).unwrap();
+        let restored = NativePluginRegistry::discover(&settings_path);
+        assert_eq!(
+            restored.plugins()[0].state,
+            NativePluginState::ReadyManifestOnly
+        );
+        assert_eq!(
+            restored.contributions().settings[0].definition.id,
+            "enabled"
+        );
+        assert_eq!(fs::read(restored.config_path()).unwrap(), saved_config);
+    }
+    fs::remove_dir_all(temp_dir).unwrap();
 }
 
 #[test]
@@ -224,49 +479,6 @@ fn permission_capabilities_reject_empty_wildcard_and_duplicate_values() {
 }
 
 #[test]
-fn capability_approval_allows_version_updates_and_narrower_requests() {
-    let mut manifest = minimal_manifest();
-    manifest.permissions.capabilities = vec![
-        "terminal.input.send".to_string(),
-        "terminal.content.read".to_string(),
-    ];
-    let config = NativePluginConfigEntry {
-        approved_capabilities: vec![
-            "terminal.content.read".to_string(),
-            "terminal.input.send".to_string(),
-        ],
-        approved_for_version: Some("1.0.0".to_string()),
-        approved_runtime_kind: Some("wasm".to_string()),
-        ..NativePluginConfigEntry::default()
-    };
-
-    assert!(native_plugin_capability_approval_matches(
-        &manifest, "wasm", &config
-    ));
-    assert!(!native_plugin_capability_approval_matches(
-        &manifest, "process", &config
-    ));
-
-    manifest.version = "1.1.0".to_string();
-    assert!(native_plugin_capability_approval_matches(
-        &manifest, "wasm", &config
-    ));
-
-    manifest.permissions.capabilities = vec!["terminal.content.read".to_string()];
-    assert!(native_plugin_capability_approval_matches(
-        &manifest, "wasm", &config
-    ));
-
-    manifest
-        .permissions
-        .capabilities
-        .push("file.content.read".to_string());
-    assert!(!native_plugin_capability_approval_matches(
-        &manifest, "wasm", &config
-    ));
-}
-
-#[test]
 fn manifest_validation_rejects_unsafe_permission_declarations() {
     let mut manifest = minimal_manifest();
     manifest.permissions.capabilities = vec!["terminal.*".to_string()];
@@ -366,6 +578,8 @@ fn plugin_package_install_supports_flat_nested_conflict_and_updates() {
                     homepage: None,
                     updated_at: None,
                     packages: Vec::new(),
+                    engines: None,
+                    releases: Vec::new(),
                 },
                 NativePluginRegistryEntry {
                     id: "com.example.other".to_string(),
@@ -382,6 +596,8 @@ fn plugin_package_install_supports_flat_nested_conflict_and_updates() {
                     homepage: None,
                     updated_at: None,
                     packages: Vec::new(),
+                    engines: None,
+                    releases: Vec::new(),
                 },
             ],
         },
@@ -696,10 +912,18 @@ fn process_activation_plans_and_runtime_state_transitions_are_host_owned() {
         kind: NativePluginRuntimeKind::Process,
         entry: "bin/plugin".to_string(),
     });
+    manifest.contributes = Some(
+        serde_json::from_value(serde_json::json!({
+            "filePreviews": [{"mimeTypes": ["application/pdf"], "command": "preview.render"}]
+        }))
+        .unwrap(),
+    );
     write_manifest(&plugin_dir, &manifest);
 
     let mut registry = NativePluginRegistry::discover(&settings_path);
+    assert_eq!(registry.plugins()[0].state, NativePluginState::Disabled);
     assert!(registry.process_activation_plans().is_empty());
+    assert!(registry.file_preview_provider("application/pdf").is_none());
     registry
         .set_plugin_enabled("com.example.process", true)
         .unwrap();
@@ -707,6 +931,16 @@ fn process_activation_plans_and_runtime_state_transitions_are_host_owned() {
     assert_eq!(plans.len(), 1);
     assert_eq!(plans[0].plugin_id, "com.example.process");
     assert_eq!(plans[0].entry, "bin/plugin");
+    assert_eq!(registry.plugins()[0].state, NativePluginState::ReadyProcess);
+    let (provider, command) = registry.file_preview_provider("application/pdf").unwrap();
+    assert_eq!(provider.manifest.id, "com.example.process");
+    assert_eq!(command, "preview.render");
+    assert!(registry.file_preview_provider("image/png").is_none());
+    let config = load_native_plugin_config(registry.config_path());
+    assert_eq!(
+        config.plugins["com.example.process"].approved_capabilities,
+        vec![NATIVE_PLUGIN_TRUSTED_PROCESS_CAPABILITY.to_string()]
+    );
 
     registry
         .mark_runtime_loading("com.example.process")
@@ -754,44 +988,7 @@ fn wasm_activation_plans_are_host_owned() {
 }
 
 #[test]
-fn set_plugin_enabled_persists_config_and_refreshes_state() {
-    let temp_dir = unique_temp_dir("plugin-toggle-enabled");
-    let settings_path = temp_dir.join("settings.json");
-    let plugins_dir = native_plugins_dir(&settings_path);
-    let plugin_dir = plugins_dir.join("demo");
-    fs::create_dir_all(&plugin_dir).unwrap();
-    write_manifest(&plugin_dir, &minimal_manifest());
-
-    let mut registry = NativePluginRegistry::discover(&settings_path);
-    assert_eq!(
-        registry.plugins()[0].state,
-        NativePluginState::ReadyManifestOnly
-    );
-
-    registry
-        .set_plugin_enabled("com.example.demo", false)
-        .unwrap();
-    assert_eq!(registry.plugins()[0].state, NativePluginState::Disabled);
-
-    let config = load_native_plugin_config(registry.config_path());
-    assert!(!config.plugins["com.example.demo"].enabled);
-    assert_eq!(
-        config.plugins["com.example.demo"].runtime_kind.as_deref(),
-        Some("manifest-only")
-    );
-
-    registry
-        .set_plugin_enabled("com.example.demo", true)
-        .unwrap();
-    assert_eq!(
-        registry.plugins()[0].state,
-        NativePluginState::ReadyManifestOnly
-    );
-    let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
-fn manifest_only_contributions_are_indexed_without_runtime_execution() {
+fn manifest_only_contributions_follow_persisted_enable_state() {
     let temp_dir = unique_temp_dir("plugin-contributions");
     let settings_path = temp_dir.join("settings.json");
     let plugins_dir = native_plugins_dir(&settings_path);
@@ -801,7 +998,11 @@ fn manifest_only_contributions_are_indexed_without_runtime_execution() {
     manifest.contributes = Some(sample_contributes());
     write_manifest(&plugin_dir, &manifest);
 
-    let registry = NativePluginRegistry::discover(&settings_path);
+    let mut registry = NativePluginRegistry::discover(&settings_path);
+    assert_eq!(
+        registry.plugins()[0].state,
+        NativePluginState::ReadyManifestOnly
+    );
     let contributions = registry.contributions();
     assert_eq!(contributions.tabs.len(), 1);
     assert_eq!(contributions.sidebar_panels.len(), 1);
@@ -825,26 +1026,25 @@ fn manifest_only_contributions_are_indexed_without_runtime_execution() {
             .host_monitor("com.example.other", "workers")
             .is_none()
     );
-    let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
-fn disabling_plugin_removes_manifest_only_contributions() {
-    let temp_dir = unique_temp_dir("plugin-contributions-disabled");
-    let settings_path = temp_dir.join("settings.json");
-    let plugins_dir = native_plugins_dir(&settings_path);
-    let plugin_dir = plugins_dir.join("demo");
-    fs::create_dir_all(&plugin_dir).unwrap();
-    let mut manifest = minimal_manifest();
-    manifest.contributes = Some(sample_contributes());
-    write_manifest(&plugin_dir, &manifest);
-
-    let mut registry = NativePluginRegistry::discover(&settings_path);
-    assert_eq!(registry.contributions().total_count(), 9);
     registry
         .set_plugin_enabled("com.example.demo", false)
         .unwrap();
     assert_eq!(registry.contributions().total_count(), 0);
+    assert_eq!(registry.plugins()[0].state, NativePluginState::Disabled);
+    let config = load_native_plugin_config(registry.config_path());
+    assert!(!config.plugins["com.example.demo"].enabled);
+    assert_eq!(
+        config.plugins["com.example.demo"].runtime_kind.as_deref(),
+        Some("manifest-only")
+    );
+    registry
+        .set_plugin_enabled("com.example.demo", true)
+        .unwrap();
+    assert_eq!(
+        registry.plugins()[0].state,
+        NativePluginState::ReadyManifestOnly
+    );
+    assert_eq!(registry.contributions().tabs[0].definition.id, "demo-tab");
     let _ = fs::remove_dir_all(temp_dir);
 }
 
@@ -1032,7 +1232,7 @@ fn runtime_registrations_feed_host_owned_contribution_store_and_cleanup() {
             metadata: serde_json::json!({
                 "target": "terminal",
                 "items": [
-                    { "label": "Run Demo", "icon": "play", "enabled": true }
+                    { "label": "Run Demo", "icon": "play", "enabled": true, "tabId":"tools", "controlId":"text" }
                 ],
             }),
         })
@@ -1196,6 +1396,18 @@ fn runtime_registrations_feed_host_owned_contribution_store_and_cleanup() {
     assert_eq!(contributions.runtime_status_items[0].alignment, "right");
     assert_eq!(contributions.runtime_context_menus[0].target, "terminal");
     assert_eq!(
+        contributions.runtime_context_menus[0].items[0]
+            .tab_id
+            .as_deref(),
+        Some("tools")
+    );
+    assert_eq!(
+        contributions.runtime_context_menus[0].items[0]
+            .control_id
+            .as_deref(),
+        Some("text")
+    );
+    assert_eq!(
         contributions.runtime_event_subscriptions_for(NATIVE_PLUGIN_APP_THEME_CHANGED_EVENT)[0]
             .registration_id,
         "theme-sub-1"
@@ -1272,6 +1484,115 @@ fn terminal_shortcut_registration_requires_manifest_declaration() {
 
     assert!(error.contains("not declared in manifest contributes.terminalHooks.shortcuts"));
     let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn toggling_another_plugin_preserves_loading_and_active_tabs() {
+    let directory = unique_temp_dir("plugin-toggle-runtime");
+    let settings_path = directory.join("settings.json");
+    let plugins_dir = native_plugins_dir(&settings_path);
+    let plugin_dir = plugins_dir.join("com.example.demo");
+    fs::create_dir_all(&plugin_dir).unwrap();
+    let mut manifest = minimal_manifest();
+    manifest.runtime = Some(NativePluginRuntime {
+        kind: NativePluginRuntimeKind::Wasm,
+        entry: "plugin.wasm".into(),
+    });
+    manifest.contributes = Some(sample_contributes());
+    fs::write(plugin_dir.join("plugin.wasm"), b"\0asm").unwrap();
+    write_manifest(&plugin_dir, &manifest);
+    let other_dir = plugins_dir.join("com.example.other");
+    fs::create_dir_all(&other_dir).unwrap();
+    let mut other = minimal_manifest();
+    other.id = "com.example.other".into();
+    write_manifest(&other_dir, &other);
+    let mut registry = NativePluginRegistry::discover(&settings_path);
+    registry.set_plugin_enabled(&manifest.id, true).unwrap();
+    registry.mark_runtime_loading(&manifest.id).unwrap();
+    registry.apply_runtime_registration(PluginRegistration {
+        registration_id: "view".into(), plugin_id: manifest.id.clone(), kind: PluginRegistrationKind::Tab,
+        metadata: serde_json::json!({"tabId":"demo-tab","schema":{"kind":"form","controls":[{"kind":"text","id":"status","value":"Ready"}]}}),
+    }).unwrap();
+    let declaration = registry
+        .contributions()
+        .tab_contribution(&manifest.id, "demo-tab")
+        .unwrap();
+    let view = registry
+        .contributions()
+        .runtime_tab_view(&manifest.id, "demo-tab")
+        .unwrap();
+    for state in [NativePluginState::Loading, NativePluginState::Active] {
+        match state {
+            NativePluginState::Loading => registry.mark_runtime_loading(&manifest.id).unwrap(),
+            NativePluginState::Active => registry.mark_runtime_active(&manifest.id).unwrap(),
+            _ => unreachable!(),
+        }
+        registry.set_plugin_enabled(&other.id, false).unwrap();
+        assert_eq!(
+            registry
+                .contributions()
+                .tab_contribution(&manifest.id, "demo-tab"),
+            Some(declaration.clone()),
+            "{state:?}"
+        );
+        assert_eq!(
+            registry
+                .contributions()
+                .runtime_tab_view(&manifest.id, "demo-tab"),
+            Some(view.clone()),
+            "{state:?}"
+        );
+        let mut refreshed = NativePluginRegistry::discover(&settings_path);
+        refreshed.preserve_unchanged_runtimes(&registry);
+        assert_eq!(
+            refreshed
+                .plugins()
+                .iter()
+                .find(|plugin| plugin.manifest.id == manifest.id)
+                .unwrap()
+                .state,
+            state
+        );
+        assert_eq!(
+            refreshed
+                .contributions()
+                .runtime_tab_view(&manifest.id, "demo-tab"),
+            Some(view.clone())
+        );
+        registry = refreshed;
+    }
+    registry.uninstall_plugin(&other.id, false).unwrap();
+    assert_eq!(
+        registry
+            .contributions()
+            .runtime_tab_view(&manifest.id, "demo-tab"),
+        Some(view.clone())
+    );
+    let mut changed_manifest = manifest.clone();
+    changed_manifest.name = "Updated demo".into();
+    write_manifest(&plugin_dir, &changed_manifest);
+    let mut changed = NativePluginRegistry::discover(&settings_path);
+    changed.preserve_unchanged_runtimes(&registry);
+    assert!(
+        changed
+            .contributions()
+            .runtime_tab_view(&manifest.id, "demo-tab")
+            .is_none()
+    );
+    registry.set_plugin_enabled(&manifest.id, false).unwrap();
+    assert!(
+        registry
+            .contributions()
+            .tab_contribution(&manifest.id, "demo-tab")
+            .is_none()
+    );
+    assert!(
+        registry
+            .contributions()
+            .runtime_tab_view(&manifest.id, "demo-tab")
+            .is_none()
+    );
+    let _ = fs::remove_dir_all(directory);
 }
 
 #[test]
@@ -1534,11 +1855,21 @@ fn declarative_component_schema_accepts_shared_components_and_rejects_unsafe_sha
             "variant": "inspector",
             "children": [
                 { "kind": "statusBadge", "label": "Ready", "tone": "success" },
+                { "kind": "textWorkbench", "id": "tools", "options":[{"label":"Encode","value":{"command":"base64.encode"}}] },
                 { "kind": "select", "id": "environment", "options": [
                     { "label": "Production", "value": "production" }
                 ] },
                 { "kind": "slider", "id": "parallelism", "min": 1, "max": 8, "step": 1 },
-                { "kind": "iconButton", "id": "refresh", "icon": "refresh-cw", "label": "Refresh" }
+                { "kind": "iconButton", "id": "refresh", "icon": "refresh-cw", "label": "Refresh" },
+                { "kind": "columns", "children": [
+                    { "kind": "stack", "label": "Recent work", "children": [
+                        { "kind": "actionRow", "children": [
+                            { "kind": "button", "id": "open", "label": "Build server" },
+                            { "kind": "iconButton", "id": "pin", "icon": "pin", "label": "Pin" }
+                        ] }
+                    ] },
+                    { "kind": "markdown", "text": "No active tasks" }
+                ] }
             ]
         }]
     }))
@@ -1749,37 +2080,6 @@ fn sensitive_wasm_waits_for_enable_approval_before_activation() {
 }
 
 #[test]
-fn process_runtime_requires_implicit_trust_approval() {
-    let temp_dir = unique_temp_dir("plugin-process-permission-review");
-    let settings_path = temp_dir.join("settings.json");
-    let plugin_dir = native_plugins_dir(&settings_path).join("process");
-    fs::create_dir_all(&plugin_dir).unwrap();
-    fs::write(plugin_dir.join("plugin-process"), b"executable placeholder").unwrap();
-    let mut manifest = minimal_manifest();
-    manifest.runtime = Some(NativePluginRuntime {
-        kind: NativePluginRuntimeKind::Process,
-        entry: "plugin-process".to_string(),
-    });
-    write_manifest(&plugin_dir, &manifest);
-
-    let mut registry = NativePluginRegistry::discover(&settings_path);
-    assert_eq!(registry.plugins()[0].state, NativePluginState::Disabled);
-    assert!(registry.process_activation_plans().is_empty());
-
-    registry
-        .set_plugin_enabled("com.example.demo", true)
-        .unwrap();
-    assert_eq!(registry.plugins()[0].state, NativePluginState::ReadyProcess);
-    assert_eq!(registry.process_activation_plans().len(), 1);
-    let config = load_native_plugin_config(registry.config_path());
-    assert_eq!(
-        config.plugins["com.example.demo"].approved_capabilities,
-        vec![NATIVE_PLUGIN_TRUSTED_PROCESS_CAPABILITY.to_string()]
-    );
-    let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
 fn updates_only_require_review_for_expanded_permissions_or_runtime_changes() {
     let temp_dir = unique_temp_dir("plugin-permission-update");
     let settings_path = temp_dir.join("settings.json");
@@ -1802,8 +2102,14 @@ fn updates_only_require_review_for_expanded_permissions_or_runtime_changes() {
         .set_plugin_enabled("com.example.demo", true)
         .unwrap();
 
-    // A version update and narrower request preserve the existing approval.
+    // A version-only update preserves the existing approval.
     manifest.version = "1.1.0".to_string();
+    write_manifest(&plugin_dir, &manifest);
+    let registry = NativePluginRegistry::discover(&settings_path);
+    assert_eq!(registry.plugins()[0].state, NativePluginState::ReadyWasm);
+    assert_eq!(registry.wasm_activation_plans().len(), 1);
+
+    // Removing a capability does not require renewed approval either.
     manifest.permissions.capabilities = vec!["terminal.content.read".to_string()];
     write_manifest(&plugin_dir, &manifest);
     let registry = NativePluginRegistry::discover(&settings_path);
@@ -1840,6 +2146,8 @@ fn write_manifest(plugin_dir: &Path, manifest: &NativePluginManifest) {
 
 fn sample_contributes() -> NativePluginContributes {
     NativePluginContributes {
+        file_previews: None,
+        language: None,
         tabs: Some(vec![NativePluginTabDef {
             id: "demo-tab".to_string(),
             title: "Demo".to_string(),

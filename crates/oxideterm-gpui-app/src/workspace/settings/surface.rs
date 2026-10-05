@@ -98,7 +98,7 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) {
         let close_active_settings_tab = self
-            .active_tab(cx)
+            .active_content_tab(cx)
             .is_some_and(|tab| tab.kind == TabKind::Settings);
         self.active_surface = ActiveSurface::Terminal;
         self.terminal_trigger_settings_pane = None;
@@ -115,7 +115,9 @@ impl WorkspaceApp {
         self.focused_settings_input = None;
         self.settings_slider_drag = None;
         if close_active_settings_tab {
-            self.close_active_tab(window, cx);
+            if let Some(tab_id) = self.active_content_tab_id(cx) {
+                self.close_tab_by_id(tab_id, window, cx);
+            }
             return;
         }
         self.focus_active_pane(window, cx);
@@ -1268,7 +1270,15 @@ impl WorkspaceApp {
         self.i18n
             .set_locale(locale_from_settings(settings.general.language));
         if previous_settings.general.language != settings.general.language {
+            self.refresh_native_plugin_terminal_hooks(cx);
             cx.set_menus(crate::platform::app_menus(settings));
+            oxideterm_gpui_editor::EditorLanguagePlugins::set_labels(
+                self.i18n.t("plugin.language_missing"),
+                self.i18n.t("plugin.load_failed_default"),
+                self.i18n.t("plugin.language_manage"),
+                self.i18n.t("plugin.language_dismiss"),
+                cx,
+            );
         }
         oxideterm_desktop_presence::set_keep_running_on_close(
             settings.general.minimize_to_tray_on_close,
@@ -1485,12 +1495,12 @@ impl WorkspaceApp {
         settings: &PersistedSettings,
         cx: &mut Context<Self>,
     ) {
-        if previous_settings.terminal.theme != settings.terminal.theme {
+        if previous_settings.appearance.theme != settings.appearance.theme {
             self.emit_native_plugin_event_to_subscribers(
                 plugin_host::NATIVE_PLUGIN_APP_THEME_CHANGED_EVENT,
                 serde_json::json!({
                     "theme": crate::workspace::plugin_lifecycle::native_plugin_theme_snapshot(
-                        &settings.terminal.theme
+                        &settings.appearance.theme
                     ),
                 }),
                 cx,

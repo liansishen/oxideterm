@@ -798,6 +798,22 @@ impl WorkspaceApp {
                 true
             }
             "enter" => {
+                if matches!(
+                    input,
+                    SettingsInput::NativePluginInstalledPageJump
+                        | SettingsInput::NativePluginMarketplacePageJump
+                ) {
+                    self.commit_plugin_page_jump(cx);
+                    return true;
+                }
+                if matches!(
+                    input,
+                    SettingsInput::NativePluginInstalledPageSize
+                        | SettingsInput::NativePluginMarketplacePageSize
+                ) {
+                    self.commit_plugin_page_size(cx);
+                    return true;
+                }
                 if input.accepts_newline() {
                     self.settings_input_draft.push('\n');
                     self.apply_settings_input_draft(input, cx);
@@ -1051,15 +1067,15 @@ impl WorkspaceApp {
                 }
             }
             SettingsSlider::AppearanceWindowOpacity => {
-                let Some(value) = self.settings_slider_value_from_position(
+                let Some(position) = self.settings_slider_value_from_position(
                     SelectAnchorId::SettingsAppearanceWindowOpacitySlider,
                     x,
-                    (MIN_WINDOW_OPACITY * SETTINGS_PERCENT_SCALE) as f32,
-                    (MAX_WINDOW_OPACITY * SETTINGS_PERCENT_SCALE) as f32,
+                    0.0,
+                    1.0,
                 ) else {
                     return;
                 };
-                let value = value.round() as f64 / SETTINGS_PERCENT_SCALE;
+                let value = super::appearance::window_opacity_from_slider_position(position);
                 if self.settings_store.settings().appearance.window_opacity != value {
                     self.edit_settings(|settings| settings.appearance.window_opacity = value, cx);
                     // Detached windows consume the same setting on their next frame.
@@ -1322,6 +1338,18 @@ impl WorkspaceApp {
                 .plugin_manager_state(cx)
                 .marketplace_search_draft
                 .clone(),
+            SettingsInput::NativePluginInstalledPageSize => self
+                .plugin_page_size(plugin_manager::NativePluginManagerTab::Installed, cx)
+                .to_string(),
+            SettingsInput::NativePluginMarketplacePageSize => self
+                .plugin_page_size(plugin_manager::NativePluginManagerTab::Marketplace, cx)
+                .to_string(),
+            SettingsInput::NativePluginInstalledPageJump => self
+                .plugin_page_number(plugin_manager::NativePluginManagerTab::Installed, cx)
+                .to_string(),
+            SettingsInput::NativePluginMarketplacePageJump => self
+                .plugin_page_number(plugin_manager::NativePluginManagerTab::Marketplace, cx)
+                .to_string(),
             SettingsInput::PortableCurrentPassword
             | SettingsInput::PortableNewPassword
             | SettingsInput::PortableConfirmPassword => String::new(),
@@ -1410,6 +1438,13 @@ impl WorkspaceApp {
             SettingsInput::PublicMcpPort => {
                 self.public_mcp
                     .set_port_draft(self.settings_input_draft.clone());
+                cx.notify();
+            }
+            SettingsInput::NativePluginInstalledPageSize
+            | SettingsInput::NativePluginMarketplacePageSize
+            | SettingsInput::NativePluginInstalledPageJump
+            | SettingsInput::NativePluginMarketplacePageJump => {
+                // Commit on Enter or Apply so typing does not move the plugin list.
                 cx.notify();
             }
             SettingsInput::TerminalCommandSpecsJson => {

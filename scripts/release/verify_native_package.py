@@ -14,6 +14,8 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+from conpty_runtime import runtime_files as conpty_runtime_files, verify_digest
+
 
 REQUIRED_DOCUMENTS = {
     "GPUI-CE-LICENSE-APACHE",
@@ -29,8 +31,6 @@ REQUIRED_DOCUMENTS = {
     "THIRD_PARTY_NOTICES.md",
     "AGENT_THIRD_PARTY_NOTICES.md",
 }
-
-WINDOWS_CONPTY_RUNTIME_FILES = {"conpty.dll", "OpenConsole.exe"}
 LINUX_DEB_GRAPHICS_RECOMMENDS = {"libegl1", "libvulkan1"}
 LINUX_RPM_GRAPHICS_RECOMMENDS = {"libglvnd-egl", "vulkan-loader"}
 LINUX_GLIBC_MAX_VERSION = (2, 35)
@@ -145,18 +145,19 @@ def verify_portable_archive(path: Path, target: str, expected_version: str) -> N
         if "windows" in target
         else "tools/oxideterm-update-helper"
     )
-    required = REQUIRED_DOCUMENTS | {
-        PACKAGE_VERSION_FILENAME,
-        PORTABLE_PLUGINS_DIR,
-        "portable",
-        PORTABLE_UPDATE_MANIFEST_FILENAME,
-        update_helper,
-        executable,
-    }
-    if "windows" in target:
-        # The ConPTY runtime has to sit beside the executable, not in resources.
-        required |= WINDOWS_CONPTY_RUNTIME_FILES
-    require_archive_suffixes(archive_names(path), required, path)
+    require_archive_suffixes(
+        archive_names(path),
+        REQUIRED_DOCUMENTS
+        | {
+            PACKAGE_VERSION_FILENAME,
+            PORTABLE_PLUGINS_DIR,
+            "portable",
+            PORTABLE_UPDATE_MANIFEST_FILENAME,
+            update_helper,
+            executable,
+        },
+        path,
+    )
     verify_embedded_version(path, PACKAGE_VERSION_FILENAME, expected_version)
     manifest = json.loads(
         archive_entry_bytes(path, PORTABLE_UPDATE_MANIFEST_FILENAME).decode("utf-8")
@@ -176,16 +177,16 @@ def verify_portable_archive(path: Path, target: str, expected_version: str) -> N
         PACKAGE_VERSION_FILENAME,
         PORTABLE_UPDATE_MANIFEST_FILENAME,
     }
-    if "windows" in target:
-        # In-place updates only replace manifest entries, so the ConPTY runtime
-        # has to be listed or updated Windows installs lose it again.
-        required_managed_entries |= WINDOWS_CONPTY_RUNTIME_FILES
     if not isinstance(managed_entries, list) or not required_managed_entries.issubset(
         managed_entries
     ):
         raise RuntimeError(f"{path.name} portable update manifest is incomplete")
     if {"data", "portable.json"} & set(managed_entries):
         raise RuntimeError(f"{path.name} portable update manifest includes user data")
+    if "windows" in target:
+        for name, (_, digest) in conpty_runtime_files(target).items():
+            entry = f"/resources/conpty/{name}"
+            verify_digest(archive_entry_bytes(path, entry), digest, entry)
 
 
 def verify_macos_app_zip(path: Path, expected_version: str) -> None:
@@ -381,19 +382,16 @@ def verify_appimage(path: Path, expected_version: str) -> None:
             raise RuntimeError(f"{path.name} does not contain version {expected_version}")
 
 
-def verify_windows_installer(path: Path, expected_version: str) -> None:
+def verify_windows_installer(path: Path, expected_version: str, target: str) -> None:
     seven_zip = next((shutil.which(name) for name in ("7z", "7zz", "7za") if shutil.which(name)), None)
     if not seven_zip:
         raise RuntimeError("7-Zip is required for NSIS content verification")
     listing = run_checked([seven_zip, "l", "-slt", str(path)])
-    required = REQUIRED_DOCUMENTS | {
+    for name in REQUIRED_DOCUMENTS | {
         PACKAGE_VERSION_FILENAME,
         "oxideterm-native.exe",
         "oxideterm-update-helper.exe",
-    }
-    # The installer places the ConPTY runtime beside the executable.
-    required |= WINDOWS_CONPTY_RUNTIME_FILES
-    for name in required:
+    }:
         if name not in listing:
             raise RuntimeError(f"{path.name} does not contain {name}")
     with tempfile.TemporaryDirectory() as directory:
@@ -401,6 +399,15 @@ def verify_windows_installer(path: Path, expected_version: str) -> None:
         versions = list(Path(directory).rglob(PACKAGE_VERSION_FILENAME))
         if not versions or all(item.read_text(encoding="utf-8").strip() != expected_version for item in versions):
             raise RuntimeError(f"{path.name} does not contain version {expected_version}")
+
+        # NSIS includes separate normal-install and staged-update payloads.
+        for root in (Path(directory), Path(directory) / "install"):
+            for name, (_, digest) in conpty_runtime_files(target).items():
+                runtime = root / "resources" / "conpty" / name
+                relative = runtime.relative_to(directory).as_posix()
+                if not runtime.is_file():
+                    raise RuntimeError(f"{path.name} must contain {relative}")
+                verify_digest(runtime.read_bytes(), digest, relative)
 
 
 def verify_release(dist: Path, target: str, version: str) -> dict[str, object]:
@@ -429,7 +436,7 @@ def verify_release(dist: Path, target: str, version: str) -> dict[str, object]:
             verify_linux_glibc_compatibility(binary)
 
     if "windows" in target:
-        verify_windows_installer(dist / f"OxideTerm_{version}_{label}-setup.exe", version)
+        verify_windows_installer(dist / f"OxideTerm_{version}_{label}-setup.exe", version, target)
     elif "apple-darwin" in target:
         verify_macos_app_zip(dist / f"OxideTerm_{version}_{label}.app.zip", version)
         legacy_archive = dist / f"OxideTerm_{version}_{label}.app.tar.gz"

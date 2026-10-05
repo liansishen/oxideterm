@@ -198,6 +198,8 @@ pub enum SshTransportError {
     Timeout,
     #[error("SSH connection failed: {0}")]
     ConnectionFailed(String),
+    #[error("SSH connection failed: {0}")]
+    Protocol(#[source] russh::Error),
     #[error(
         "SSH algorithm negotiation failed: no common {kind} algorithm. Client offered: {client_algorithms:?}; server offered: {server_algorithms:?}"
     )]
@@ -235,8 +237,13 @@ pub enum SshTransportError {
     Channel(String),
 }
 
+pub struct ManagedKeyMaterial {
+    pub private_key: Zeroizing<String>,
+    pub certificate: Option<String>,
+}
+
 pub type ManagedKeyResolver =
-    Arc<dyn Fn(&str) -> Result<Zeroizing<String>, SshTransportError> + Send + Sync>;
+    Arc<dyn Fn(&str) -> Result<ManagedKeyMaterial, SshTransportError> + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SshAlgorithmKind {
@@ -272,7 +279,7 @@ impl From<russh::Error> for SshTransportError {
                     server_algorithms: theirs,
                 }
             }
-            error => Self::ConnectionFailed(error.to_string()),
+            error => Self::Protocol(error),
         }
     }
 }
@@ -280,6 +287,7 @@ impl From<russh::Error> for SshTransportError {
 impl SshTransportError {
     pub(crate) fn with_context(self, context: impl Into<String>) -> Self {
         match self {
+            Self::Protocol(error) => Self::ConnectionFailed(format!("{}: {error}", context.into())),
             Self::ConnectionFailed(message) => {
                 Self::ConnectionFailed(format!("{}: {message}", context.into()))
             }
@@ -423,6 +431,34 @@ pub struct KeyboardInteractivePromptRequest {
 
 pub type KeyboardInteractiveResponses = Zeroizing<Vec<String>>;
 
+#[derive(Clone, PartialEq, Eq)]
+pub struct SshPasswordPrompt {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+}
+
+impl SshPasswordPrompt {
+    pub fn challenge(&self) -> KeyboardInteractivePromptRequest {
+        KeyboardInteractivePromptRequest {
+            flow_id: uuid::Uuid::new_v4().to_string(),
+            name: format!("{}@{}:{}", self.username, self.host, self.port),
+            instructions: String::new(),
+            prompts: vec![KeyboardInteractivePrompt {
+                prompt: "ssh.form.password".into(),
+                echo: false,
+            }],
+            chained: false,
+        }
+    }
+}
+
+pub struct SshPasswordResponse {
+    pub password: Zeroizing<String>,
+    // The authentication attempt owns this callback and secret until full authentication succeeds.
+    pub on_authenticated: Option<Box<dyn FnOnce(Zeroizing<String>) + Send>>,
+}
+
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum SshPromptError {
     #[error("keyboard-interactive authentication cancelled")]
@@ -434,6 +470,26 @@ pub enum SshPromptError {
 }
 
 pub trait SshPromptHandler: Send + Sync {
+    /// A successful login may bypass or replace configured credentials; persistence needs this distinction.
+    fn authentication_completed(&self, _configured_credentials_confirmed: bool) {}
+
+    fn password(
+        &self,
+        prompt: SshPasswordPrompt,
+    ) -> Pin<Box<dyn Future<Output = Result<SshPasswordResponse, SshPromptError>> + Send + '_>>
+    {
+        Box::pin(async move {
+            let mut responses = self.keyboard_interactive(prompt.challenge()).await?;
+            if responses.len() != 1 {
+                return Err(SshPromptError::Failed("Invalid password response".into()));
+            }
+            Ok(SshPasswordResponse {
+                password: Zeroizing::new(std::mem::take(&mut responses[0])),
+                on_authenticated: None,
+            })
+        })
+    }
+
     fn keyboard_interactive(
         &self,
         request: KeyboardInteractivePromptRequest,
@@ -816,6 +872,32 @@ include!("transport/proxy_command.rs");
 mod transport_lost_tests {
     use super::{RegistryConsumerGuard, SshTransportClient, ssh_channel_error_is_transport_lost};
     use crate::{ConnectionConsumer, SshConfig, SshConnectionRegistry};
+
+    #[test]
+    fn disconnect_diagnostics_preserve_protocol_details_without_remote_text() {
+        for (source, expected) in [
+            (
+                russh::Error::SshEncoding(ssh_encoding::Error::TrailingData { remaining: 4 }),
+                "encoding: unexpected trailing data at end of message (4 bytes)",
+            ),
+            (
+                russh::Error::IO(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionReset,
+                    "synthetic-password=do-not-log",
+                )),
+                "io: ConnectionReset, os_code=None",
+            ),
+            (
+                russh::Error::InvalidConfig("synthetic-token=do-not-log".into()),
+                "invalid_configuration",
+            ),
+        ] {
+            let super::SshTransportError::Protocol(source) = source.into() else {
+                panic!("disconnect diagnostics lost the typed protocol error");
+            };
+            assert_eq!(super::ssh_protocol_diagnostic(&source), expected);
+        }
+    }
 
     #[test]
     fn channel_error_classifier_matches_idle_closed_transport() {

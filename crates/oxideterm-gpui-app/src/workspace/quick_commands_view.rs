@@ -3761,30 +3761,11 @@ mod terminal_command_bar_quick_command_tests {
     }
 
     #[test]
-    fn dock_blur_preserves_confirmation_and_explicit_close_clears_it() {
+    fn dock_pinning_keeps_launcher_open_and_blur_preserves_confirmation_until_close() {
         let directory = tempfile::tempdir().unwrap();
         let mut commands =
             super::TerminalQuickCommandsState::load(&directory.path().join("settings.json"));
         let command = oxideterm_quick_commands::default_quick_commands().remove(0);
-        commands.request_execution(command.clone());
-        commands.set_focused_input(super::QuickCommandInput::Search);
-        commands.blur_input();
-        assert!(commands.is_open());
-        assert_eq!(commands.focused_input(), None);
-        assert_eq!(
-            commands.pending_execution.as_ref().unwrap().command.id,
-            command.id
-        );
-        commands.close();
-        assert!(!commands.is_open());
-        assert!(commands.pending_execution.is_none());
-    }
-
-    #[test]
-    fn dock_pin_preserves_launcher_after_fill_and_execution_without_retaining_input_focus() {
-        let directory = tempfile::tempdir().unwrap();
-        let mut commands =
-            super::TerminalQuickCommandsState::load(&directory.path().join("settings.json"));
         for pinned in [false, true] {
             commands.open = true;
             commands.pinned = pinned;
@@ -3795,12 +3776,23 @@ mod terminal_command_bar_quick_command_tests {
             );
             assert_eq!(commands.is_open(), pinned);
             assert_eq!(commands.focused_input(), None);
-            commands
-                .request_execution(oxideterm_quick_commands::default_quick_commands().remove(0));
+            commands.request_execution(command.clone());
+            commands.set_focused_input(super::QuickCommandInput::Search);
+            commands.blur_input();
+            assert!(commands.is_open());
+            assert_eq!(commands.focused_input(), None);
+            assert_eq!(
+                commands.pending_execution.as_ref().unwrap().command.id,
+                command.id
+            );
             commands.set_focused_input(super::QuickCommandInput::ParameterDefault(0));
             commands.finish_execution();
             assert_eq!(commands.is_open(), pinned);
             assert_eq!(commands.focused_input(), None);
+            assert!(commands.pending_execution.is_none());
+            commands.request_execution(command.clone());
+            commands.close();
+            assert!(!commands.is_open());
             assert!(commands.pending_execution.is_none());
         }
     }
@@ -3814,7 +3806,7 @@ mod terminal_command_bar_quick_command_tests {
     }
 
     #[test]
-    fn quick_command_editor_rejects_unknown_template_parameter() {
+    fn quick_command_editor_validates_templates_and_secret_defaults() {
         let mut draft = QuickCommandEditorDraft {
             id: None,
             name: "Deploy".to_string(),
@@ -3839,32 +3831,11 @@ mod terminal_command_bar_quick_command_tests {
         assert!(!quick_command_editor_can_save(&draft));
         draft.command = "deploy {{param.service|sh}}".to_string();
         assert!(quick_command_editor_can_save(&draft));
-    }
-
-    #[test]
-    fn quick_command_editor_rejects_secret_defaults() {
-        let draft = QuickCommandEditorDraft {
-            id: None,
-            name: "Login".to_string(),
-            command: "login {{param.password}}".to_string(),
-            category: "custom".to_string(),
-            description: String::new(),
-            host_patterns: String::new(),
-            parameters: vec![QuickCommandParameterEditorDraft {
-                name: "password".to_string(),
-                label: "Password".to_string(),
-                kind: QuickCommandParameterKind::Secret,
-                default_value: "must-not-persist".to_string(),
-                choices: String::new(),
-                required: true,
-            }],
-            protocols: Vec::new(),
-            confirmation: QuickCommandConfirmationPolicy::Inherit,
-            created_at: 1,
-            sort_order: 0,
-        };
-
+        draft.parameters[0].kind = QuickCommandParameterKind::Secret;
+        draft.parameters[0].default_value = "must-not-persist".to_string();
         assert!(!quick_command_editor_can_save(&draft));
+        draft.parameters[0].default_value.clear();
+        assert!(quick_command_editor_can_save(&draft));
     }
 
     #[test]

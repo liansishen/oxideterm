@@ -786,6 +786,12 @@ fn capture_layout(
             };
             let mut saved = Vec::new();
             for child in children {
+                let mut sessions = Vec::new();
+                child.node.collect_session_ids(&mut sessions);
+                // Tool pages share split trees but have no terminal restore target.
+                if sessions.is_empty() {
+                    continue;
+                }
                 let layout = capture_layout(&child.node, host, nodes, pane_count, cx)?;
                 saved.push(SavedChild {
                     ratio: child.size,
@@ -844,6 +850,77 @@ mod tests {
             Some("tab-1".into()),
         )
         .unwrap()
+    }
+
+    #[gpui::test]
+    fn mixed_page_groups_preserve_terminal_snapshot_layout(cx: &mut gpui::TestAppContext) {
+        use oxideterm_workspace::{PaneNode, PaneSplitChild};
+
+        let page = |id| PaneNode::Page {
+            pane_id: PaneId(id),
+            tab_id: TabId(id),
+        };
+        let root = PaneNode::Group {
+            id: PaneId(10),
+            direction: oxideterm_workspace::SplitDirection::Horizontal,
+            children: vec![
+                PaneSplitChild::new(
+                    PaneNode::Group {
+                        id: PaneId(11),
+                        direction: oxideterm_workspace::SplitDirection::Vertical,
+                        children: vec![
+                            PaneSplitChild::new(page(3), 0.5),
+                            PaneSplitChild::new(page(4), 0.5),
+                        ],
+                    },
+                    0.2,
+                ),
+                PaneSplitChild::new(
+                    PaneNode::Group {
+                        id: PaneId(12),
+                        direction: oxideterm_workspace::SplitDirection::Vertical,
+                        children: vec![
+                            PaneSplitChild::new(page(5), 0.5),
+                            PaneSplitChild::new(
+                                PaneNode::leaf(PaneId(1), TerminalSessionId(1)),
+                                0.5,
+                            ),
+                        ],
+                    },
+                    0.3,
+                ),
+                PaneSplitChild::new(PaneNode::leaf(PaneId(2), TerminalSessionId(2)), 0.5),
+            ],
+        };
+        let host = tabs::WorkspaceTabHostEntity::new();
+        let nodes = vec![(
+            "node-1".into(),
+            Some("profile-1".into()),
+            vec![TerminalSessionId(1), TerminalSessionId(2)],
+            "example.test".into(),
+            22,
+            "user".into(),
+        )];
+        let layout = cx.update(|cx| capture_layout(&root, &host, &nodes, &mut 0, cx).unwrap());
+        assert_eq!(
+            layout,
+            SavedLayout::Split {
+                direction: SplitDirection::Horizontal,
+                children: [("1", 0.3), ("2", 0.5)]
+                    .into_iter()
+                    .map(|(pane_id, ratio)| SavedChild {
+                        ratio,
+                        layout: SavedLayout::Terminal {
+                            pane_id: pane_id.into(),
+                            target: RestoreTarget::SavedSsh {
+                                profile_id: "profile-1".into(),
+                                node_id: "node-1".into(),
+                            },
+                        },
+                    })
+                    .collect(),
+            }
+        );
     }
 
     #[test]

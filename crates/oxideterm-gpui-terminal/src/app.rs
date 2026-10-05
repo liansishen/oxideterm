@@ -24,7 +24,7 @@ use oxideterm_terminal::{
     GraphicsOptions, KittyFileTransmissionControl, LocalPtyConfig, SerialControlLine,
     SerialControlState, SerialDisplayMode, SerialLineEnding, SerialRuntimeOptions, SerialSendMode,
     SerialSessionConfig, ShellIntegrationLifecycleState, ShellIntegrationStatus, SshSessionConfig,
-    TelnetSessionConfig, TermMode, TerminalCommandMark, TerminalCommandMarkClosedBy,
+    TelnetSessionConfig, TermMode, TerminalCell, TerminalCommandMark, TerminalCommandMarkClosedBy,
     TerminalCommandMarkConfidence, TerminalCommandMarkDetectionSource, TerminalCommandMarkEvent,
     TerminalCwdIntegrationLaunchState, TerminalDrainBudget, TerminalDrainReport,
     TerminalEditorApplication, TerminalEditorClipboardOperation, TerminalEditorIntegrationEvent,
@@ -493,14 +493,19 @@ pub struct TerminalPane {
     context_menu: Option<TerminalContextMenu>,
     context_menu_presence: oxideterm_gpui_ui::motion::ExitPresence,
     context_action_requested: Option<TerminalContextAction>,
+    plugin_text_actions: Vec<TerminalPluginTextAction>,
+    pending_plugin_text: Option<(TerminalPluginTextAction, zeroize::Zeroizing<String>)>,
     pending_trigger_matches: VecDeque<oxideterm_terminal_triggers::TriggerMatched>,
     pending_terminal_notifications: VecDeque<TerminalNotification>,
     plugin_input_interceptor: Option<TerminalInputInterceptor>,
+    win32_pressed_keys: HashSet<String>,
     input_broadcaster: Option<TerminalInputBroadcaster>,
     #[cfg(test)]
     test_accepts_input: bool,
     input_locked: bool,
     marked_text: Option<String>,
+    /// IME caret inside `marked_text`, in UTF-16 units; only read while composing.
+    marked_text_caret_utf16: Option<usize>,
     privilege_prompt_inline_hint: Option<String>,
     privilege_prompt_submit_requested: bool,
     search_query: Option<String>,
@@ -643,10 +648,19 @@ pub(crate) enum FreeTypeDragAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TerminalContextAction {
+    PluginTextTool,
     SendSelectionToAi,
     FillCommandBarFromSelection,
     OpenSearch,
     OpenSessionTriggers,
+}
+
+#[derive(Clone)]
+pub struct TerminalPluginTextAction {
+    pub plugin_id: String,
+    pub tab_id: String,
+    pub control_id: String,
+    pub label: String,
 }
 
 #[derive(Clone, Debug)]
@@ -1028,7 +1042,9 @@ impl TerminalPane {
         cx: &mut Context<Self>,
     ) -> Result<Self> {
         let (mut snapshot, session_kind, cwd_integration_launch_state, render_mode) = {
-            let terminal = terminal.lock();
+            let mut terminal = terminal.lock();
+            // The pane owns the visible theme; apply it before the first snapshot is taken.
+            terminal.set_palette(preferences.theme.palette());
             (
                 terminal.snapshot().with_generation(1),
                 terminal.kind(),
@@ -1212,14 +1228,18 @@ impl TerminalPane {
             context_menu: None,
             context_menu_presence: oxideterm_gpui_ui::motion::ExitPresence::visible(),
             context_action_requested: None,
+            plugin_text_actions: Vec::new(),
+            pending_plugin_text: None,
             pending_trigger_matches: VecDeque::new(),
             pending_terminal_notifications: VecDeque::new(),
             plugin_input_interceptor: None,
+            win32_pressed_keys: HashSet::new(),
             input_broadcaster: None,
             #[cfg(test)]
             test_accepts_input: false,
             input_locked: false,
             marked_text: None,
+            marked_text_caret_utf16: None,
             privilege_prompt_inline_hint: None,
             privilege_prompt_submit_requested: false,
             search_query: None,
@@ -1842,6 +1862,16 @@ impl TerminalPane {
         self.context_action_requested.take()
     }
 
+    pub fn set_plugin_text_actions(&mut self, actions: Vec<TerminalPluginTextAction>) {
+        self.plugin_text_actions = actions;
+    }
+
+    pub fn take_plugin_text_request(
+        &mut self,
+    ) -> Option<(TerminalPluginTextAction, zeroize::Zeroizing<String>)> {
+        self.pending_plugin_text.take()
+    }
+
     pub fn set_privilege_prompt_inline_hint(
         &mut self,
         hint: Option<String>,
@@ -1888,6 +1918,12 @@ impl TerminalPane {
             self.terminal
                 .lock()
                 .set_trzsz_policy(preferences.trzsz_policy.clone());
+        }
+        let palette = preferences.theme.palette();
+        if self.preferences.theme.palette() != palette {
+            self.terminal.lock().set_palette(palette);
+            // Rows resolved with the previous palette must be rebuilt even without new output.
+            self.snapshot_dirty = true;
         }
         let metrics_changed = self.preferences.font_family != preferences.font_family
             || self.preferences.cjk_font_family != preferences.cjk_font_family
@@ -3802,6 +3838,9 @@ impl TerminalPane {
 
     fn handle_focus_change(&mut self, focused: bool, cx: &mut Context<Self>) {
         self.focused = focused;
+        if !focused {
+            self.win32_pressed_keys.clear();
+        }
         if !focused && self.context_menu.take().is_some() {
             // Menu actions refer to this pane's selection and command snapshot. Drop them
             // immediately on focus transfer and invalidate any pending exit animation.
@@ -3844,14 +3883,37 @@ impl TerminalPane {
         bytes: &[u8],
         cx: &mut Context<Self>,
     ) -> bool {
+        self.send_user_encoded_key_without_broadcast(bytes, None, cx)
+    }
+
+    fn send_user_encoded_key_without_broadcast(
+        &mut self,
+        semantic_bytes: &[u8],
+        encoded_key: Option<(&str, &[u8])>,
+        cx: &mut Context<Self>,
+    ) -> bool {
         if !self.terminal_accepts_input() {
             return false;
         }
-        let Some(bytes) = self.apply_plugin_input_interceptor(bytes) else {
+        let Some(bytes) = self.apply_plugin_input_interceptor(semantic_bytes) else {
             return false;
         };
         let bytes = Zeroizing::new(bytes);
-        if self.send_protocol_bytes(&bytes, cx) {
+        // Command/secret tracking and plugins consume the logical input. Only
+        // the PTY sees the negotiated Windows envelope; plugin replacements
+        // remain literal input, matching the existing hook contract.
+        let wire_bytes = if bytes.as_slice() == semantic_bytes {
+            encoded_key.map_or(bytes.as_slice(), |(_, encoded)| encoded)
+        } else {
+            &bytes
+        };
+        if self.send_protocol_bytes(wire_bytes, cx) {
+            if bytes.as_slice() == semantic_bytes
+                && let Some((key, _)) = encoded_key
+            {
+                // Only delivered Win32 presses own a future release, including repeats.
+                self.win32_pressed_keys.insert(key.to_owned());
+            }
             self.observe_user_input("protocol", &bytes, cx);
             self.restore_live_output_after_user_input();
             return true;
@@ -4101,9 +4163,23 @@ impl TerminalPane {
         false
     }
 
-    fn set_marked_text(&mut self, text: &str, cx: &mut Context<Self>) {
+    fn set_marked_text(
+        &mut self,
+        text: &str,
+        selected_range_utf16: Option<Range<usize>>,
+        cx: &mut Context<Self>,
+    ) {
         self.marked_text = (!text.is_empty()).then(|| text.to_string());
+        self.marked_text_caret_utf16 = selected_range_utf16.map(|range| range.end);
+        // Composition edits are typing; keep the caret solid like other key input.
+        self.reset_cursor_blink();
         cx.notify();
+    }
+
+    fn marked_text_cells_before_utf16(&self, utf16_offset: usize) -> usize {
+        self.marked_text
+            .as_deref()
+            .map_or(0, |text| marked_text_cells_before_utf16(text, utf16_offset))
     }
 
     fn clear_marked_text(&mut self, cx: &mut Context<Self>) {
@@ -4432,7 +4508,13 @@ fn trim_row_timestamp_history(
 fn terminal_row_timestamp_signature(row: &TerminalRow) -> u64 {
     let mut hasher = DefaultHasher::new();
     row.wrapped.hash(&mut hasher);
-    for cell in row.cells.iter() {
+    // Ignore unstyled trailing padding so a grid resize does not restamp output.
+    // Styled blanks and links remain part of the content signature.
+    let content_end = row.cells.iter().rposition(terminal_cell_has_content);
+    let Some(content_end) = content_end else {
+        return hasher.finish();
+    };
+    for cell in &row.cells[..=content_end] {
         cell.ch.hash(&mut hasher);
         cell.zerowidth().hash(&mut hasher);
         cell.wide.hash(&mut hasher);
@@ -4445,9 +4527,17 @@ fn terminal_row_timestamp_signature(row: &TerminalRow) -> u64 {
 }
 
 fn terminal_row_has_timestamp_content(row: &TerminalRow) -> bool {
-    row.cells
-        .iter()
-        .any(|cell| !cell.ch.is_whitespace() || !cell.zerowidth().is_empty())
+    row.cells.iter().any(terminal_cell_has_content)
+}
+
+/// Explicit styling and links distinguish meaningful blanks from grid padding.
+fn terminal_cell_has_content(cell: &TerminalCell) -> bool {
+    !cell.ch.is_whitespace()
+        || !cell.zerowidth().is_empty()
+        || cell.style_origin.foreground_explicit()
+        || cell.style_origin.background_explicit()
+        || cell.attrs != Default::default()
+        || cell.hyperlink().is_some()
 }
 
 fn hex_color(color: u32) -> String {
@@ -4502,6 +4592,51 @@ mod tests {
 
     use gpui::{AppContext, IntoElement, Render, TestAppContext, div};
     use oxideterm_terminal::{TerminalAttrs, TerminalCell, TerminalColor, TerminalCursorShape};
+
+    #[gpui::test]
+    fn plugin_text_action_captures_selection_before_focus_or_output_changes(
+        cx: &mut TestAppContext,
+    ) {
+        let (pane, cx) = cx.add_window_view(|window, cx| {
+            TerminalPane::new_recording_playback(80, 24, Default::default(), window, cx).unwrap()
+        });
+        pane.update(cx, |pane, cx| {
+            pane.terminal.lock().feed_recording_output(b"captured text");
+            let snapshot = pane.terminal.lock().snapshot();
+            pane.snapshot = pane.stamp_snapshot(snapshot);
+            pane.set_selection(Some(TerminalSelection {
+                anchor: TerminalGridPoint { line: 0, col: 0 },
+                head: TerminalGridPoint { line: 0, col: 7 },
+                mode: TerminalSelectionMode::Simple,
+            }));
+            pane.request_plugin_text_action(
+                TerminalPluginTextAction {
+                    plugin_id: "test.tools".into(),
+                    tab_id: "tools".into(),
+                    control_id: "text".into(),
+                    label: "Process".into(),
+                },
+                cx,
+            );
+            pane.set_selection(None);
+            pane.terminal.lock().feed_recording_output(b"\rreplaced");
+            assert_eq!(
+                pane.take_context_action_request(),
+                Some(TerminalContextAction::PluginTextTool)
+            );
+            let (target, text) = pane.take_plugin_text_request().unwrap();
+            assert_eq!(
+                (
+                    target.plugin_id.as_str(),
+                    target.tab_id.as_str(),
+                    target.control_id.as_str()
+                ),
+                ("test.tools", "tools", "text")
+            );
+            assert_eq!(text.as_str(), "captured");
+            assert!(pane.take_plugin_text_request().is_none());
+        });
+    }
 
     #[gpui::test]
     fn modem_failure_notice_includes_localized_reason(cx: &mut TestAppContext) {
@@ -4925,6 +5060,110 @@ mod tests {
     }
 
     #[gpui::test]
+    fn win32_input_releases_only_delivered_keys_after_modifiers_change(cx: &mut TestAppContext) {
+        let (_, cx) = cx.add_window_view(|_window, _cx| TerminalTestRoot);
+        let pane = cx.update(|window, cx| {
+            cx.new(|cx| {
+                TerminalPane::new_recording_playback(
+                    DEFAULT_COLS,
+                    DEFAULT_ROWS,
+                    TerminalUiPreferences::default(),
+                    window,
+                    cx,
+                )
+                .unwrap()
+            })
+        });
+        pane.update(cx, |pane, cx| {
+            pane.test_accepts_input = true;
+            pane.terminal.lock().feed_recording_output(b"\x1b[?9001h");
+            pane.recorder = Some(TerminalRecorder::start(
+                DEFAULT_COLS,
+                DEFAULT_ROWS,
+                TerminalRecordingOptions {
+                    capture_input: true,
+                    title: None,
+                    theme: None,
+                },
+            ));
+            for (pressed, released) in [("ctrl-j", "j"), ("alt-j", "j"), ("ctrl-space", "space")] {
+                assert!(pane.handle_key(
+                    &gpui::KeyDownEvent {
+                        keystroke: gpui::Keystroke::parse(pressed).unwrap(),
+                        is_held: false,
+                        prefer_character_input: false,
+                    },
+                    cx
+                ));
+                pane.handle_key_up(
+                    &gpui::KeyUpEvent {
+                        keystroke: gpui::Keystroke::parse(released).unwrap(),
+                    },
+                    cx,
+                );
+            }
+            // Platform text commits and plugin replacements own their own input delivery.
+            assert!(!pane.handle_key(
+                &gpui::KeyDownEvent {
+                    keystroke: gpui::Keystroke::parse("j").unwrap(),
+                    is_held: false,
+                    prefer_character_input: false,
+                },
+                cx
+            ));
+            pane.handle_key_up(
+                &gpui::KeyUpEvent {
+                    keystroke: gpui::Keystroke::parse("j").unwrap(),
+                },
+                cx,
+            );
+            for replacement in [None, Some(b"replacement".to_vec())] {
+                pane.set_plugin_input_interceptor(Some(Arc::new(move |_| match &replacement {
+                    Some(bytes) => TerminalInputInterceptorResult::Continue(bytes.clone()),
+                    None => TerminalInputInterceptorResult::Suppress,
+                })));
+                pane.handle_key(
+                    &gpui::KeyDownEvent {
+                        keystroke: gpui::Keystroke::parse("ctrl-j").unwrap(),
+                        is_held: false,
+                        prefer_character_input: false,
+                    },
+                    cx,
+                );
+                pane.handle_key_up(
+                    &gpui::KeyUpEvent {
+                        keystroke: gpui::Keystroke::parse("ctrl-j").unwrap(),
+                    },
+                    cx,
+                );
+            }
+            let recording = pane.recorder.take().unwrap().stop();
+            let input = recording
+                .lines()
+                .skip(1)
+                .map(|line| {
+                    serde_json::from_str::<serde_json::Value>(line).unwrap()[2]
+                        .as_str()
+                        .unwrap()
+                        .to_owned()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                input,
+                [
+                    "\x1b[74;0;10;1;8;1_",
+                    "\x1b[74;0;106;0;0;1_",
+                    "\x1b[74;0;106;1;2;1_",
+                    "\x1b[74;0;106;0;0;1_",
+                    "\x1b[32;0;0;1;8;1_",
+                    "\x1b[32;0;32;0;0;1_",
+                    "replacement",
+                ]
+            );
+        });
+    }
+
+    #[gpui::test]
     fn direct_user_input_broadcasts_once_for_each_input_path(cx: &mut TestAppContext) {
         let (_, cx) = cx.add_window_view(|_window, _cx| TerminalTestRoot);
         let pane = cx.update(|window, cx| {
@@ -4956,6 +5195,21 @@ mod tests {
             pane.commit_text("x", cx);
             pane.send_user_protocol_bytes(b"\x1b[D", cx);
             pane.paste_text("y", cx);
+            pane.terminal.lock().feed_recording_output(b"\x1b[?9001h");
+            assert!(pane.handle_key(
+                &gpui::KeyDownEvent {
+                    keystroke: gpui::Keystroke::parse("ctrl-j").unwrap(),
+                    is_held: false,
+                    prefer_character_input: false,
+                },
+                cx
+            ));
+            pane.handle_key_up(
+                &gpui::KeyUpEvent {
+                    keystroke: gpui::Keystroke::parse("ctrl-j").unwrap(),
+                },
+                cx,
+            );
         });
         let delivered = recorder.read_with(cx, |recorder, _cx| recorder.delivered.clone());
         assert_eq!(
@@ -4964,6 +5218,7 @@ mod tests {
                 (TerminalBroadcastInputKind::Text, b"x".to_vec()),
                 (TerminalBroadcastInputKind::Protocol, b"\x1b[D".to_vec()),
                 (TerminalBroadcastInputKind::Paste, b"y".to_vec()),
+                (TerminalBroadcastInputKind::Protocol, b"\n".to_vec()),
             ]
         );
 
@@ -4972,8 +5227,58 @@ mod tests {
         });
         assert_eq!(
             recorder.read_with(cx, |recorder, _cx| recorder.delivered.len()),
-            3
+            4
         );
+    }
+
+    #[gpui::test]
+    fn theme_change_repaints_existing_rows_with_the_new_palette(cx: &mut TestAppContext) {
+        let (_, cx) = cx.add_window_view(|_window, _cx| TerminalTestRoot);
+        let pane = cx.update(|window, cx| {
+            cx.new(|cx| {
+                TerminalPane::new_recording_playback(
+                    DEFAULT_COLS,
+                    DEFAULT_ROWS,
+                    TerminalUiPreferences::default(),
+                    window,
+                    cx,
+                )
+                .unwrap()
+            })
+        });
+        let light = TerminalUiTheme::from_tokens(oxideterm_theme::ThemeTokens::from_builtin(
+            oxideterm_theme::theme_by_id("solarized-light"),
+        ));
+        pane.update(cx, |pane, cx| {
+            let settled = {
+                let mut terminal = pane.terminal.lock();
+                // The cursor row is always damaged, so leave it below the colored row.
+                terminal.feed_recording_output(b"\x1b[41mAB\x1b[0m\r\n");
+                let first = terminal.snapshot_incremental(&terminal.snapshot());
+                terminal.snapshot_incremental(&first)
+            };
+            pane.snapshot = settled;
+            pane.snapshot_dirty = false;
+
+            let mut preferences = pane.preferences.clone();
+            preferences.theme = light.clone();
+            pane.set_preferences(preferences, cx);
+
+            assert!(pane.snapshot_dirty);
+            let (next, _, _) = pane
+                .terminal
+                .lock()
+                .try_render_snapshot(&pane.snapshot, false)
+                .unwrap();
+            let row = &next.lines[0].cells;
+            assert_eq!(
+                (row[0].bg, row[2].bg),
+                (
+                    terminal_color_from_hex(light.tokens.terminal.red),
+                    terminal_color_from_hex(light.background),
+                )
+            );
+        });
     }
 
     #[gpui::test]
@@ -5631,14 +5936,52 @@ mod tests {
             Some("10:00:03")
         );
 
+        // Showing or hiding the timestamp gutter reserves columns and resizes
+        // the grid; the wider row must keep the label of the unchanged content.
+        let wider_snapshot = timestamp_test_snapshot(timestamp_test_row(42, "pwd        "));
+        record_timestampable_snapshot_rows(&mut store, &wider_snapshot, "10:00:04");
+        assert_eq!(
+            store.get(42).map(|timestamp| timestamp.label.as_str()),
+            Some("10:00:03"),
+            "a width-only change must not re-stamp an unchanged row"
+        );
+        assert_eq!(
+            store.get(42).map(|timestamp| timestamp.source_signature),
+            Some(wider_snapshot.lines[0].signature),
+            "the cheap invalidation key still follows the snapshot"
+        );
+
         let label = terminal_timestamp_label(1, 2, 3, 4);
         assert_eq!(label, "[01:02:03.004]");
         assert_eq!(label.chars().count(), TERMINAL_TIMESTAMP_LABEL_CELLS);
 
         let cleared_snapshot = timestamp_test_snapshot(timestamp_test_row(42, ""));
-        record_timestampable_snapshot_rows(&mut store, &cleared_snapshot, "10:00:04");
+        record_timestampable_snapshot_rows(&mut store, &cleared_snapshot, "10:00:05");
 
         assert!(!store.entries.contains_key(&42));
+    }
+
+    #[test]
+    fn row_timestamps_track_styled_trailing_spaces() {
+        for style in ["\x1b[41m", "\x1b[4m", "\x1b]8;;https://example.com\x07"] {
+            let mut terminal =
+                TerminalSession::recording_playback(12, 1, GraphicsOptions::default(), 10);
+            terminal.feed_recording_output(b"pwd   ");
+            let initial = terminal.snapshot();
+            let key = terminal_row_timestamp_identity(&initial.lines[0]);
+            let mut store = TerminalRowTimestampStore::default();
+            record_timestampable_snapshot_rows(&mut store, &initial, "old");
+
+            terminal.feed_recording_output(b"\x1b[1;4H");
+            terminal.feed_recording_output(style.as_bytes());
+            terminal.feed_recording_output(b" \x1b[0m\x1b]8;;\x07");
+            record_timestampable_snapshot_rows(&mut store, &terminal.snapshot(), "styled");
+            assert_eq!(store.get(key).unwrap().label, "styled", "{style:?}");
+
+            terminal.feed_recording_output(b"\x1b[1;4H ");
+            record_timestampable_snapshot_rows(&mut store, &terminal.snapshot(), "cleared");
+            assert_eq!(store.get(key).unwrap().label, "cleared", "{style:?}");
+        }
     }
 
     #[test]

@@ -14,8 +14,8 @@ use oxideterm_gpui_settings_view::{SettingsInput, SettingsKeybindingScopeFilter}
 use oxideterm_gpui_ui::confirm::ConfirmDialogAction;
 use oxideterm_settings_model::{
     AiSettingsPage, SettingsNavigationLayout, SettingsTab, TerminalSettingsPage,
-    ThemeEditorSection, ThemeEditorState, app_ui_colors_to_colors, editor_terminal_theme,
-    terminal_theme_to_colors,
+    ThemeEditorSection, ThemeEditorState, ThemeTarget, app_ui_colors_to_colors,
+    editor_terminal_theme, terminal_theme_to_colors,
 };
 use oxideterm_theme::{derive_ui_colors_from_terminal, theme_by_id};
 use zeroize::Zeroizing;
@@ -226,6 +226,7 @@ pub(in crate::workspace) enum BackgroundGalleryOperationResult {
 
 pub(in crate::workspace) enum ThemeImportResult {
     Imported {
+        target: ThemeTarget,
         theme_id: String,
         name: String,
         value: serde_json::Value,
@@ -375,6 +376,7 @@ pub(in crate::workspace) enum SettingsNavigationDraftAction {
 /// Owns settings work that must complete independently from root rendering.
 pub(in crate::workspace) struct SettingsWorkspaceEntity {
     route: SettingsRouteState,
+    pub(super) theme_preview_page: oxideterm_gpui_settings_view::ThemePreviewPage,
     external_store_watch: Option<ExternalStoreWatch>,
     external_store_watch_task: Option<Task<()>>,
     portable_status: Option<oxideterm_portable_runtime::PortableStatusSnapshot>,
@@ -529,6 +531,7 @@ impl SettingsWorkspaceEntity {
     pub(in crate::workspace) fn new(cx: &mut Context<Self>) -> Self {
         Self {
             route: SettingsRouteState::default(),
+            theme_preview_page: Default::default(),
             external_store_watch: None,
             external_store_watch_task: None,
             portable_status: None,
@@ -1587,6 +1590,7 @@ impl SettingsWorkspaceEntity {
 
     pub(in crate::workspace) fn start_theme_import(
         &mut self,
+        target: ThemeTarget,
         selection: impl std::future::Future<Output = Option<PathBuf>> + 'static,
         runtime: tokio::runtime::Handle,
         cx: &mut Context<Self>,
@@ -1622,6 +1626,7 @@ impl SettingsWorkspaceEntity {
                         settings
                             .theme_import_results
                             .push_back(ThemeImportResult::Imported {
+                                target,
                                 theme_id,
                                 name,
                                 value,
@@ -1709,7 +1714,8 @@ impl SettingsWorkspaceEntity {
         editor.duplicate_theme.push_str(theme.id);
         editor.duplicate_theme_touched = true;
         editor.terminal_colors = terminal_theme_to_colors(theme.terminal);
-        editor.ui_colors = app_ui_colors_to_colors(derive_ui_colors_from_terminal(theme.terminal));
+        editor.ui_colors =
+            app_ui_colors_to_colors(oxideterm_theme::ThemeTokens::from_builtin(theme).ui);
         cx.notify();
         true
     }
@@ -2366,7 +2372,7 @@ mod tests {
 
     use gpui::{AppContext, TestAppContext};
     use oxideterm_settings::PersistedSettings;
-    use oxideterm_settings_model::{SettingsTab, theme_editor_from_settings};
+    use oxideterm_settings_model::{SettingsTab, ThemeTarget, theme_editor_from_settings};
 
     use super::{
         ExternalStoreWatch, KeybindingFileOperationResult, LaunchAtLoginError,
@@ -2454,7 +2460,9 @@ mod tests {
     }
 
     #[gpui::test]
-    fn hidden_settings_page_keeps_worker_completion_exact_once(cx: &mut TestAppContext) {
+    fn hidden_settings_page_keeps_single_flight_worker_completion_exact_once(
+        cx: &mut TestAppContext,
+    ) {
         let entity = cx.new(SettingsWorkspaceEntity::new);
         let runtime = Arc::new(
             tokio::runtime::Builder::new_multi_thread()
@@ -2471,7 +2479,7 @@ mod tests {
             entity.set_active_tab(SettingsTab::Portable, cx);
             assert!(entity.start_portable_status_refresh(
                 true,
-                runtime,
+                Arc::clone(&runtime),
                 move || {
                     worker_release_rx
                         .recv()
@@ -2482,9 +2490,15 @@ mod tests {
                         .expect("worker completion receiver should remain alive");
                     super::PortableStatusRefresh {
                         status: Err("portable unavailable while hidden".to_string()),
-                        exportable_secret_count: 0,
+                        exportable_secret_count: 2,
                     }
                 },
+                cx,
+            ));
+            assert!(!entity.start_portable_status_refresh(
+                false,
+                runtime,
+                || unreachable!("single-flight worker"),
                 cx,
             ));
             // The worker result remains lifecycle-significant after the page hides.
@@ -2515,6 +2529,7 @@ mod tests {
                 snapshot.error.as_deref(),
                 Some("portable unavailable while hidden")
             );
+            assert_eq!(snapshot.exportable_secret_count, Some(2));
             assert!(entity.portable_refresh_task.is_none());
         });
     }
@@ -2574,60 +2589,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn portable_status_refresh_is_single_flight_and_entity_owned(cx: &mut TestAppContext) {
-        let entity = cx.new(SettingsWorkspaceEntity::new);
-        let runtime = Arc::new(
-            tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(1)
-                .enable_all()
-                .build()
-                .expect("test runtime"),
-        );
-
-        entity.update(cx, |entity, cx| {
-            assert!(entity.start_portable_status_refresh(
-                false,
-                runtime,
-                || super::PortableStatusRefresh {
-                    status: Err("unavailable".to_string()),
-                    exportable_secret_count: 2,
-                },
-                cx,
-            ));
-            assert!(
-                !entity.start_portable_status_refresh(
-                    false,
-                    Arc::new(
-                        tokio::runtime::Builder::new_multi_thread()
-                            .worker_threads(1)
-                            .enable_all()
-                            .build()
-                            .expect("second test runtime"),
-                    ),
-                    || unreachable!("single-flight worker"),
-                    cx,
-                )
-            );
-            entity.portable_refresh_task = None;
-            entity.finish_portable_status_refresh(
-                Ok(super::PortableStatusRefresh {
-                    status: Err("unavailable".to_string()),
-                    exportable_secret_count: 2,
-                }),
-                cx,
-            );
-        });
-
-        entity.update(cx, |entity, _cx| {
-            let snapshot = entity.portable_status_snapshot();
-            assert!(!snapshot.refresh_pending);
-            assert_eq!(snapshot.error.as_deref(), Some("unavailable"));
-            assert_eq!(snapshot.exportable_secret_count, Some(2));
-        });
-    }
-
-    #[gpui::test]
-    fn launch_at_login_replacement_and_late_completion_are_generation_safe(
+    fn launch_at_login_replacement_completion_and_release_preserve_task_ownership(
         cx: &mut TestAppContext,
     ) {
         let first_dropped = Arc::new(AtomicBool::new(false));
@@ -2676,12 +2638,8 @@ mod tests {
                 }
             );
         });
-    }
 
-    #[gpui::test]
-    fn settings_entity_release_cancels_launch_at_login_task(cx: &mut TestAppContext) {
         let dropped = Arc::new(AtomicBool::new(false));
-        let entity = cx.new(SettingsWorkspaceEntity::new);
         entity.update(cx, |entity, cx| {
             let dropped_for_future = Arc::clone(&dropped);
             entity.start_launch_at_login_operation(
@@ -2698,7 +2656,10 @@ mod tests {
         cx.update(|_cx| {});
         cx.run_until_parked();
 
-        assert!(dropped.load(Ordering::Acquire));
+        assert!(
+            dropped.load(Ordering::Acquire),
+            "release cancels the current launch-at-login task"
+        );
     }
 
     #[cfg(target_os = "macos")]
@@ -2726,7 +2687,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn keybinding_file_task_replacement_and_completion_are_generation_safe(
+    fn keybinding_file_replacement_completion_and_release_preserve_task_ownership(
         cx: &mut TestAppContext,
     ) {
         let runtime = tokio::runtime::Runtime::new().expect("create keybinding file runtime");
@@ -2784,13 +2745,8 @@ mod tests {
                 Some(KeybindingFileOperationResult::ImportFailed)
             ));
         });
-    }
 
-    #[gpui::test]
-    fn settings_entity_release_cancels_keybinding_file_task(cx: &mut TestAppContext) {
-        let runtime = tokio::runtime::Runtime::new().expect("create keybinding file runtime");
         let dropped = Arc::new(AtomicBool::new(false));
-        let entity = cx.new(SettingsWorkspaceEntity::new);
         entity.update(cx, |entity, cx| {
             let dropped_for_future = Arc::clone(&dropped);
             entity.start_keybinding_export(
@@ -2809,7 +2765,10 @@ mod tests {
         cx.update(|_cx| {});
         cx.run_until_parked();
 
-        assert!(dropped.load(Ordering::Acquire));
+        assert!(
+            dropped.load(Ordering::Acquire),
+            "release cancels the current keybinding file task"
+        );
     }
 
     #[gpui::test]
@@ -2819,6 +2778,7 @@ mod tests {
             entity.open_theme_editor(
                 theme_editor_from_settings(
                     &PersistedSettings::default(),
+                    ThemeTarget::Terminal,
                     None,
                     "First".to_string(),
                 ),
@@ -2834,6 +2794,7 @@ mod tests {
             entity.open_theme_editor(
                 theme_editor_from_settings(
                     &PersistedSettings::default(),
+                    ThemeTarget::Terminal,
                     None,
                     "Second".to_string(),
                 ),

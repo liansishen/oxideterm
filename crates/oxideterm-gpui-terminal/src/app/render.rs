@@ -2,9 +2,9 @@ use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use gpui::{
     Anchor, AnchoredPositionMode, AnyElement, App, ClipboardItem, Context, ExternalPaths,
-    FocusHandle, Focusable, FontWeight, IntoColor, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, ObjectFit, Render, RenderImage, SharedString, StyledImage, Window, anchored,
-    deferred, div, point, prelude::*, px, rgb, rgba,
+    FocusHandle, Focusable, FontWeight, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ObjectFit, Render, RenderImage, SharedString, StyledImage, Window, anchored, deferred, div,
+    point, prelude::*, px, rgb, rgba,
 };
 use oxideterm_gpui_ui::button::{
     ButtonRadius, ContextChipOptions, IconButtonOptions, context_chip, icon_button,
@@ -444,6 +444,7 @@ impl Render for TerminalPane {
                 last_viewport_scale_factor_bits: self.viewport_scale_factor_bits,
             }),
         )
+        .marked_text_caret(self.marked_text_caret_utf16)
         .detect_file_paths_as_links(self.settings.detect_file_paths_as_links)
         .precomputed_search_matches()
         .selection_highlight_query(selection_highlight_query)
@@ -701,7 +702,7 @@ impl TerminalPane {
                     (
                         range,
                         gpui::HighlightStyle {
-                            color: Some(rgb(tokens.ui.accent).into_color()),
+                            color: Some(rgb(tokens.ui.accent).into()),
                             ..Default::default()
                         },
                     )
@@ -2007,6 +2008,16 @@ impl TerminalPane {
             context_menu_event_boundary(
                 context_menu_content(tokens)
                     .w(px(TERMINAL_CONTEXT_MENU_WIDTH))
+                    .children(self.plugin_text_actions.iter().cloned().map(|action| {
+                        self.render_terminal_context_menu_item(
+                            action.label.clone(),
+                            !menu.has_selection,
+                            move |this, _, _, cx| {
+                                this.request_plugin_text_action(action.clone(), cx);
+                            },
+                            cx,
+                        )
+                    }))
                     .child(self.render_terminal_context_menu_item(
                         copy_label,
                         !menu.has_selection,
@@ -2464,13 +2475,26 @@ impl TerminalPane {
         // Context menu rendering is token-driven; positioning uses the same
         // Radix-mapped padding and shared line box as the rendered rows.
         tokens.metrics.ui_menu_padding * 2.0
-            + TERMINAL_CONTEXT_MENU_ACTION_COUNT * context_menu_item_height_estimate(tokens)
+            + (TERMINAL_CONTEXT_MENU_ACTION_COUNT + self.plugin_text_actions.len() as f32)
+                * context_menu_item_height_estimate(tokens)
             + TERMINAL_CONTEXT_MENU_SEPARATOR_COUNT * context_menu_separator_height_estimate(tokens)
     }
 
     fn copy_selection_from_context_menu(&mut self, cx: &mut Context<Self>) {
         self.dismiss_terminal_context_menu(cx);
         let _copied = self.copy_selection_to_clipboard_if_present(cx);
+    }
+
+    pub(super) fn request_plugin_text_action(
+        &mut self,
+        action: super::TerminalPluginTextAction,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(text) = self.selected_text_snapshot() else {
+            return;
+        };
+        self.pending_plugin_text = Some((action, zeroize::Zeroizing::new(text)));
+        self.request_context_action(super::TerminalContextAction::PluginTextTool, false, cx);
     }
 
     fn request_context_action(
@@ -2764,11 +2788,7 @@ mod tests {
 
     use oxideterm_terminal::TerminalCursorShape;
 
-    use super::{
-        TERMINAL_VISUAL_BELL_OVERLAY_ALPHA, external_paths_for_local_terminal,
-        terminal_cursor_shape_for_render, terminal_pane_base_is_transparent,
-        terminal_visual_bell_overlay_color,
-    };
+    use super::{external_paths_for_local_terminal, terminal_cursor_shape_for_render};
 
     struct AutosuggestTestView {
         pane: gpui::Entity<super::TerminalPane>,
@@ -2959,16 +2979,6 @@ mod tests {
         assert_eq!(
             constrained.size,
             gpui::size(gpui::px(234.0), gpui::px(48.0))
-        );
-    }
-
-    #[test]
-    fn terminal_pane_base_keeps_window_background_visible_during_visual_bell() {
-        assert!(terminal_pane_base_is_transparent(true));
-        assert!(!terminal_pane_base_is_transparent(false));
-        assert_eq!(
-            terminal_visual_bell_overlay_color(0x17131a) & 0xff,
-            u32::from(TERMINAL_VISUAL_BELL_OVERLAY_ALPHA)
         );
     }
 

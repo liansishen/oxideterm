@@ -94,8 +94,7 @@ rustPlatform.buildRustPackage {
     # 4. Run `nix flake check -L` to ensure package checks pass.
     outputHashes = {
       "ironrdp-0.17.0" = "sha256-gBkwaq6m1iunsQ2Xz/5l5ajuI3uRmYkdlFdiE5wx7to=";
-      "russh-0.63.0" = "sha256-ymdLCqupKWdxM96nGE80sOkmorwd99uvJ2bRazA4IYs=";
-      "wasm_thread-0.3.3" = "sha256-+lRLCIk0S6Y5ORYjDKsYYHia2FtoSoh+rWkQh7mnPBE=";
+      "russh-0.63.0" = "sha256-oMUSzDpWWh9/W+HEipJrU2A8CRbpyCoJVeDchIbBsNM=";
     };
   };
 

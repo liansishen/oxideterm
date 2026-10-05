@@ -87,6 +87,7 @@ pub enum SettingsSelect {
     UpdateProxyMode,
     UpdateProxyProtocol,
     AppearanceTheme,
+    AppearanceTerminalTheme,
     AppearanceDensity,
     AppearanceAnimation,
     AppearanceRenderProfile,
@@ -140,6 +141,16 @@ pub enum SettingsSelect {
     HighlightMatchScope(usize),
     ConnectionImportSource,
     ConnectionImportDuplicateStrategy,
+}
+
+impl SettingsSelect {
+    pub fn theme_target(self) -> Option<crate::ThemeTarget> {
+        match self {
+            Self::AppearanceTheme => Some(crate::ThemeTarget::Application),
+            Self::AppearanceTerminalTheme => Some(crate::ThemeTarget::Terminal),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -276,6 +287,10 @@ pub enum SettingsInput {
     NativePluginInstallChecksum,
     NativePluginRegistryUrl,
     NativePluginMarketplaceSearch,
+    NativePluginInstalledPageSize,
+    NativePluginMarketplacePageSize,
+    NativePluginInstalledPageJump,
+    NativePluginMarketplacePageJump,
     ManagedKeyFilePath,
     ManagedKeyFileName,
     ManagedKeyFilePassphrase,
@@ -684,6 +699,10 @@ impl SettingsInput {
             Self::NativePluginInstallChecksum => PLUGIN_MANAGER_INPUT_ANCHOR_BASE + 1,
             Self::NativePluginRegistryUrl => PLUGIN_MANAGER_INPUT_ANCHOR_BASE + 2,
             Self::NativePluginMarketplaceSearch => PLUGIN_MANAGER_INPUT_ANCHOR_BASE + 3,
+            Self::NativePluginInstalledPageSize => PLUGIN_MANAGER_INPUT_ANCHOR_BASE + 4,
+            Self::NativePluginMarketplacePageSize => PLUGIN_MANAGER_INPUT_ANCHOR_BASE + 5,
+            Self::NativePluginInstalledPageJump => PLUGIN_MANAGER_INPUT_ANCHOR_BASE + 6,
+            Self::NativePluginMarketplacePageJump => PLUGIN_MANAGER_INPUT_ANCHOR_BASE + 7,
             Self::ManagedKeyFilePath => 30_000,
             Self::ManagedKeyFileName => 30_001,
             Self::ManagedKeyFilePassphrase => 30_002,

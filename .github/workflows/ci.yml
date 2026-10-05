@@ -37,7 +37,7 @@ jobs:
             echo "native=true" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
-          if git diff --name-only "${BASE_SHA}" HEAD | grep -qE '^(crates/|scripts/|\.github/scripts/|\.github/workflows/(ci|fork-release|native-package)\.yml|Cargo\.toml|Cargo\.lock|rustfmt\.toml)'; then
+          if git diff --name-only "${BASE_SHA}" HEAD | grep -qE '^(crates/|scripts/|\.github/scripts/|\.github/workflows/(ci|fork-release|native-package)\.yml|Cargo\.toml|Cargo\.lock|rustfmt\.toml|rust-toolchain\.toml)'; then
             echo "native=true" >> "${GITHUB_OUTPUT}"
           else
             echo "native=false" >> "${GITHUB_OUTPUT}"
@@ -52,7 +52,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
-          toolchain: 1.94.1
+          toolchain: 1.97.0
           components: rustfmt
 
       - name: Rust cache
@@ -105,7 +105,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
-          toolchain: 1.94.1
+          toolchain: 1.97.0
 
       - name: Rust cache
         uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
@@ -114,13 +114,25 @@ jobs:
           cache-on-failure: false
 
       - name: Check Windows GPUI backend
-        run: cargo check -p gpui_windows
+        run: cargo check -p gpui-pre-windows
 
       - name: Test Windows frame and quit message handling
-        run: cargo test -p gpui_windows --lib windows_message_
+        run: cargo test -p gpui-pre-windows --lib windows_message_
 
       - name: Test Windows text fallback identity
-        run: cargo test -p gpui_windows --lib windows_text_
+        run: cargo test -p gpui-pre-windows --lib windows_text_
+
+      - name: Test Windows terminal pipe readiness and EOF
+        run: cargo test -p alacritty_terminal --lib tty::windows::blocking::tests
+
+      - name: Stage pinned ConPTY for console input tests
+        run: python scripts/release/conpty_runtime.py --target x86_64-pc-windows-msvc --destination target/debug/deps
+
+      - name: Test negotiated Windows key encoding
+        run: cargo test -p oxideterm-gpui-terminal --lib terminal_view::tests::input_tests
+
+      - name: Test actual ConPTY control and Enter keys
+        run: cargo test -p oxideterm-gpui-terminal --lib bundled_conpty_delivers_distinct_ctrl_j_and_enter_events -- --ignored
 
       - name: Check Windows application
         run: cargo check -p oxideterm-gpui-app

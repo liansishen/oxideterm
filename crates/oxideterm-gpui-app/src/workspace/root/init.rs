@@ -23,13 +23,21 @@ impl WorkspaceApp {
         let window_button_layout_subscription =
             cx.observe_button_layout_changed(window, |_workspace, _window, cx| cx.notify());
         let mut settings_store = SettingsStore::load_default()?;
+        let mut connection_store = ConnectionStore::load(default_connections_path())?;
+        oxideterm_cloud_sync::sync_v3::RecoveryJournal::recover_pending(
+            &mut connection_store,
+            &mut settings_store,
+            &default_saved_forwards_path(),
+            &mut oxideterm_cloud_sync::secrets::CloudSyncKeychainSecretProvider::new(
+                Default::default(),
+            ),
+        )?;
         settings_store.settings_mut().sidebar_ui.zen_mode = false;
         if let Err(error) = ensure_bundled_workspace_backgrounds(settings_store.path()) {
             // A background-gallery failure must not prevent the workspace from opening.
             eprintln!("failed to install built-in workspace backgrounds: {error}");
         }
         let version_migration = VersionMigrationState::from_settings_path(settings_store.path())?;
-        let connection_store = ConnectionStore::load(default_connections_path())?;
         let audit = audit::AuditState::new(settings_store.path().with_file_name("audit.sqlite3"));
         let settings = settings_store.settings().clone();
         let i18n = I18n::new(locale_from_settings(settings.general.language));
@@ -491,6 +499,13 @@ impl WorkspaceApp {
             ai_runtime_context::AiRuntimeContextEntity::new()
         });
         let plugin_task_runtime = forwarding_runtime.clone();
+        oxideterm_gpui_editor::EditorLanguagePlugins::set_labels(
+            i18n.t("plugin.language_missing"),
+            i18n.t("plugin.load_failed_default"),
+            i18n.t("plugin.language_manage"),
+            i18n.t("plugin.language_dismiss"),
+            cx,
+        );
         let plugin_entity = cx.new(move |cx| {
             plugin_entity::PluginWorkspaceEntity::new(plugin_task_runtime, plugin_registry, cx)
         });
@@ -500,6 +515,7 @@ impl WorkspaceApp {
                 workspace.enqueue_plugin_window_effect(event, cx);
             },
         );
+        plugin_entity.update(cx, |plugins, _cx| plugins.start_compatibility_refresh());
         let tab_host = cx.new(|_| tabs::WorkspaceTabHostEntity::new());
         let tab_host_subscription = cx.subscribe(
             &tab_host,

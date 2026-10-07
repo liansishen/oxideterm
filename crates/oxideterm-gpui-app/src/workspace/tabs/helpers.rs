@@ -3,11 +3,11 @@ use oxideterm_connections::ConnectionStore;
 use oxideterm_remote_desktop::RemoteDesktopProtocol;
 
 pub(super) const WELCOME_PAGE_PADDING: f32 = 24.0;
-const WELCOME_WORKBENCH_MIN_ROW_WIDTH: f32 = 800.0;
+const WELCOME_COMPACT_LAYOUT_WIDTH: f32 = 800.0;
 
-/// The breakpoint uses card space, excluding the page gutters.
-pub(super) fn welcome_layout_is_stacked(available_width: f32) -> bool {
-    available_width - 2.0 * WELCOME_PAGE_PADDING < WELCOME_WORKBENCH_MIN_ROW_WIDTH
+/// Compact section spacing follows the usable width after page gutters.
+pub(super) fn welcome_layout_is_compact(available_width: f32) -> bool {
+    available_width - 2.0 * WELCOME_PAGE_PADDING < WELCOME_COMPACT_LAYOUT_WIDTH
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -50,19 +50,22 @@ pub(super) fn welcome_recent_connections(
 ) -> Vec<WelcomeRecentConnection> {
     let mut recent = Vec::new();
 
-    recent.extend(store.connections().iter().filter_map(|connection| {
-        Some(WelcomeRecentConnection {
-            name: connection.name.clone(),
-            subtitle: format!(
-                "{}@{}:{}",
-                connection.username, connection.host, connection.port
-            ),
-            kind: WelcomeRecentKind::Ssh,
-            target: WelcomeRecentTarget::Ssh(connection.id.clone()),
-            id: connection.id.clone(),
-            last_used_at: connection.last_used_at,
-        })
-    }));
+    recent.extend(
+        store
+            .connections()
+            .iter()
+            .map(|connection| WelcomeRecentConnection {
+                name: connection.name.clone(),
+                subtitle: format!(
+                    "{}@{}:{}",
+                    connection.username, connection.host, connection.port
+                ),
+                kind: WelcomeRecentKind::Ssh,
+                target: WelcomeRecentTarget::Ssh(connection.id.clone()),
+                id: connection.id.clone(),
+                last_used_at: connection.last_used_at,
+            }),
+    );
     recent.extend(store.serial_profiles().iter().filter_map(|profile| {
         Some(WelcomeRecentConnection {
             name: profile.name.clone(),

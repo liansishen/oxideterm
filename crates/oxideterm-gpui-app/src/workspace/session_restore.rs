@@ -416,7 +416,7 @@ impl WorkspaceApp {
         let profile_ids = snapshot_saved_ssh_profiles(&snapshot);
         let missing_profiles = profile_ids
             .iter()
-            .filter(|profile_id| self.connection_store.get(*profile_id).is_none())
+            .filter(|profile_id| self.connection_store.get(profile_id).is_none())
             .cloned()
             .collect::<Vec<_>>();
         self.pending_terminal_workspace_restore = Some(PendingRestore::new(snapshot));

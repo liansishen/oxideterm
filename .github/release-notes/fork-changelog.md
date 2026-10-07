@@ -53,6 +53,7 @@
 #### 🛠️ Fork 自有更新
 
 - 本次以同步上游为主，继续保留本 Fork 的终端工作区恢复、标题栏合并、活动栏控制、本地终端连接后执行、字体回退、通知和自定义更新功能。
+- 通知和浮层到期任务交由 GPUI 执行器调度，统一到期时钟并保持现有关闭动画，修复交互测试中外部定时线程唤醒界面任务的问题。
 - 发布流程支持主程序已预设目标 Fork 版本的情况，创建发布标记提交并原子推送主分支与标签。
 
 #### 📌 升级与验证范围
@@ -112,6 +113,7 @@ This Windows x64 release of the **liansishen/oxideterm community fork** moves to
 #### 🛠️ Fork-specific changes
 
 - This release focuses on upstream synchronization and retains the fork's terminal workspace restoration, merged title bar, activity-bar controls, local post-connect commands, font fallback, notifications, and custom updates.
+- Notification and overlay deadlines use the GPUI executor and its clock while preserving exit animations, fixing external timer threads waking UI tasks in interaction tests.
 - The release workflow supports an already selected fork version by creating a release marker commit and atomically pushing main and the tag.
 
 #### 📌 Upgrade and validation scope

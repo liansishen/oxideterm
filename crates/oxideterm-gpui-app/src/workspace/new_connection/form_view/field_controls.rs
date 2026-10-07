@@ -3223,6 +3223,39 @@ impl WorkspaceApp {
             .into_any_element()
     }
 
+    pub(super) fn render_mosh_plugin_status(&self, cx: &mut Context<Self>) -> AnyElement {
+        let available = self.plugin_entity.read(cx).mosh_executable().is_some();
+        div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap_3()
+            .child(self.render_connection_hint_with_color(
+                self.i18n.t(if available {
+                    "mosh_plugin.ready"
+                } else {
+                    "mosh_plugin.required"
+                }),
+                if available {
+                    self.tokens.ui.success
+                } else {
+                    self.tokens.ui.warning
+                },
+            ))
+            .when(!available, |row| {
+                row.child(self.workspace_toolbar_action_button(
+                    self.i18n.t("remote_desktop.manage_plugin"),
+                    None,
+                    ToolbarButtonOptions::default(),
+                    cx.listener(|this, _event, window, cx| {
+                        this.close_new_connection_form(window, cx);
+                        this.open_mosh_plugin(window, cx);
+                    }),
+                ))
+            })
+            .into_any_element()
+    }
+
     pub(super) fn render_mosh_advanced_fields(
         &self,
         server_executable: &str,
@@ -3484,6 +3517,37 @@ impl WorkspaceApp {
             .flex()
             .flex_col()
             .gap(px(self.tokens.metrics.modal_section_gap))
+            .child({
+                let available = self.remote_desktop_provider(protocol, cx).is_some();
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_3()
+                    .child(self.render_connection_hint_with_color(
+                        self.i18n.t(if available {
+                            "remote_desktop.plugin_ready"
+                        } else {
+                            "remote_desktop.plugin_required"
+                        }),
+                        if available {
+                            self.tokens.ui.success
+                        } else {
+                            self.tokens.ui.warning
+                        },
+                    ))
+                    .when(!available, |row| {
+                        row.child(self.workspace_toolbar_action_button(
+                            self.i18n.t("remote_desktop.manage_plugin"),
+                            None,
+                            ToolbarButtonOptions::default(),
+                            cx.listener(move |this, _event, window, cx| {
+                                this.close_new_connection_form(window, cx);
+                                this.open_remote_desktop_plugin(protocol, window, cx);
+                            }),
+                        ))
+                    })
+            })
             .child(self.render_connection_form_section(ConnectionFormSection::Basic, basic, cx))
             .child(self.render_connection_form_section(
                 ConnectionFormSection::Authentication,

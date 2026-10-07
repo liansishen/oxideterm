@@ -18,6 +18,8 @@ pub struct NativePluginManifest {
     pub description: Option<String>,
     #[serde(default)]
     pub author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
     #[serde(default)]
     pub main: Option<String>,
     #[serde(default)]
@@ -75,12 +77,19 @@ pub enum NativePluginRuntimeKind {
     Language,
     Wasm,
     Process,
+    Acp,
+    RemoteDesktop,
+    TerminalTransport,
     ManifestOnly,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativePluginContributes {
+    #[serde(default)]
+    pub terminal_transport: Option<NativePluginTerminalTransportDef>,
+    #[serde(default)]
+    pub remote_desktop: Option<NativePluginRemoteDesktopDef>,
     #[serde(default)]
     pub file_previews: Option<Vec<NativePluginFilePreviewDef>>,
     #[serde(default)]
@@ -105,6 +114,22 @@ pub struct NativePluginContributes {
     pub api_commands: Option<Vec<String>>,
     #[serde(default)]
     pub host_monitors: Option<Vec<NativePluginHostMonitorDef>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePluginRemoteDesktopDef {
+    pub protocol: oxideterm_remote_desktop::RemoteDesktopProtocol,
+    pub protocol_version: u32,
+    #[serde(default)]
+    pub capabilities: oxideterm_remote_desktop::RemoteDesktopProviderCapabilities,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePluginTerminalTransportDef {
+    pub protocol: String,
+    pub protocol_version: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]

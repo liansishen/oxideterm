@@ -9,13 +9,14 @@ use std::io::Write as _;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zip::{ZipWriter, write::SimpleFileOptions};
 
-fn minimal_manifest() -> NativePluginManifest {
+pub(super) fn minimal_manifest() -> NativePluginManifest {
     NativePluginManifest {
         id: "com.example.demo".to_string(),
         name: "Demo".to_string(),
         version: "1.0.0".to_string(),
         description: None,
         author: None,
+        tags: None,
         main: None,
         engines: None,
         manifest_version: None,
@@ -580,6 +581,7 @@ fn plugin_package_install_supports_flat_nested_conflict_and_updates() {
                     packages: Vec::new(),
                     engines: None,
                     releases: Vec::new(),
+                    history: None,
                 },
                 NativePluginRegistryEntry {
                     id: "com.example.other".to_string(),
@@ -598,6 +600,7 @@ fn plugin_package_install_supports_flat_nested_conflict_and_updates() {
                     packages: Vec::new(),
                     engines: None,
                     releases: Vec::new(),
+                    history: None,
                 },
             ],
         },
@@ -697,6 +700,85 @@ fn discovery_creates_missing_plugin_directory() {
     assert!(registry.diagnostics().is_empty());
     assert!(plugins_dir.is_dir());
     let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn duplicate_installations_select_one_runtime_and_tab() {
+    for (directories, expected_directory, expected_version) in [
+        (
+            vec![
+                ("demo-local", "1.0.0-local.1"),
+                ("com.example.demo", "1.0.0"),
+            ],
+            "com.example.demo",
+            "1.0.0",
+        ),
+        (
+            vec![
+                ("demo-local", "2.0.0-local.1"),
+                ("com.example.demo", "1.0.0"),
+            ],
+            "com.example.demo",
+            "1.0.0",
+        ),
+        (
+            vec![("demo-local", "1.0.0-local.1"), ("demo-release", "1.0.0")],
+            "demo-release",
+            "1.0.0",
+        ),
+        (
+            vec![("demo", "1.0.0"), (".com.example.demo-backup", "2.0.0")],
+            "demo",
+            "1.0.0",
+        ),
+    ] {
+        let root = unique_temp_dir("duplicate-plugin");
+        let settings = root.join("settings.json");
+        let plugins_dir = native_plugins_dir(&settings);
+        for (directory, version) in directories {
+            let path = plugins_dir.join(directory);
+            fs::create_dir_all(&path).unwrap();
+            fs::write(path.join("plugin.wasm"), b"\0asm").unwrap();
+            let manifest: NativePluginManifest = serde_json::from_value(serde_json::json!({
+                "id": "com.example.demo",
+                "name": "Demo",
+                "version": version,
+                "runtime": { "kind": "wasm", "entry": "plugin.wasm" },
+                "contributes": { "tabs": [{ "id": "demo", "title": directory, "icon": "puzzle" }] }
+            }))
+            .unwrap();
+            write_manifest(&path, &manifest);
+        }
+
+        let registry = NativePluginRegistry::discover(&settings);
+        let selected = plugins_dir.join(expected_directory);
+        assert_eq!(
+            registry
+                .plugins()
+                .iter()
+                .map(|plugin| (&plugin.install_dir, plugin.manifest.version.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(&selected, expected_version)],
+        );
+        assert_eq!(
+            registry
+                .wasm_activation_plans()
+                .iter()
+                .map(|plan| &plan.install_dir)
+                .collect::<Vec<_>>(),
+            vec![&selected],
+        );
+        assert_eq!(
+            registry
+                .contributions()
+                .tabs
+                .iter()
+                .map(|tab| tab.definition.title.as_str())
+                .collect::<Vec<_>>(),
+            vec![expected_directory],
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 #[test]
@@ -857,6 +939,53 @@ fn executable_native_runtime_requires_existing_entry() {
 }
 
 #[test]
+fn acp_agents_require_trust_and_use_the_acp_owner_instead_of_plugin_bootstrap() {
+    let root = unique_temp_dir("acp-agent");
+    let settings = root.join("settings.json");
+    let directory = native_plugins_dir(&settings).join("agent");
+    fs::create_dir_all(directory.join("bin")).unwrap();
+    fs::write(directory.join("bin/agent"), b"fixture").unwrap();
+    let mut manifest = minimal_manifest();
+    manifest.runtime = Some(NativePluginRuntime {
+        kind: NativePluginRuntimeKind::Acp,
+        entry: "bin/agent".into(),
+    });
+    manifest.engines = Some(oxideterm_plugin_manifest::NativePluginEngines {
+        oxideterm: Some(">=2.2.1".into()),
+    });
+    write_manifest(&directory, &manifest);
+    let mut registry = NativePluginRegistry::discover(&settings);
+    assert_eq!(registry.plugins()[0].state, NativePluginState::Disabled);
+    assert_eq!(
+        native_plugin_requested_capabilities(&manifest, &registry.plugins()[0].runtime_plan)
+            .unwrap(),
+        [NATIVE_PLUGIN_TRUSTED_PROCESS_CAPABILITY]
+    );
+    assert!(registry.acp_agents().is_empty());
+    registry.set_plugin_enabled(&manifest.id, true).unwrap();
+    assert_eq!(
+        registry.acp_agents(),
+        vec![NativePluginAcpAgent {
+            plugin_id: manifest.id.clone(),
+            name: manifest.name.clone(),
+            version: manifest.version.clone(),
+            command: directory.join("bin/agent").canonicalize().unwrap(),
+        }]
+    );
+    assert!(registry.process_activation_plans().is_empty());
+    assert!(registry.wasm_activation_plans().is_empty());
+    registry.set_plugin_enabled(&manifest.id, false).unwrap();
+    assert!(registry.acp_agents().is_empty());
+    registry.set_plugin_enabled(&manifest.id, true).unwrap();
+    manifest.engines.as_mut().unwrap().oxideterm = Some(">99.0.0".into());
+    write_manifest(&directory, &manifest);
+    let registry = NativePluginRegistry::discover(&settings);
+    assert_eq!(registry.plugins()[0].state, NativePluginState::Error);
+    assert!(registry.acp_agents().is_empty());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn discovery_classifies_native_wasm_and_process_runtime_states() {
     let temp_dir = unique_temp_dir("plugin-runtime-state");
     let plugins_dir = temp_dir.join(PLUGINS_DIR_NAME);
@@ -894,6 +1023,95 @@ fn discovery_classifies_native_wasm_and_process_runtime_states() {
     assert_eq!(plugins[0].state, NativePluginState::Disabled);
     assert_eq!(plugins[1].state, NativePluginState::ReadyWasm);
     let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn remote_desktop_plugins_resolve_only_enabled_compatible_trusted_executables() {
+    let root = unique_temp_dir("desktop-plugin");
+    let settings = root.join("settings.json");
+    let directory = native_plugins_dir(&settings).join("vnc");
+    fs::create_dir_all(directory.join("bin")).unwrap();
+    fs::write(directory.join("bin/helper"), b"fixture").unwrap();
+    let mut manifest = minimal_manifest();
+    manifest.runtime = Some(NativePluginRuntime {
+        kind: NativePluginRuntimeKind::RemoteDesktop,
+        entry: "bin/helper".into(),
+    });
+    manifest.engines = Some(oxideterm_plugin_manifest::NativePluginEngines {
+        oxideterm: Some(">=2.2.1".into()),
+    });
+    let definition = NativePluginRemoteDesktopDef {
+        protocol: oxideterm_remote_desktop::RemoteDesktopProtocol::Vnc,
+        protocol_version: 1,
+        capabilities: oxideterm_remote_desktop::RemoteDesktopProviderCapabilities {
+            binary_frames: true,
+            resize: true,
+            ..Default::default()
+        },
+    };
+    manifest.contributes = Some(NativePluginContributes {
+        remote_desktop: Some(definition.clone()),
+        ..Default::default()
+    });
+    write_manifest(&directory, &manifest);
+    let mut registry = NativePluginRegistry::discover(&settings);
+    assert!(registry.remote_desktop_providers().is_empty());
+    registry.set_plugin_enabled(&manifest.id, true).unwrap();
+    assert_eq!(
+        registry.remote_desktop_providers(),
+        vec![oxideterm_remote_desktop::RemoteDesktopProviderManifest {
+            id: manifest.id.clone(),
+            name: manifest.name.clone(),
+            description: String::new(),
+            version: manifest.version.clone(),
+            protocol: definition.protocol,
+            capabilities: definition.capabilities.clone(),
+            ui: None,
+            entry: oxideterm_remote_desktop::RemoteDesktopProviderEntry {
+                command: directory
+                    .join("bin/helper")
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                args: vec!["--stdio".into()],
+                working_dir: Some(
+                    directory
+                        .canonicalize()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned()
+                ),
+            },
+        }]
+    );
+    assert!(registry.process_activation_plans().is_empty());
+    registry.set_plugin_enabled(&manifest.id, false).unwrap();
+    assert!(registry.remote_desktop_providers().is_empty());
+    registry.set_plugin_enabled(&manifest.id, true).unwrap();
+    manifest
+        .contributes
+        .as_mut()
+        .unwrap()
+        .remote_desktop
+        .as_mut()
+        .unwrap()
+        .protocol_version = 2;
+    write_manifest(&directory, &manifest);
+    registry = NativePluginRegistry::discover(&settings);
+    assert!(registry.remote_desktop_providers().is_empty());
+    assert!(
+        validate_native_plugin_manifest(&manifest)
+            .unwrap_err()
+            .contains("protocol version")
+    );
+    manifest.contributes.as_mut().unwrap().remote_desktop = Some(definition);
+    manifest.engines.as_mut().unwrap().oxideterm = Some(format!(">{}", env!("CARGO_PKG_VERSION")));
+    write_manifest(&directory, &manifest);
+    registry = NativePluginRegistry::discover(&settings);
+    assert!(registry.remote_desktop_providers().is_empty());
+    assert_eq!(registry.plugins()[0].state, NativePluginState::Error);
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -959,6 +1177,62 @@ fn process_activation_plans_and_runtime_state_transitions_are_host_owned() {
         Some("activate failed")
     );
     let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn mosh_transport_requires_a_compatible_trusted_provider_and_supported_pipe_version() {
+    let root = unique_temp_dir("mosh-plugin");
+    let settings = root.join("settings.json");
+    let directory = native_plugins_dir(&settings).join("mosh");
+    fs::create_dir_all(directory.join("bin")).unwrap();
+    fs::write(directory.join("bin/helper"), b"fixture").unwrap();
+    let mut manifest = minimal_manifest();
+    manifest.id = "com.oxideterm.terminal.mosh".into();
+    manifest.tags = Some(vec!["remote-connections".into()]);
+    manifest.runtime = Some(NativePluginRuntime {
+        kind: NativePluginRuntimeKind::TerminalTransport,
+        entry: "bin/helper".into(),
+    });
+    manifest.engines = Some(oxideterm_plugin_manifest::NativePluginEngines {
+        oxideterm: Some(">=2.2.2".into()),
+    });
+    manifest.contributes = Some(
+        serde_json::from_value(serde_json::json!({
+            "terminalTransport": {"protocol":"mosh", "protocolVersion":1}
+        }))
+        .unwrap(),
+    );
+    write_manifest(&directory, &manifest);
+    let mut registry = NativePluginRegistry::discover(&settings);
+    assert_eq!(registry.catalog_tags(&manifest.id), ["remote-connections"]);
+    assert!(registry.mosh_executable().is_none());
+    registry.set_plugin_enabled(&manifest.id, true).unwrap();
+    assert_eq!(
+        registry.mosh_executable(),
+        Some(directory.join("bin/helper").canonicalize().unwrap())
+    );
+    assert!(registry.process_activation_plans().is_empty());
+    registry.set_plugin_enabled(&manifest.id, false).unwrap();
+    assert!(registry.mosh_executable().is_none());
+    registry.set_plugin_enabled(&manifest.id, true).unwrap();
+    for (range, version) in [("<2.2.2", 1), (">=2.2.2", 2)] {
+        manifest.engines.as_mut().unwrap().oxideterm = Some(range.into());
+        manifest
+            .contributes
+            .as_mut()
+            .unwrap()
+            .terminal_transport
+            .as_mut()
+            .unwrap()
+            .protocol_version = version;
+        write_manifest(&directory, &manifest);
+        assert!(
+            NativePluginRegistry::discover(&settings)
+                .mosh_executable()
+                .is_none()
+        );
+    }
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -2146,8 +2420,10 @@ fn write_manifest(plugin_dir: &Path, manifest: &NativePluginManifest) {
 
 fn sample_contributes() -> NativePluginContributes {
     NativePluginContributes {
+        terminal_transport: None,
         file_previews: None,
         language: None,
+        remote_desktop: None,
         tabs: Some(vec![NativePluginTabDef {
             id: "demo-tab".to_string(),
             title: "Demo".to_string(),
@@ -2203,7 +2479,7 @@ fn sample_contributes() -> NativePluginContributes {
     }
 }
 
-fn unique_temp_dir(label: &str) -> PathBuf {
+pub(super) fn unique_temp_dir(label: &str) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()

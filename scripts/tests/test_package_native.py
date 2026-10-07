@@ -17,6 +17,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "release"))
 import package_native
 
 
+class RuntimeResourceTests(unittest.TestCase):
+    def test_non_windows_package_omits_helpers_and_conpty_even_when_stale_resources_exist(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            resources = root / "resources"
+            target = "aarch64-apple-darwin"
+            for relative in [
+                "agents/oxideterm-agent-linux", "icons/app.png",
+                f"cli-bin/{target}/oxideterm", f"helpers/{target}/oxideterm-vnc-helper",
+                f"helpers/{target}/oxideterm-rdp-helper",
+            ]:
+                file = resources / relative
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(relative.encode())
+            destination = root / "bundle"
+            with (
+                patch.object(package_native, "RESOURCE_DIR", resources),
+                patch.object(package_native, "stage_conpty_runtime") as stage_runtime,
+            ):
+                package_native.copy_runtime_resources(destination, target)
+            self.assertFalse((destination / "helpers").exists())
+            for relative in ["agents/oxideterm-agent-linux", "icons/app.png", f"cli-bin/{target}/oxideterm"]:
+                self.assertEqual((destination / relative).read_bytes(), relative.encode())
+            stage_runtime.assert_not_called()
+
+
 class WindowsInstallerScriptTests(unittest.TestCase):
     def identity(self) -> package_native.ReleaseIdentity:
         return package_native.ReleaseIdentity(
@@ -489,28 +515,6 @@ class ReleaseDocumentTests(unittest.TestCase):
             self.assertIn("tools", manifest["managedEntries"])
             self.assertNotIn("data", manifest["managedEntries"])
             self.assertNotIn("portable.json", manifest["managedEntries"])
-
-
-class RuntimeResourceTests(unittest.TestCase):
-    def test_non_windows_package_omits_conpty_runtime(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            source = root / "source"
-            target = "aarch64-apple-darwin"
-            for relative in ["agents", "icons", f"cli-bin/{target}", f"helpers/{target}"]:
-                (source / relative).mkdir(parents=True)
-            (source / f"helpers/{target}/helper").write_bytes(b"macOS helper fixture")
-            destination = root / "resources"
-            with (
-                patch.object(package_native, "RESOURCE_DIR", source),
-                patch.object(package_native, "stage_conpty_runtime") as stage_runtime,
-            ):
-                package_native.copy_runtime_resources(destination, target)
-            self.assertEqual(
-                (destination / f"helpers/{target}/helper").read_bytes(),
-                b"macOS helper fixture",
-            )
-            stage_runtime.assert_not_called()
 
 
 class ReleaseVersionTests(unittest.TestCase):

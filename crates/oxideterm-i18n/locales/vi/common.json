@@ -1,4 +1,8 @@
 {
+  "mosh_plugin": {
+    "required": "Cài đặt hoặc bật plugin Mosh trước khi kết nối.",
+    "ready": "Plugin Mosh đã được cài đặt và bật."
+  },
   "file_preview": {
     "entry_file_offset": "Vị trí điểm vào trong tệp",
     "subject": "Chủ thể",
@@ -260,6 +264,9 @@
     "marketplace_sources": "Nguồn máy chủ",
     "marketplace_workspace": "Không gian làm việc",
     "marketplace_utilities": "Công cụ tiện ích",
+    "marketplace_acp": "ACP",
+    "acp_setup_hint": "Cài đặt và bật plugin sẽ tự động tạo cấu hình tác nhân; bạn không cần nhập lệnh khởi chạy. Thư mục làm việc, tham số bổ sung và biến môi trường là tùy chọn; để trống để dùng cấu hình mặc định. Plugin sử dụng chương trình cục bộ cần công cụ dòng lệnh chính thức tương ứng; hãy làm theo hướng dẫn của plugin để cài đặt và đăng nhập.",
+    "marketplace_remote_connections": "Kết nối từ xa",
     "apply_page_size": "Áp dụng",
     "invalid_page_size": "Nhập một số nguyên dương hợp lệ",
     "page_range": "{{start}}–{{end}} trong {{total}} tiện ích",
@@ -1321,6 +1328,9 @@
     "rdp_preview_title": "Xem trước RDP",
     "vnc_preview_title": "Xem trước VNC",
     "provider_missing": "Trình cung cấp máy tính từ xa không khả dụng.",
+    "plugin_ready": "Tiện ích máy tính từ xa đã được cài đặt và bật.",
+    "plugin_required": "Cài đặt hoặc bật tiện ích máy tính từ xa trước khi kết nối.",
+    "manage_plugin": "Quản lý tiện ích",
     "session_missing": "Phiên máy tính từ xa không khả dụng.",
     "reconnect": "Kết nối lại",
     "resize_fixed": "Kích thước do máy chủ cố định",

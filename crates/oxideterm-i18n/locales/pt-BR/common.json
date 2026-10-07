@@ -1,4 +1,8 @@
 {
+  "mosh_plugin": {
+    "required": "Instale ou ative o plugin Mosh antes de conectar.",
+    "ready": "O plugin Mosh está instalado e ativado."
+  },
   "file_preview": {
     "entry_file_offset": "Deslocamento de entrada no arquivo",
     "subject": "Titular",
@@ -260,6 +264,9 @@
     "marketplace_sources": "Fontes de hosts",
     "marketplace_workspace": "Espaço de trabalho",
     "marketplace_utilities": "Utilitários",
+    "marketplace_acp": "ACP",
+    "acp_setup_hint": "Ao instalar e ativar o plugin, a configuração do agente é criada automaticamente; não é necessário informar um comando de inicialização. O diretório de trabalho, os argumentos extras e as variáveis de ambiente são opcionais: deixe-os em branco para usar os valores padrão. Plugins que usam um programa local precisam da ferramenta oficial de linha de comando; siga as instruções do plugin para instalá-la e entrar na conta.",
+    "marketplace_remote_connections": "Conexões remotas",
     "apply_page_size": "Aplicar",
     "invalid_page_size": "Insira um número inteiro positivo válido",
     "page_range": "{{start}}–{{end}} de {{total}} plugins",
@@ -1321,6 +1328,9 @@
     "rdp_preview_title": "Prévia RDP",
     "vnc_preview_title": "Prévia VNC",
     "provider_missing": "O provedor de área de trabalho remota está indisponível.",
+    "plugin_ready": "O plugin de área de trabalho remota está instalado e ativado.",
+    "plugin_required": "Instale ou ative o plugin de área de trabalho remota antes de conectar.",
+    "manage_plugin": "Gerenciar plugin",
     "session_missing": "A sessão de área de trabalho remota está indisponível.",
     "reconnect": "Reconectar",
     "resize_fixed": "Tamanho fixado pelo servidor",

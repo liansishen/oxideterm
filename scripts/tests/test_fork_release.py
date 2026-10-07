@@ -1,6 +1,9 @@
 """Focused tests for fork release version and workflow contracts."""
 from pathlib import Path
 import sys
+import os
+import subprocess
+import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "release"))
@@ -83,6 +86,53 @@ class ForkReleaseTests(unittest.TestCase):
         self.assertEqual(package_native.windows_numeric_version("2.1.0"), "2.1.0.0")
         with self.assertRaises(RuntimeError):
             package_native.windows_numeric_version("2.1.0+fork.65536")
+
+    def test_release_step_pushes_commit_and_annotated_tag_with_preselected_version(self):
+        workflow = (ROOT / ".github/workflows/fork-release.yml").read_text(encoding="utf-8")
+        step = workflow.split("      - name: Commit and atomically push release branch and tag\n", 1)[1]
+        script = step.split("        run: |\n", 1)[1].split("\n  package:", 1)[0]
+        script = "\n".join(line[10:] for line in script.splitlines())
+        version = "2.2.2+fork.1"
+        for previous_version in (version, "2.2.1+fork.1"):
+            with self.subTest(previous_version=previous_version), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                remote = root / "origin.git"
+                repo = root / "checkout"
+                subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+                subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
+
+                def git(*args):
+                    return subprocess.check_output(["git", *args], cwd=repo, text=True).strip()
+
+                git("config", "user.name", "Release test")
+                git("config", "user.email", "release@example.invalid")
+                git("config", "commit.gpgsign", "false")
+                git("config", "tag.gpgsign", "false")
+                git("remote", "add", "origin", str(remote))
+                (repo / "docs/readme").mkdir(parents=True)
+                (repo / "README.md").write_text("Release fixture\n")
+                (repo / "Cargo.toml").write_text(f'version = "{previous_version}"\n')
+                (repo / "Cargo.lock").write_text("Lockfile fixture\n")
+                git("add", "Cargo.toml", "Cargo.lock", "README.md")
+                git("commit", "-m", "Initial version")
+                git("push", "origin", "main")
+                previous_commit = git("rev-parse", "HEAD")
+                (repo / "Cargo.toml").write_text(f'version = "{version}"\n')
+                subprocess.run(
+                    ["bash", "-c", script], cwd=repo,
+                    env={**os.environ, "VERSION": version, "TAG": f"v{version}"},
+                    check=True, capture_output=True, text=True,
+                )
+                release_commit = git("rev-parse", "HEAD")
+                self.assertEqual(git("rev-parse", "HEAD^"), previous_commit)
+                self.assertEqual(git("log", "-1", "--format=%s"), f"chore(release): {version}")
+                self.assertEqual(git("cat-file", "-t", f"v{version}"), "tag")
+                self.assertEqual(git("show", f"v{version}:Cargo.toml"), f'version = "{version}"')
+                remote_refs = dict(
+                    line.split()[::-1] for line in git("ls-remote", "origin").splitlines()
+                )
+                self.assertEqual(remote_refs["refs/heads/main"], release_commit)
+                self.assertEqual(remote_refs[f"refs/tags/v{version}^{{}}"], release_commit)
 
     def test_fork_workflow_is_manual_and_reuses_native_package(self):
         workflow = (ROOT / ".github/workflows/fork-release.yml").read_text(encoding="utf-8")

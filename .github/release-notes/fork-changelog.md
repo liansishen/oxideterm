@@ -1,5 +1,137 @@
 # Windows Fork Changelog
 
+## 2.2.2+fork.1
+
+[中文](#中文) | [English](#english)
+
+### 中文
+
+本次社区 Fork **liansishen/oxideterm** 的 Windows x64 版本升级至官方 OxideTerm 2.2.2，纳入 v2 插件市场、独立更新的 ACP／RDP／VNC／Mosh 插件、FIDO 安全密钥认证和动态语言支持，并改善 AI 对话、文件预览与连接交互。以下变更以 `2.2.1+fork.1` 为比较基线，继续保留 AnalyseDeCircuit 的上游版权声明。
+
+#### ✨ 上游更新
+
+##### 插件市场与安装
+
+- 切换到 v2 插件市场，先加载摘要，再按需获取并校验各插件的版本历史；继续按主程序版本和平台选择最高兼容版本。
+- 支持按名称、最近更新、最近上架排序，并记住选择。排序覆盖完整筛选结果后再分页；切换排序回到第一页，保留搜索和分类条件。
+- 新增安装队列及逐插件状态，提供安装中、排队、失败重试和取消排队入口。安装期间仍可搜索、筛选、翻页和添加其他安装任务。
+- 市场与已安装插件的展开详情显示许可证，并按插件声明提供许可证和第三方许可说明链接。
+- 缺少、禁用或不兼容的 ACP、RDP、VNC、Mosh 插件会显示原因和插件管理入口，帮助恢复升级后的连接与代理使用。
+
+##### ACP、远程桌面与 Mosh
+
+- 将 Codex、Claude Code 的 ACP 适配器，以及 RDP、VNC 和 Mosh 的运行程序移入独立市场插件。应用继续提供原生聊天、远程桌面查看器、终端、连接配置与认证流程。
+- ACP 代理直接通过标准 ACP 与应用通信，RDP／VNC 和 Mosh 使用各自专用协议。停用、更新或卸载插件会停止其相关进程和会话。
+- 移除设置中的 ACP 页面；安装并启用插件后自动创建代理配置，工作目录、额外参数和环境变量仍可按需设置。
+- 支持通过插件发现并启动本机已安装的 OpenCode、Antigravity、Cursor、Grok Build、GitHub Copilot CLI、Qwen Code 和 Kimi CLI；使用前需要安装对应官方命令行程序并完成登录。
+- 接入 Cursor 提问选择与计划确认，覆盖单选、多选、批准、拒绝和取消。
+- RDP／VNC 底栏与工作区状态栏对齐，SSH 活动会话的展开箭头与其他连接类型统一；Nix 打包同步移除已外置的远程桌面程序。
+
+##### FIDO 安全密钥
+
+- 接入 FIDO Security Key 插件，支持通过现有 `ed25519-sk`、`ecdsa-sk` 私钥文件完成 SSH 认证，提供原生 PIN 输入、触摸提示与取消操作。
+- 签名程序按认证请求启动，通过私有管道通信并校验协议和签名；取消、超时或插件停用后停止并回收。PIN 和凭据句柄排除在设置与日志之外，临时缓冲区使用后清理。
+- 使用前需通过支持 FIDO 的 OpenSSH 生成密钥并将公钥配置到服务器。插件的能力范围为签名，密钥生成由 OpenSSH 提供，设备私钥保留在设备中，PIN 每次按需输入。协议与软件签名路径已有自动化验证，真实设备的触摸、PIN 和 SSH 登录仍需硬件实测。
+
+##### 动态语言与代码预览
+
+- 语言插件可动态声明语言名称、扩展名和精确文件名，主程序据此识别文件并提供安装入口，支持后续语言扩展。
+- 安装、启用、停用或更新语言插件后，已打开的编辑器及本地、SFTP 代码预览刷新语言支持。
+- 插件可携带嵌入语法，为 Vue、Svelte 等混合语言文件分别高亮脚本、样式与标记内容。
+- v2 市场提供 XML、DTD、INI、Kotlin、Dart、Nix、Julia、Vue、Svelte、Slint、AWK、jq、Justfile、Groovy、Clojure／ClojureScript、Erlang、OCaml、OCaml Interface 和 Typst 等语言插件；Lua、TOML、YAML 继续内置。插件独立发布，可用版本以市场为准。
+
+##### AI、文件与交互修复
+
+- AI 工具活动使用紧凑平面列表，聚合相关调用并展示状态、数量和耗时，可展开查看调用与结果。
+- ACP 上下文用量使用代理报告的数据，减少过早出现的接近上限提示。动态运行观察位于固定提示前缀之后，保留最新目标、状态和时间信息。
+- 开始页统一使用按钮提供连接、终端、导入和管理入口，保留最近连接与快捷键。
+- 本地 PDF 预览上限提高至 100 MiB，本地音视频直接使用原文件播放；其他本地预览和 SFTP 预览沿用原有大小限制。
+- 本地与 SFTP 路径栏按 Enter 默认进入输入路径；方向键明确选择候选后进入候选目录，Tab 仍可接受补全。
+- 终端右键菜单按实际渲染尺寸定位，在窗口边缘调整位置，覆盖缩放显示与插件菜单。
+- SSH 交互式认证弹窗使用不透明遮罩，等待输入期间暂停连接动画，减少光标和倒计时重绘触发的图形工作。
+
+#### 🛠️ Fork 自有更新
+
+- 本次以同步上游为主，继续保留本 Fork 的终端工作区恢复、标题栏合并、活动栏控制、本地终端连接后执行、字体回退、通知和自定义更新功能。
+- 发布流程支持主程序已预设目标 Fork 版本的情况，创建发布标记提交并原子推送主分支与标签。
+
+#### 📌 升级与验证范围
+
+- 从旧版升级后，请在插件市场安装并启用所需的 ACP、RDP、VNC、Mosh 插件；已有连接配置继续使用。平台支持、外部程序要求和本机代码权限以插件详情及启用确认提示为准。
+- FIDO 与新增动态语言能力需要 OxideTerm 2.2.2 或更高版本。插件市场 v1 已冻结，原索引和安装包继续保留；后续插件与版本更新发布到 v2。
+- 本次提供 Windows x64 安装版与便携版，内置稳定更新使用本 Fork 的签名清单；自定义更新保留已有仓库与公钥设置，测试版通道继续关闭。
+- 维护者已确认本次 Windows 图形界面验证并批准发布；交互式安装、原位替换与重启流程未在本次准备中单独复验。发布流程继续检查包内容、签名和更新清单。
+- Fork 的支持、源码文档与问题反馈位于 [liansishen/oxideterm](https://github.com/liansishen/oxideterm)，上游能力保留官方历史与归属。
+
+### English
+
+This Windows x64 release of the **liansishen/oxideterm community fork** moves to official OxideTerm 2.2.2, inheriting the v2 marketplace, independently updated ACP/RDP/VNC/Mosh plugins, FIDO security-key authentication, dynamic languages, and improvements to AI conversations, file previews, and connection interactions. Changes below are relative to `2.2.1+fork.1`; AnalyseDeCircuit's upstream copyright remains intact.
+
+#### ✨ Upstream changes
+
+##### Marketplace and installation
+
+- Switched to the v2 marketplace, loading summaries first and fetching and verifying individual version histories on demand. Releases remain selected for compatibility with the application and platform.
+- Added sorting by name, recently updated, and newly listed, with the choice saved. Sorting covers the complete filtered result before pagination; changing it returns to the first page while preserving search and category filters.
+- Added an installation queue with per-plugin installing, queued, retry, and cancel-queued states. Search, filters, pagination, and additional installation requests remain available during installation.
+- Expanded marketplace and installed-plugin details show licenses and links to license text and third-party notices when declared by the plugin.
+- Missing, disabled, or incompatible ACP, RDP, VNC, and Mosh plugins show reasons and a plugin-management entry to help restore connections and agent use after upgrading.
+
+##### ACP, remote desktop, and Mosh
+
+- Moved Codex and Claude Code ACP adapters, plus RDP, VNC, and Mosh executables, into independent marketplace plugins. The application retains native chat, remote desktop viewing, terminals, connection profiles, and authentication flows.
+- ACP agents communicate directly with the application using standard ACP; RDP/VNC and Mosh use dedicated protocols. Disabling, updating, or uninstalling a plugin stops its associated processes and sessions.
+- Removed the ACP settings page. Installing and enabling a plugin automatically creates its agent configuration; working directory, additional arguments, and environment variables remain optional settings.
+- Plugins can discover and launch locally installed OpenCode, Antigravity, Cursor, Grok Build, GitHub Copilot CLI, Qwen Code, and Kimi CLI. Install and sign in to the corresponding official CLI before use.
+- Integrated Cursor questions and plan confirmation, including single choice, multiple choice, approval, rejection, and cancellation.
+- Aligned RDP/VNC footers with the workspace status bar and SSH session expansion arrows with other connection types. Nix packaging also removes the extracted remote desktop executables.
+
+##### FIDO security keys
+
+- Added FIDO Security Key plugin integration for SSH authentication using existing `ed25519-sk` and `ecdsa-sk` private-key files, with native PIN, touch, and cancellation prompts.
+- Signing providers start on demand through private pipes with protocol and signature verification, and stop and are reaped on cancellation, timeout, or plugin retirement. PINs and credential handles are excluded from settings and logs, and temporary buffers are cleared after use.
+- Generate keys with FIDO-capable OpenSSH and configure the public key on the server first. The plugin provides signing, OpenSSH handles key generation, device private keys remain on the device, and PINs are entered on demand. Protocol and software-signing paths have automated coverage; real-device touch, PIN, and SSH login still require hardware validation.
+
+##### Dynamic languages and code previews
+
+- Language plugins dynamically declare language names, extensions, and exact filenames, enabling file recognition and installation entries for future languages.
+- Open editors and local or SFTP code previews refresh language support when plugins are installed, enabled, disabled, or updated.
+- Plugins can include embedded grammars to highlight scripts, styles, and markup separately in mixed-language files such as Vue and Svelte.
+- The v2 marketplace offers XML, DTD, INI, Kotlin, Dart, Nix, Julia, Vue, Svelte, Slint, AWK, jq, Justfile, Groovy, Clojure/ClojureScript, Erlang, OCaml, OCaml Interface, and Typst language plugins. Lua, TOML, and YAML remain built in. Plugins release independently; consult the marketplace for available versions.
+
+##### AI, files, and interaction fixes
+
+- AI tool activity uses compact flat lists grouping related calls with status, count, and duration, expandable to show calls and results.
+- ACP context usage uses agent-reported data, reducing premature context-limit warnings. Dynamic runtime observations follow the stable prompt prefix and retain current targets, state, and timestamps.
+- The start page uses buttons for connections, terminals, import, and management, while retaining recent connections and shortcuts.
+- Raised local PDF previews to 100 MiB and enabled local audio and video playback from original files. Other local and SFTP previews retain their existing limits.
+- Enter in local and SFTP path bars opens the typed path by default. Arrow-key selection explicitly chooses a completion, and Tab still accepts completion.
+- Terminal context menus use their rendered size and adjust at window edges, including scaled displays and plugin menus.
+- SSH interactive-authentication dialogs use opaque overlays and pause connection animations while awaiting input, reducing graphical work from cursor and countdown redraws.
+
+#### 🛠️ Fork-specific changes
+
+- This release focuses on upstream synchronization and retains the fork's terminal workspace restoration, merged title bar, activity-bar controls, local post-connect commands, font fallback, notifications, and custom updates.
+- The release workflow supports an already selected fork version by creating a release marker commit and atomically pushing main and the tag.
+
+#### 📌 Upgrade and validation scope
+
+- After upgrading, install and enable the ACP, RDP, VNC, or Mosh plugins you need. Existing connection profiles remain usable. Consult plugin details and enable-time approval for platform support, external programs, and local-code permissions.
+- FIDO integration and new dynamic-language capabilities require OxideTerm 2.2.2 or later. Marketplace v1 is frozen with its original index and packages retained; subsequent plugins and updates are published to v2.
+- This release provides Windows x64 setup and portable packages. Built-in stable updates use this fork's signed manifest; custom updates preserve existing repository and public-key settings, and beta remains disabled.
+- The maintainer confirmed Windows GUI validation and approved publication. Interactive installation, in-place replacement, and restart were not separately rechecked during this preparation. Publication continues to check package contents, signatures, and the updater manifest.
+- Fork support, source documentation, and issue reporting are available at [liansishen/oxideterm](https://github.com/liansishen/oxideterm); upstream capabilities retain their official history and attribution.
+
+#### 📥 Windows x64 downloads / Windows x64 下载
+
+- [Setup / 安装版](https://github.com/liansishen/oxideterm/releases/download/v2.2.2%2Bfork.1/OxideTerm_2.2.2%2Bfork.1_windows_x64-setup.exe)
+- [Portable ZIP / 便携版](https://github.com/liansishen/oxideterm/releases/download/v2.2.2%2Bfork.1/OxideTerm_2.2.2%2Bfork.1_windows_x64_portable.zip)
+- [Checksums / 校验和](https://github.com/liansishen/oxideterm/releases/download/v2.2.2%2Bfork.1/sha256sums.txt)
+
+Windows SmartScreen may require **More info → Run anyway**. 若 Windows SmartScreen 弹出提示，请选择 **更多信息 → 仍要运行**。
+
+[Full changelog / 完整变更](https://github.com/liansishen/oxideterm/compare/v2.2.1%2Bfork.1...v2.2.2%2Bfork.1) · [Issues / 问题反馈](https://github.com/liansishen/oxideterm/issues) · [Source documentation / 源码文档](https://github.com/liansishen/oxideterm/tree/main/docs)
+
 ## 2.2.1+fork.1
 
 [中文](#中文) | [English](#english)

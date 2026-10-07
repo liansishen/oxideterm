@@ -122,16 +122,6 @@ This Windows x64 release of the **liansishen/oxideterm community fork** moves to
 - The maintainer confirmed Windows GUI validation and approved publication. Interactive installation, in-place replacement, and restart were not separately rechecked during this preparation. Publication continues to check package contents, signatures, and the updater manifest.
 - Fork support, source documentation, and issue reporting are available at [liansishen/oxideterm](https://github.com/liansishen/oxideterm); upstream capabilities retain their official history and attribution.
 
-#### 📥 Windows x64 downloads / Windows x64 下载
-
-- [Setup / 安装版](https://github.com/liansishen/oxideterm/releases/download/v2.2.2%2Bfork.1/OxideTerm_2.2.2%2Bfork.1_windows_x64-setup.exe)
-- [Portable ZIP / 便携版](https://github.com/liansishen/oxideterm/releases/download/v2.2.2%2Bfork.1/OxideTerm_2.2.2%2Bfork.1_windows_x64_portable.zip)
-- [Checksums / 校验和](https://github.com/liansishen/oxideterm/releases/download/v2.2.2%2Bfork.1/sha256sums.txt)
-
-Windows SmartScreen may require **More info → Run anyway**. 若 Windows SmartScreen 弹出提示，请选择 **更多信息 → 仍要运行**。
-
-[Full changelog / 完整变更](https://github.com/liansishen/oxideterm/compare/v2.2.1%2Bfork.1...v2.2.2%2Bfork.1) · [Issues / 问题反馈](https://github.com/liansishen/oxideterm/issues) · [Source documentation / 源码文档](https://github.com/liansishen/oxideterm/tree/main/docs)
-
 ## 2.2.1+fork.1
 
 [中文](#中文) | [English](#english)

@@ -50,19 +50,22 @@ pub(super) fn welcome_recent_connections(
 ) -> Vec<WelcomeRecentConnection> {
     let mut recent = Vec::new();
 
-    recent.extend(store.connections().iter().filter_map(|connection| {
-        Some(WelcomeRecentConnection {
-            name: connection.name.clone(),
-            subtitle: format!(
-                "{}@{}:{}",
-                connection.username, connection.host, connection.port
-            ),
-            kind: WelcomeRecentKind::Ssh,
-            target: WelcomeRecentTarget::Ssh(connection.id.clone()),
-            id: connection.id.clone(),
-            last_used_at: connection.last_used_at,
-        })
-    }));
+    recent.extend(
+        store
+            .connections()
+            .iter()
+            .map(|connection| WelcomeRecentConnection {
+                name: connection.name.clone(),
+                subtitle: format!(
+                    "{}@{}:{}",
+                    connection.username, connection.host, connection.port
+                ),
+                kind: WelcomeRecentKind::Ssh,
+                target: WelcomeRecentTarget::Ssh(connection.id.clone()),
+                id: connection.id.clone(),
+                last_used_at: connection.last_used_at,
+            }),
+    );
     recent.extend(store.serial_profiles().iter().filter_map(|profile| {
         Some(WelcomeRecentConnection {
             name: profile.name.clone(),

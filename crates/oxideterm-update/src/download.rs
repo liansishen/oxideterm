@@ -752,7 +752,7 @@ pub async fn prune_resumable_update_cache(
         }
     }
 
-    resumable_dirs.sort_by(|left, right| right.0.cmp(&left.0));
+    resumable_dirs.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     removable_dirs.extend(
         resumable_dirs
             .into_iter()

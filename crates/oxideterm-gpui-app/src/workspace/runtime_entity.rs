@@ -1233,6 +1233,7 @@ impl WorkspaceRuntimeEntity {
         node_id: NodeId,
         force_install: bool,
     ) -> bool {
+        use settings::RemoteShellIntegrationFailure;
         let Some(generation) = self.remote_shell_integration.begin_terminal_gate(&node_id) else {
             return false;
         };
@@ -1247,7 +1248,7 @@ impl WorkspaceRuntimeEntity {
                 let resolved = router
                     .resolve_connection(&task_node_id)
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|_| RemoteShellIntegrationFailure::ConnectionUnavailable)?;
                 // Detection starts only after the first visible Shell request,
                 // preserving PAM, MOTD, and Last login output ordering.
                 let mut remote_env = resolved.handle.remote_env();
@@ -1258,30 +1259,28 @@ impl WorkspaceRuntimeEntity {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     remote_env = resolved.handle.remote_env();
                 }
-                let remote_env = remote_env.ok_or_else(|| {
-                    "remote Shell detection did not finish after the visible terminal opened"
-                        .to_string()
-                })?;
+                let remote_env = remote_env.ok_or(RemoteShellIntegrationFailure::Integration(
+                    oxideterm_terminal::RemoteShellIntegrationError::EnvironmentUnavailable,
+                ))?;
                 let sftp = router
                     .acquire_sftp(&task_node_id)
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|_| RemoteShellIntegrationFailure::SftpUnavailable)?;
                 let sftp = sftp.lock().await;
                 let status =
                     oxideterm_terminal::inspect_remote_shell_integration(&sftp, Some(&remote_env))
-                        .await?;
+                        .await
+                        .map_err(RemoteShellIntegrationFailure::Integration)?;
                 if should_install_remote_shell_integration(force_install, mode, status.state) {
                     oxideterm_terminal::install_remote_shell_integration(&sftp, Some(&remote_env))
                         .await
                         .map(|status| (status, true))
+                        .map_err(RemoteShellIntegrationFailure::Integration)
                 } else {
                     Ok((status, false))
                 }
             }
-            .await
-            // Delivery exposes only a typed failure category; backend details
-            // never cross into UI state, notifications, or diagnostics.
-            .map_err(|_| ());
+            .await;
             let _ = result_tx.send(ReconnectWorkerResult::RemoteShellIntegrationGateFinished {
                 node_id: task_node_id,
                 generation,
@@ -1298,6 +1297,7 @@ impl WorkspaceRuntimeEntity {
         action: settings::RemoteShellIntegrationAction,
         node_id: NodeId,
     ) -> bool {
+        use settings::RemoteShellIntegrationFailure;
         let Some(generation) = self
             .remote_shell_integration
             .begin_maintenance(action, node_id.clone())
@@ -1315,12 +1315,12 @@ impl WorkspaceRuntimeEntity {
                 let resolved = router
                     .resolve_connection(&task_node_id)
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|_| RemoteShellIntegrationFailure::ConnectionUnavailable)?;
                 let remote_env = resolved.handle.remote_env();
                 let sftp = router
                     .acquire_sftp(&task_node_id)
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|_| RemoteShellIntegrationFailure::SftpUnavailable)?;
                 let sftp = sftp.lock().await;
                 match action {
                     settings::RemoteShellIntegrationAction::Inspect => {
@@ -1354,10 +1354,9 @@ impl WorkspaceRuntimeEntity {
                         .await
                     }
                 }
+                .map_err(RemoteShellIntegrationFailure::Integration)
             }
-            .await
-            // Maintenance failures follow the same content-free UI boundary.
-            .map_err(|_| ());
+            .await;
             let _ = result_tx.send(
                 ReconnectWorkerResult::RemoteShellIntegrationMaintenanceFinished {
                     action,
@@ -2767,9 +2766,11 @@ impl WorkspaceRuntimeEntity {
                             notice: None,
                         })
                     }
-                    settings::RemoteShellIntegrationGateOutcome::Failed => {
+                    settings::RemoteShellIntegrationGateOutcome::Failed(failure) => {
                         Some(ReconnectRuntimeEffect::RemoteShellIntegrationGateFinished {
-                            notice: Some(settings::RemoteShellIntegrationNotice::Failed),
+                            notice: Some(settings::RemoteShellIntegrationNotice::CheckFailed(
+                                failure,
+                            )),
                         })
                     }
                     settings::RemoteShellIntegrationGateOutcome::Stale => None,

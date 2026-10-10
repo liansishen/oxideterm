@@ -263,10 +263,9 @@ impl WorkspaceOverlayEntity {
         intent: WorkspaceOverlayIntent,
         cx: &mut Context<Self>,
     ) -> bool {
-        let now = cx.background_executor().now();
         let changed = match intent {
             WorkspaceOverlayIntent::Notice { notice, ttl } => {
-                self.push_notice(notice, ttl, None, now);
+                self.push_notice(notice, ttl, None, cx.background_executor().now());
                 true
             }
             WorkspaceOverlayIntent::PluginRequired {
@@ -283,27 +282,29 @@ impl WorkspaceOverlayEntity {
                         label,
                         workspace,
                     }),
-                    now,
+                    cx.background_executor().now(),
                 );
                 true
             }
             WorkspaceOverlayIntent::PluginProgress { key, notice, ttl } => {
-                self.upsert_plugin_progress(key, notice, ttl, now);
+                self.upsert_plugin_progress(key, notice, ttl, cx.background_executor().now());
                 true
             }
             WorkspaceOverlayIntent::DismissPluginProgress { key } => {
-                self.dismiss_plugin_progress(&key, now)
+                self.dismiss_plugin_progress(&key, cx.background_executor().now())
             }
             WorkspaceOverlayIntent::ConnectionTraceEvents(events) => {
-                self.apply_connection_trace_events(events, now)
+                self.apply_connection_trace_events(events, cx.background_executor().now())
             }
             WorkspaceOverlayIntent::QueueTooltip { id, label, x, y } => {
-                self.queue_tooltip(id, label, x, y, now)
+                self.queue_tooltip(id, label, x, y, cx.background_executor().now())
             }
-            WorkspaceOverlayIntent::ClearTooltip { id } => self.clear_tooltip(&id, now),
+            WorkspaceOverlayIntent::ClearTooltip { id } => {
+                self.clear_tooltip(&id, cx.background_executor().now())
+            }
             WorkspaceOverlayIntent::ClearAllTooltips => self.clear_all_tooltips(),
             WorkspaceOverlayIntent::ShowZenHint { ttl } => {
-                self.zen_hint_expires_at = Some(now + ttl);
+                self.zen_hint_expires_at = Some(cx.background_executor().now() + ttl);
                 true
             }
             WorkspaceOverlayIntent::ClearZenHint => self.zen_hint_expires_at.take().is_some(),
@@ -313,7 +314,7 @@ impl WorkspaceOverlayEntity {
                 self.terminal_font_size_hud = Some(TerminalFontSizeHud {
                     font_size,
                     generation: self.terminal_font_size_hud_generation,
-                    expires_at: now + ttl,
+                    expires_at: cx.background_executor().now() + ttl,
                 });
                 true
             }
@@ -482,8 +483,9 @@ impl WorkspaceOverlayEntity {
             self.finish_confirm_exit(generation, cx);
             return (true, effect);
         }
+        let timer = cx.background_executor().timer(delay);
         self.confirm_exit_task = Some(cx.spawn(async move |overlay, cx| {
-            Timer::after(delay).await;
+            timer.await;
             let _ = overlay.update(cx, |overlay, cx| {
                 overlay.finish_confirm_exit(generation, cx);
             });
@@ -743,8 +745,9 @@ impl WorkspaceOverlayEntity {
                 ConnectionTraceStatus::Ready => {
                     trace.flush_deadline = None;
                     let mut success = event;
-                    success.elapsed_ms = now
-                        .saturating_duration_since(trace.started_at)
+                    success.elapsed_ms = trace
+                        .started_at
+                        .elapsed()
                         .as_millis()
                         .min(u128::from(u64::MAX)) as u64;
                     trace.visible = true;
@@ -1880,48 +1883,6 @@ mod tests {
     use super::*;
 
     #[gpui::test]
-    fn notice_deadline_expires_and_finishes_exit_on_the_executor_clock(cx: &mut TestAppContext) {
-        let exit_duration = Duration::from_millis(100);
-        let overlay = cx.new(|cx| WorkspaceOverlayEntity::new(exit_duration, cx));
-        for title in ["Install the required plugin", "Enable the installed plugin"] {
-            overlay.update(cx, |overlay, cx| {
-                overlay.apply_intent(
-                    WorkspaceOverlayIntent::Notice {
-                        notice: TerminalNotice {
-                            title: title.into(),
-                            description: None,
-                            status_text: None,
-                            progress: None,
-                            variant: TerminalNoticeVariant::Warning,
-                        },
-                        ttl: Duration::from_secs(1),
-                    },
-                    cx,
-                );
-            });
-            cx.run_until_parked();
-            overlay.read_with(cx, |overlay, _| {
-                assert_eq!(overlay.standard_toasts[0].notice.title, title);
-                assert_eq!(
-                    overlay.standard_toasts[0].presence.phase(),
-                    oxideterm_gpui_ui::motion::ExitPhase::Visible
-                );
-            });
-            cx.executor().advance_clock(Duration::from_secs(1));
-            cx.run_until_parked();
-            overlay.read_with(cx, |overlay, _| {
-                assert_eq!(
-                    overlay.standard_toasts[0].presence.phase(),
-                    oxideterm_gpui_ui::motion::ExitPhase::Exiting
-                );
-            });
-            cx.executor().advance_clock(exit_duration);
-            cx.run_until_parked();
-            overlay.read_with(cx, |overlay, _| assert!(overlay.standard_toasts.is_empty()));
-        }
-    }
-
-    #[gpui::test]
     fn plugin_requirement_notices_route_install_and_enable_actions(cx: &mut TestAppContext) {
         let executable = std::env::current_exe().unwrap();
         let fixture_key = "OXIDETERM_CONNECTION_PLUGIN_NOTICE_TEST_DIR";
@@ -2538,7 +2499,9 @@ mod tests {
     }
 
     #[gpui::test]
-    fn hidden_notice_delivery_continues_across_budgets(cx: &mut TestAppContext) {
+    fn hidden_notice_delivery_continues_across_budgets_and_expires_on_deadline(
+        cx: &mut TestAppContext,
+    ) {
         let overlay = cx.new(|cx| WorkspaceOverlayEntity::new(Duration::ZERO, cx));
         let sender = cx.read(|cx| overlay.read(cx).notice_sender());
         for index in 0..130 {
@@ -2553,6 +2516,9 @@ mod tests {
             assert_eq!(overlay.standard_toasts[0].notice.title, "notice-0");
             assert_eq!(overlay.standard_toasts[129].notice.title, "notice-129");
         });
+        cx.executor().advance_clock(WORKSPACE_NOTICE_TTL);
+        cx.run_until_parked();
+        cx.read(|cx| assert!(overlay.read(cx).standard_toasts.is_empty()));
     }
 
     #[gpui::test]

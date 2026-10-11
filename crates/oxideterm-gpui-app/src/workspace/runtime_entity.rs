@@ -58,6 +58,7 @@ enum WorkspaceRuntimeLifecycle {
 #[derive(Debug)]
 pub(in crate::workspace) struct PendingSshTerminalOpen {
     pub(in crate::workspace) node_id: NodeId,
+    pub(in crate::workspace) reconnect_session_id: Option<TerminalSessionId>,
     pub(in crate::workspace) post_connect_command: Option<String>,
     pub(in crate::workspace) mark_used_connection_id: Option<String>,
     pub(in crate::workspace) save_after_open: Option<SaveConnectionRequest>,
@@ -455,6 +456,8 @@ impl WorkspaceRuntimeEntity {
     ) -> Option<NodeId> {
         // Removing a terminal consumer never changes node or transport ownership.
         self.terminal_endpoint_sessions.remove(&session_id);
+        self.pending_ssh_terminal_opens
+            .retain(|request| request.reconnect_session_id != Some(session_id));
         let node_id = self.terminal_ssh_nodes.remove(&session_id)?;
         let endpoint_session_id = session_id.0.to_string();
         let _ = self
@@ -542,11 +545,11 @@ impl WorkspaceRuntimeEntity {
         if self.lifecycle != WorkspaceRuntimeLifecycle::Running {
             return QueueSshTerminalOpenOutcome::WorkspaceShuttingDown;
         }
-        let outcome = if let Some(existing) = self
-            .pending_ssh_terminal_opens
-            .iter_mut()
-            .find(|pending| pending.node_id == request.node_id)
-        {
+        let outcome = if let Some(existing) =
+            self.pending_ssh_terminal_opens.iter_mut().find(|pending| {
+                pending.node_id == request.node_id
+                    && pending.reconnect_session_id == request.reconnect_session_id
+            }) {
             // Preserve the first visible terminal request while adopting later
             // one-shot side effects without cloning secret-bearing save state.
             if existing.mark_used_connection_id.is_none() {
@@ -3700,6 +3703,7 @@ mod tests {
             let first = entity.queue_ssh_terminal_open(
                 PendingSshTerminalOpen {
                     node_id: node_id.clone(),
+                    reconnect_session_id: None,
                     post_connect_command: None,
                     mark_used_connection_id: None,
                     save_after_open: None,
@@ -3713,13 +3717,14 @@ mod tests {
             let second = entity.queue_ssh_terminal_open(
                 PendingSshTerminalOpen {
                     node_id: node_id.clone(),
+                    reconnect_session_id: None,
                     post_connect_command: Some("pwd".to_string()),
                     mark_used_connection_id: Some("saved-a".to_string()),
                     save_after_open: None,
                     cleanup_node_id: None,
                     title: "Ignored duplicate".to_string(),
-                    restore_profile_id: None,
-                    restore_terminal_workspace: false,
+                    restore_profile_id: Some("saved-a".to_string()),
+                    restore_terminal_workspace: true,
                 },
                 cx,
             );
@@ -3735,6 +3740,27 @@ mod tests {
             assert_eq!(pending.post_connect_command.as_deref(), Some("pwd"));
             assert_eq!(pending.mark_used_connection_id.as_deref(), Some("saved-a"));
 
+            let cancelled_session = TerminalSessionId(42);
+            let restored_session = TerminalSessionId(43);
+            for session_id in [cancelled_session, restored_session, restored_session] {
+                entity.register_ssh_terminal_session(session_id, node_id.clone());
+                entity.queue_ssh_terminal_open(
+                    PendingSshTerminalOpen {
+                        node_id: node_id.clone(),
+                        reconnect_session_id: Some(session_id),
+                        post_connect_command: None,
+                        mark_used_connection_id: None,
+                        save_after_open: None,
+                        cleanup_node_id: None,
+                        restore_profile_id: None,
+                        restore_terminal_workspace: false,
+                        title: String::new(),
+                    },
+                    cx,
+                );
+            }
+            entity.unregister_ssh_terminal_session(cancelled_session);
+
             entity.publish_ssh_terminal_opens_for_connected_node(&node_id, cx);
             assert!(entity.pending_ssh_terminal_opens.is_empty());
 
@@ -3745,7 +3771,22 @@ mod tests {
             else {
                 panic!("expected typed SSH terminal open effect");
             };
-            assert_eq!(requests.len(), 1);
+            assert_eq!(
+                requests
+                    .iter()
+                    .map(|request| {
+                        (
+                            request.reconnect_session_id,
+                            request.restore_profile_id.as_deref(),
+                            request.restore_terminal_workspace,
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+                [
+                    (None, Some("saved-a"), true),
+                    (Some(restored_session), None, false),
+                ]
+            );
             assert_eq!(requests[0].node_id, node_id);
             assert_eq!(requests[0].title, "First terminal");
             assert_eq!(requests[0].post_connect_command.as_deref(), Some("pwd"));

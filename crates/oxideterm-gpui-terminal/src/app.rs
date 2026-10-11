@@ -554,6 +554,7 @@ pub struct TerminalPane {
     last_session_log_path: Option<std::path::PathBuf>,
     bell_flash: bool,
     terminal_exited: bool,
+    ssh_reconnect_state: SshReconnectState,
     scroll_input_remainder_px: Pixels,
     smooth_scroll_offset_px: Pixels,
     smooth_scroll_animation: Option<SmoothScrollAnimation>,
@@ -649,11 +650,19 @@ pub(crate) enum FreeTypeDragAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TerminalContextAction {
+    Reconnect,
     PluginTextTool,
     SendSelectionToAi,
     FillCommandBarFromSelection,
     OpenSearch,
     OpenSessionTriggers,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SshReconnectState {
+    Idle,
+    WaitingForConnection,
+    StartingShell,
 }
 
 #[derive(Clone)]
@@ -1292,6 +1301,7 @@ impl TerminalPane {
             last_session_log_path: None,
             bell_flash: false,
             terminal_exited: false,
+            ssh_reconnect_state: SshReconnectState::Idle,
             scroll_input_remainder_px: px(0.0),
             smooth_scroll_offset_px: px(0.0),
             smooth_scroll_animation: None,
@@ -2104,6 +2114,41 @@ impl TerminalPane {
 
     pub fn lifecycle(&self) -> TerminalLifecycle {
         self.terminal.lock().lifecycle()
+    }
+
+    pub fn can_reconnect_ssh(&self) -> bool {
+        self.session_kind == TerminalSessionKind::SshPty
+            && self.terminal_exited
+            && self.ssh_reconnect_state == SshReconnectState::Idle
+    }
+
+    pub fn ssh_reconnect_starting(&self) -> bool {
+        self.ssh_reconnect_state == SshReconnectState::StartingShell
+    }
+
+    fn ssh_reconnect_pending(&self) -> bool {
+        self.ssh_reconnect_state != SshReconnectState::Idle
+    }
+
+    pub fn set_ssh_reconnect_pending(&mut self, pending: bool, cx: &mut Context<Self>) {
+        self.ssh_reconnect_state = if pending {
+            SshReconnectState::WaitingForConnection
+        } else {
+            SshReconnectState::Idle
+        };
+        cx.notify();
+    }
+
+    pub fn reconnect_ssh(
+        &mut self,
+        config: SshSessionConfig,
+        cx: &mut Context<Self>,
+    ) -> Result<()> {
+        self.terminal.lock().reconnect_ssh(config)?;
+        self.ssh_reconnect_state = SshReconnectState::StartingShell;
+        let _ = self.scheduler_wake_sender.try_send(());
+        cx.notify();
+        Ok(())
     }
 
     pub fn session_kind(&self) -> TerminalSessionKind {
@@ -3578,7 +3623,29 @@ impl TerminalPane {
                 self.finish_tmux_mouse_selection(selected, cx);
                 TerminalEventEffect::notify()
             }
+            TerminalEvent::SessionRestarted => {
+                self.terminal_exited = false;
+                self.ssh_reconnect_state = SshReconnectState::Idle;
+                self.win32_pressed_keys.clear();
+                self.tmux_prompt = None;
+                self.pending_paste = None;
+                self.pending_paste_prefix = None;
+                self.paste_editor = None;
+                self.marked_text = None;
+                self.marked_text_caret_utf16 = None;
+                self.selection = None;
+                self.cwd = None;
+                self.cwd_source = None;
+                self.cwd_host = None;
+                self.pending_cwd = None;
+                cx.emit(TerminalPaneEvent::CurrentDirectoryChanged);
+                self.title = String::new().into();
+                self.last_pty_resize = None;
+                self.snapshot_dirty = true;
+                TerminalEventEffect::notify()
+            }
             TerminalEvent::ProcessingFailed => {
+                self.ssh_reconnect_state = SshReconnectState::Idle;
                 self.cancel_pending_tmux_mouse();
                 self.notify_trzsz_connection_lost_if_active();
                 self.notify_modem_connection_lost_if_active();
@@ -3591,6 +3658,7 @@ impl TerminalPane {
                 TerminalEventEffect::notify()
             }
             TerminalEvent::StartupFailed => {
+                self.ssh_reconnect_state = SshReconnectState::Idle;
                 self.command_fact_ledger.interrupt_audit_commands();
                 self.cancel_pending_tmux_mouse();
                 self.notify_trzsz_connection_lost_if_active();
@@ -3599,6 +3667,7 @@ impl TerminalPane {
                 TerminalEventEffect::notify()
             }
             TerminalEvent::ChildExited(code) => {
+                self.ssh_reconnect_state = SshReconnectState::Idle;
                 self.command_fact_ledger.interrupt_audit_commands();
                 self.cancel_pending_tmux_mouse();
                 self.notify_trzsz_connection_lost_if_active();

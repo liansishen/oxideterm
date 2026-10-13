@@ -1370,7 +1370,7 @@ fn ssh_packet_splits_preserve_grid_modes_selection_graphics_and_private_recordin
         TerminalEncoding::Utf8,
         1000,
     );
-    // The disconnected parser baseline has no shell startup or prior viewport to archive.
+    // The disconnected reference has no shell startup; only set its parser geometry.
     baseline
         .parser_state
         .resize_with_cell_size(TerminalResize::new(80, 24, 10, 20))

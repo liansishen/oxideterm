@@ -2480,7 +2480,7 @@ impl WorkspaceRuntimeEntity {
         // Only the runtime entity owns the keepalive timer. Replacing or
         // releasing the entity must cancel the previous async wake.
         self.active_probe_timer_task = Some(cx.spawn(async move |entity, cx| {
-            Timer::after(delay).await;
+            cx.background_executor().timer(delay).await;
             let _ = entity.update(cx, |entity, cx| {
                 if entity.active_probe_timer_generation == generation {
                     entity.active_probe_timer_task = None;
@@ -3370,8 +3370,11 @@ mod tests {
         let entity = test_runtime_entity(cx);
         let initial_generation = cx.read(|cx| entity.read(cx).active_probe_timer_generation);
 
+        cx.run_until_parked();
+        cx.executor().advance_clock(ACTIVE_PROBE_START_DELAY);
+        cx.run_until_parked();
+
         entity.update(cx, |entity, cx| {
-            entity.start_active_ssh_probe(cx);
             assert!(!entity.ssh_active_probe_in_flight);
             assert!(entity.active_probe_timer_generation > initial_generation);
 

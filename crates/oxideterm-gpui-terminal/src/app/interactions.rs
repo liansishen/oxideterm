@@ -4354,12 +4354,6 @@ mod tests {
             TerminalEditorMode::Normal,
             TerminalEditorSelection::None,
         )?;
-        let mode = session.mode();
-        if !mode.contains(TermMode::ALT_SCREEN) || !mode.intersects(TermMode::MOUSE_MODE) {
-            return Err(format!(
-                "Vim adapter did not retain alternate-screen mouse ownership: {mode:?}"
-            ));
-        }
 
         session
             .write_protocol_bytes(b"vllll")
@@ -4415,17 +4409,25 @@ mod tests {
         expected_selection: TerminalEditorSelection,
     ) -> Result<(), String> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut editor_state_matches = false;
         while std::time::Instant::now() < deadline {
             session.read_pending();
             for event in session.take_events() {
                 if let TerminalEvent::EditorIntegration(editor) = event
-                    && editor.active
                     && editor.application == TerminalEditorApplication::Vim
-                    && editor.mode == expected_mode
-                    && editor.selection == expected_selection
                 {
-                    return Ok(());
+                    editor_state_matches = editor.active
+                        && editor.mode == expected_mode
+                        && editor.selection == expected_selection;
                 }
+            }
+            // Vim can emit adapter state before flushing its mouse-mode sequence.
+            let mode = session.mode();
+            if editor_state_matches
+                && mode.contains(TermMode::ALT_SCREEN)
+                && mode.intersects(TermMode::MOUSE_MODE)
+            {
+                return Ok(());
             }
             if !session.lifecycle().is_running() {
                 return Err("Vim exited before reporting editor state".to_string());
@@ -4433,7 +4435,8 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         Err(format!(
-            "timed out waiting for Vim {expected_mode:?}/{expected_selection:?}"
+            "timed out waiting for Vim {expected_mode:?}/{expected_selection:?} with alternate-screen mouse ownership; terminal_mode={:?}",
+            session.mode()
         ))
     }
 

@@ -225,7 +225,9 @@ impl SettingsWorkspaceEntity {
 
         // Delay manifest traffic until session restoration and the first frame settle.
         self.native_update.automatic_check_task = Some(cx.spawn(async move |settings, cx| {
-            Timer::after(AUTOMATIC_NATIVE_UPDATE_DELAY).await;
+            cx.background_executor()
+                .timer(AUTOMATIC_NATIVE_UPDATE_DELAY)
+                .await;
             let _ = settings.update(cx, |settings, cx| {
                 settings.native_update.automatic_check_task = None;
                 if matches!(settings.native_update.state, NativeUpdateUiState::Idle) {
@@ -1269,6 +1271,44 @@ mod tests {
             retry_delay_ms: None,
             last_http_status: None,
             can_resume_after_restart: true,
+        }
+    }
+
+    #[gpui::test]
+    fn automatic_update_check_uses_executor_delay_and_stops_with_its_owner(
+        cx: &mut TestAppContext,
+    ) {
+        for (release_owner, expected_checks) in [(false, 1), (true, 0)] {
+            let settings = cx.new(SettingsWorkspaceEntity::new);
+            let checks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let observed = checks.clone();
+            let _subscription = settings.update(cx, |_, cx| {
+                cx.subscribe(&settings, move |_, _, event: &SettingsWorkspaceEvent, _| {
+                    if *event == SettingsWorkspaceEvent::RequestAutomaticNativeUpdateCheck {
+                        observed.fetch_add(1, Ordering::Relaxed);
+                    }
+                })
+            });
+            settings.update(cx, |settings, cx| {
+                settings.schedule_automatic_native_update_check(cx);
+                settings.schedule_automatic_native_update_check(cx);
+            });
+            cx.run_until_parked();
+            if release_owner {
+                drop(settings);
+                cx.update(|_| {});
+            }
+            cx.executor()
+                .advance_clock(AUTOMATIC_NATIVE_UPDATE_DELAY - Duration::from_millis(1));
+            cx.run_until_parked();
+            assert_eq!(checks.load(Ordering::Relaxed), 0);
+            cx.executor().advance_clock(Duration::from_millis(1));
+            cx.run_until_parked();
+            assert_eq!(
+                checks.load(Ordering::Relaxed),
+                expected_checks,
+                "release_owner={release_owner}"
+            );
         }
     }
 

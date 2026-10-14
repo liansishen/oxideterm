@@ -50,7 +50,8 @@
 
 #### 🛠️ Fork 自有更新
 
-- 本次以同步上游与适配为主。将上游原窗格 SSH 重连接入本 Fork 的终端工作区恢复，继续保留恢复流程；连接提示位置沿用合并标题栏的实际工作区起点。
+- 本次以同步上游与适配为主。将上游原窗格 SSH 重连接入本 Fork 的终端工作区恢复，继续保留恢复流程；连接提示位置沿用合并标题栏的实际工作区起点。（PR [#14](https://github.com/liansishen/oxideterm/pull/14)）
+- 工作区启动后的审计状态轮询、资源状态刷新和自动更新延迟统一使用 GPUI 执行器计时，修复界面调度测试中的外部线程唤醒问题，并覆盖延迟触发、重复调度和拥有者释放后的取消行为。（PR [#14](https://github.com/liansishen/oxideterm/pull/14)）
 - 继续保留此前发布的终端工作区恢复、标题栏合并、活动栏控制、本地终端连接后执行、字体回退、终端通知与自定义更新功能；本次版本使用 `2.2.3+fork.1` 的签名更新通道。
 
 #### 📌 升级与验证范围
@@ -107,7 +108,8 @@ This Windows x64 release of the **liansishen/oxideterm community fork** moves to
 
 #### 🛠️ Fork-specific changes
 
-- This release focuses on upstream synchronization and adaptation. Integrated upstream in-place SSH reconnection with the fork's terminal workspace restoration, retaining restoration flows; connection notices keep the actual workspace origin used by the merged title bar.
+- This release focuses on upstream synchronization and adaptation. Integrated upstream in-place SSH reconnection with the fork's terminal workspace restoration, retaining restoration flows; connection notices keep the actual workspace origin used by the merged title bar. (PR [#14](https://github.com/liansishen/oxideterm/pull/14))
+- Audit status polling, resource status refresh, and delayed automatic update checks now use GPUI executor timers after workspace startup. This fixes external-thread wakeups in interface scheduling tests and covers delayed delivery, duplicate scheduling, and cancellation when the owner is released. (PR [#14](https://github.com/liansishen/oxideterm/pull/14))
 - Retained previously released terminal workspace restoration, merged title bar, activity-bar controls, local post-connect commands, font fallback, terminal notifications, and custom updates. This version uses the signed `2.2.3+fork.1` fork update channel.
 
 #### 📌 Upgrade and validation scope

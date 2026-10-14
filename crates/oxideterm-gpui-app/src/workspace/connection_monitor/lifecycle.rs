@@ -20,7 +20,9 @@ impl HostToolsEntity {
         // Pool/topology freshness belongs to Host Tools and stops with the Entity.
         self.lifecycle_refresh_task = Some(cx.spawn(async move |host_tools, cx| {
             loop {
-                Timer::after(MONITOR_POOL_REFRESH_INTERVAL).await;
+                cx.background_executor()
+                    .timer(MONITOR_POOL_REFRESH_INTERVAL)
+                    .await;
                 let should_continue = host_tools
                     .update(cx, |host_tools, cx| {
                         host_tools.refresh_lifecycle_tick(cx);

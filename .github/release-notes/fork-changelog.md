@@ -1,5 +1,123 @@
 # Windows Fork Changelog
 
+## 2.2.3+fork.1
+
+[中文](#中文) | [English](#english)
+
+### 中文
+
+本次社区 Fork **liansishen/oxideterm** 的 Windows x64 版本升级至官方 OxideTerm 2.2.3，纳入动态背景、完整亮暗外观、按需背景素材包和重新整理的首次使用引导，并改善云同步方向选择、SSH 重连和更新重启。以下变更以 `2.2.2+fork.1` 为比较基线，继续保留 AnalyseDeCircuit 的上游版权声明。
+
+#### ✨ 上游更新
+
+##### 亮暗外观与背景编辑
+
+- “跟随系统外观”可分别配置浅色和深色两套完整外观，每套包含应用主题、终端主题和背景；系统外观变化时一起更新现有界面与终端。
+- 背景支持静态图片、动图和视频，素材、叠加效果与交互分别配置。新增九点对齐，可调整裁切位置、不透明度、模糊、阅读遮罩、作用范围及启用页面。
+- 主题预览和编辑预览同时显示背景、透明度与裁切；编辑使用独立草稿，取消后恢复原外观。素材卡片显示格式与当前使用状态，并修复部分视频和导入图片的缩略图缺失。
+- 新增轻纹理、雾光、光潮、光潮与粒子组合、流星、景深粒子和水面折光，可单独使用或叠加在素材上；强度、颜色等参数按效果能力提供，默认颜色可跟随主题。
+- 新增输入时暂停动效、鼠标视差、静态图片缓慢运镜和全天候光照，可分别开启。连续输入停止约一秒后恢复播放；背景切换平滑过渡，窗口不活跃、不可见或最小化时暂停播放，并遵循减少动态效果设置。
+- 修复滑杆点击与拖动偏离指针、设置选项变化导致滚动位置跳动，以及静态内容显示无效播放控制的问题；素材不透明度与效果强度分别控制。
+
+##### 视频播放与背景素材包
+
+- Windows 视频背景使用 Media Foundation 解码，并支持将原生视频缓冲或纹理交给图形后端；保留软件解码与像素上传路径。自动模式按持续处理负载调整播放尺寸与帧率，手动上限继续生效。
+- 背景与预览共享媒体处理结果，按视频时间调度并限制提前解码和缓冲占用；支持的图形路径处理缩放、裁切与模糊，背景和媒体绘制保留圆角裁切。
+- 修复 Windows 视频缓冲缺少行跨度导致背景与缩略图不显示的问题，并改善 4K 不透明视频软件缩放的颜色、透明度和内存预算处理。
+- 插件市场新增“背景素材”分类，素材库提供“获取更多背景”入口。视频素材改为独立按需分发，主程序保留现有静态背景。
+- 安装背景包会将声明的素材导入当前配置的素材库，便携版使用自己的数据目录；安装保留当前外观选择，卸载包后已导入素材继续保留，可从素材库单独删除。安装导入失败时回滚新文件与插件替换。
+
+##### 首次使用引导与界面体验
+
+- 首次使用引导整理为欢迎与须知、外观、连接与操作、AI 与命令行、开始使用五页，宽窗口分栏，窄窗口调整布局；主题预览集中在外观页，最后一页提供终端、连接和导入入口。
+- 新用户显示欢迎引导，完成前先保存状态；保存失败时保留引导并显示提示，避免重启后重复出现。
+- 半透明面板与侧边区域增加随主题和透明度调整的柔和边缘层次；Windows 绘制路径减少重复图形工作，浮层到期与关闭沿用界面动画时钟。
+- 新建连接表单根据已安装插件状态判断能力，减少绘制时重复探测外部程序；SSH 代理发现减少阻塞探测，改善 Windows 连接表单和远程桌面页面响应。
+
+##### 云同步方向与首次下载
+
+- 新增只读“查看云端”入口；同步预览明确提供“使用云端配置”“合并本机与云端”“用本机更新云端”，各方向有对应说明和确认按钮。
+- 新设备发现已有云端配置时，默认预览下载方向，确认后应用云端配置并建立同步基线，首次自动同步也需明确确认，避免本机默认设置覆盖云端。
+- 取消预览保留已保存的同步基线；合并重新读取本机设置以纳入预览期间的新修改。未选同步范围继续保留，云端自身存在冲突时需要先选择候选值；下载完成记录正确的云端状态与历史。
+
+##### 连接、终端与更新修复
+
+- SSH 远端 Shell 退出后，通过原窗格重连按钮或 Enter 恢复会话，保留窗格身份和滚动历史；SFTP、端口转发等消费者继续持有共享连接。
+- 远程 Shell 集成失败时显示 SFTP 不可用、不支持的 Shell、权限或安装未完成等具体原因，并说明终端是否仍可使用。
+- SFTP 跨窗格拖放在清理拖动状态前完成释放处理，正确进入上传、下载与冲突流程。
+- 更新完成后先释放工作区更新，再保存历史并退出；Windows 更新辅助程序统一由主程序启动，等待旧进程结束后替换并启动新版，避免安装器重复启动辅助程序影响重启。
+- 源码同时纳入 Linux 粘贴编辑字符输入与标题栏关闭修复、Linux GStreamer 打包支持、macOS 原生媒体解码与 RDP 文件剪贴板修复，以及 macOS 便携应用包更新时的数据保留和失败回滚。本次发行资产为 Windows x64。
+
+#### 🛠️ Fork 自有更新
+
+- 本次以同步上游与适配为主。将上游原窗格 SSH 重连接入本 Fork 的终端工作区恢复，继续保留恢复流程；连接提示位置沿用合并标题栏的实际工作区起点。
+- 继续保留此前发布的终端工作区恢复、标题栏合并、活动栏控制、本地终端连接后执行、字体回退、终端通知与自定义更新功能；本次版本使用 `2.2.3+fork.1` 的签名更新通道。
+
+#### 📌 升级与验证范围
+
+- 背景动效和交互均可自行选择；视频播放性能与硬件加速路径取决于设备、驱动和媒体格式，可手动限制分辨率与帧率。背景包导入素材占用当前配置的数据目录空间，卸载插件后仍由用户管理。
+- 更新退出、安装和重启修复由新版客户端执行；从旧版首次升级时仍使用旧客户端的更新逻辑。
+- 维护者已确认本次桌面应用验证并批准发布；交互式安装、原位替换与重启流程未在本次准备中单独复验。发布流程继续检查包内容、签名与更新清单。
+- 提供 Windows x64 安装版与便携版，内置稳定更新使用本 Fork 的签名清单，自定义更新保留已有仓库和公钥设置，测试版通道继续关闭。
+- 支持、源码文档与问题反馈位于 [liansishen/oxideterm](https://github.com/liansishen/oxideterm)；完整变更范围为 [2.2.2+fork.1…2.2.3+fork.1](https://github.com/liansishen/oxideterm/compare/v2.2.2%2Bfork.1...v2.2.3%2Bfork.1)。上游能力保留官方历史与归属。
+
+### English
+
+This Windows x64 release of the **liansishen/oxideterm community fork** moves to official OxideTerm 2.2.3, inheriting animated backgrounds, complete light and dark appearances, on-demand background packs, and a redesigned first-run guide, with improvements to cloud sync direction, SSH reconnection, and update restarts. Changes below are relative to `2.2.2+fork.1`; AnalyseDeCircuit's upstream copyright remains intact.
+
+#### ✨ Upstream changes
+
+##### Light and dark appearances and background editing
+
+- Follow System Appearance supports separate complete light and dark profiles, each containing an application theme, terminal theme, and background. System appearance changes update the existing interface and terminals together.
+- Backgrounds support static images, animations, and videos, with separate media, overlay effects, and interaction settings. Nine-point alignment controls cropping position alongside opacity, blur, readability overlay, scope, and enabled pages.
+- Theme and editor previews show backgrounds, transparency, and cropping together. Editing uses a separate draft, and cancellation restores the previous appearance. Media cards show format and active status, with fixes for missing thumbnails in some videos and imported images.
+- Added subtle texture, fog glow, light tides, combined tides and particles, meteors, depth particles, and water caustics as standalone effects or media overlays. Applicable strength, color, and other controls depend on the effect, with theme-derived default colors.
+- Added optional typing pauses, mouse parallax, slow camera motion for static images, and all-day lighting. Playback resumes approximately one second after continuous typing stops; background changes transition smoothly, playback pauses in inactive, hidden, or minimized windows, and reduced-motion preferences are respected.
+- Fixed slider pointer offsets, settings scroll jumps after changing options, and irrelevant playback controls on static content. Media opacity and effect strength have separate controls.
+
+##### Video playback and background packs
+
+- Windows video backgrounds use Media Foundation decoding and can pass native video buffers or textures to the graphics backend, retaining software decoding and pixel-upload paths. Automatic mode adjusts dimensions and frame rate under sustained load while preserving manual limits.
+- Backgrounds and previews share media processing results, schedule by video time, and bound decode-ahead work and buffering. Supported graphics paths handle scaling, cropping, and blur, while background and media rendering retain rounded clipping.
+- Fixed missing Windows backgrounds and thumbnails when decoded buffers omit their row stride, and improved color, opacity, and memory budgeting for software resizing of opaque 4K videos.
+- Added a Background Media marketplace category and a Get More Backgrounds entry in the gallery. Videos are distributed independently as optional packs, and existing static backgrounds remain bundled.
+- Installing a pack imports declared media into the current configuration's gallery, including the portable data directory, and preserves appearance selections. Imported media remains after package removal and can be deleted separately from the gallery. Failed imports roll back newly created files and package replacement.
+
+##### First-run guide and interface experience
+
+- Reorganized onboarding into five pages: Welcome and Notices, Appearance, Connections and Operations, AI and Command Line, and Getting Started. Wide windows use columns and narrow windows adapt; theme preview is concentrated on Appearance, with terminal, connection, and import entries on the final page.
+- New users see the welcome guide, with completion saved before closing. A failed save keeps the guide visible with a message, preventing it from reappearing after restart.
+- Translucent panels and sidebar regions have softer edges that follow theme and opacity. Windows rendering reduces repeated graphics work, and overlay deadlines and dismissal use the interface animation clock.
+- Connection forms use installed-plugin state to reduce repeated external-program probes during rendering. SSH agent discovery avoids blocking probes, improving Windows connection-form and remote-desktop responsiveness.
+
+##### Cloud sync direction and first-device downloads
+
+- Added a read-only View Cloud Configuration entry. Sync previews offer Use Cloud Configuration, Merge Local and Cloud, and Update Cloud from This Device with corresponding explanations and confirmation buttons.
+- New devices finding existing cloud configuration default to a download preview. Confirmation applies it and establishes the sync baseline; initial automatic sync also requires explicit confirmation, preventing local defaults from overwriting cloud configuration.
+- Canceling preview preserves the saved sync baseline. Merging re-reads local configuration to include edits made during preview. Excluded sync scope remains intact, existing cloud conflicts require candidate choices, and downloads record the correct cloud state and history.
+
+##### Connection, terminal, and update fixes
+
+- After a remote SSH shell exits, its reconnect button or Enter restores the session in the original pane, preserving identity and scrollback. SFTP, forwarding, and other consumers retain ownership of the shared connection.
+- Remote shell integration failures explain unavailable SFTP, unsupported shells, permissions, and incomplete installation, and indicate whether the terminal remains usable.
+- SFTP cross-pane drops finish before drag-state cleanup, restoring upload, download, and conflict handling.
+- Update completion releases the workspace update before saving history and quitting. Windows updates launch the helper from the application to wait for exit, replace files, and start the new version, avoiding duplicate installer helper launches that interfered with restart.
+- Source changes also include Linux paste-editor character input and titlebar-close fixes, Linux GStreamer packaging, macOS native media decoding and RDP file clipboard fixes, and portable macOS application data preservation with rollback during updates. Release assets for this fork are Windows x64.
+
+#### 🛠️ Fork-specific changes
+
+- This release focuses on upstream synchronization and adaptation. Integrated upstream in-place SSH reconnection with the fork's terminal workspace restoration, retaining restoration flows; connection notices keep the actual workspace origin used by the merged title bar.
+- Retained previously released terminal workspace restoration, merged title bar, activity-bar controls, local post-connect commands, font fallback, terminal notifications, and custom updates. This version uses the signed `2.2.3+fork.1` fork update channel.
+
+#### 📌 Upgrade and validation scope
+
+- Background animation and interaction options are configurable. Video performance and hardware acceleration depend on devices, drivers, and media formats; resolution and frame rate can be limited manually. Imported pack media occupies the current configuration's data directory and remains user-managed after uninstalling the package.
+- Update shutdown, installation, and restart fixes are performed by the new client. The first upgrade from an older version uses that older client's update logic.
+- The maintainer confirmed desktop application validation and approved publication. Interactive installation, in-place replacement, and restart were not separately rechecked during this preparation. Publication continues to check package contents, signatures, and the updater manifest.
+- Provides Windows x64 setup and portable packages. Built-in stable updates use this fork's signed manifest, custom updates retain existing repository and public-key settings, and beta remains disabled.
+- Support, source documentation, and issue reporting are available at [liansishen/oxideterm](https://github.com/liansishen/oxideterm). Full range: [2.2.2+fork.1…2.2.3+fork.1](https://github.com/liansishen/oxideterm/compare/v2.2.2%2Bfork.1...v2.2.3%2Bfork.1). Upstream capabilities retain their official history and attribution.
+
 ## 2.2.2+fork.1
 
 [中文](#中文) | [English](#english)

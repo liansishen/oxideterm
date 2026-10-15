@@ -58,6 +58,7 @@ enum WorkspaceRuntimeLifecycle {
 #[derive(Debug)]
 pub(in crate::workspace) struct PendingSshTerminalOpen {
     pub(in crate::workspace) node_id: NodeId,
+    pub(in crate::workspace) reconnect_session_id: Option<TerminalSessionId>,
     pub(in crate::workspace) post_connect_command: Option<String>,
     pub(in crate::workspace) mark_used_connection_id: Option<String>,
     pub(in crate::workspace) save_after_open: Option<SaveConnectionRequest>,
@@ -455,6 +456,8 @@ impl WorkspaceRuntimeEntity {
     ) -> Option<NodeId> {
         // Removing a terminal consumer never changes node or transport ownership.
         self.terminal_endpoint_sessions.remove(&session_id);
+        self.pending_ssh_terminal_opens
+            .retain(|request| request.reconnect_session_id != Some(session_id));
         let node_id = self.terminal_ssh_nodes.remove(&session_id)?;
         let endpoint_session_id = session_id.0.to_string();
         let _ = self
@@ -542,11 +545,11 @@ impl WorkspaceRuntimeEntity {
         if self.lifecycle != WorkspaceRuntimeLifecycle::Running {
             return QueueSshTerminalOpenOutcome::WorkspaceShuttingDown;
         }
-        let outcome = if let Some(existing) = self
-            .pending_ssh_terminal_opens
-            .iter_mut()
-            .find(|pending| pending.node_id == request.node_id)
-        {
+        let outcome = if let Some(existing) =
+            self.pending_ssh_terminal_opens.iter_mut().find(|pending| {
+                pending.node_id == request.node_id
+                    && pending.reconnect_session_id == request.reconnect_session_id
+            }) {
             // Preserve the first visible terminal request while adopting later
             // one-shot side effects without cloning secret-bearing save state.
             if existing.mark_used_connection_id.is_none() {
@@ -1233,6 +1236,7 @@ impl WorkspaceRuntimeEntity {
         node_id: NodeId,
         force_install: bool,
     ) -> bool {
+        use settings::RemoteShellIntegrationFailure;
         let Some(generation) = self.remote_shell_integration.begin_terminal_gate(&node_id) else {
             return false;
         };
@@ -1247,7 +1251,7 @@ impl WorkspaceRuntimeEntity {
                 let resolved = router
                     .resolve_connection(&task_node_id)
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|_| RemoteShellIntegrationFailure::ConnectionUnavailable)?;
                 // Detection starts only after the first visible Shell request,
                 // preserving PAM, MOTD, and Last login output ordering.
                 let mut remote_env = resolved.handle.remote_env();
@@ -1258,30 +1262,28 @@ impl WorkspaceRuntimeEntity {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     remote_env = resolved.handle.remote_env();
                 }
-                let remote_env = remote_env.ok_or_else(|| {
-                    "remote Shell detection did not finish after the visible terminal opened"
-                        .to_string()
-                })?;
+                let remote_env = remote_env.ok_or(RemoteShellIntegrationFailure::Integration(
+                    oxideterm_terminal::RemoteShellIntegrationError::EnvironmentUnavailable,
+                ))?;
                 let sftp = router
                     .acquire_sftp(&task_node_id)
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|_| RemoteShellIntegrationFailure::SftpUnavailable)?;
                 let sftp = sftp.lock().await;
                 let status =
                     oxideterm_terminal::inspect_remote_shell_integration(&sftp, Some(&remote_env))
-                        .await?;
+                        .await
+                        .map_err(RemoteShellIntegrationFailure::Integration)?;
                 if should_install_remote_shell_integration(force_install, mode, status.state) {
                     oxideterm_terminal::install_remote_shell_integration(&sftp, Some(&remote_env))
                         .await
                         .map(|status| (status, true))
+                        .map_err(RemoteShellIntegrationFailure::Integration)
                 } else {
                     Ok((status, false))
                 }
             }
-            .await
-            // Delivery exposes only a typed failure category; backend details
-            // never cross into UI state, notifications, or diagnostics.
-            .map_err(|_| ());
+            .await;
             let _ = result_tx.send(ReconnectWorkerResult::RemoteShellIntegrationGateFinished {
                 node_id: task_node_id,
                 generation,
@@ -1298,6 +1300,7 @@ impl WorkspaceRuntimeEntity {
         action: settings::RemoteShellIntegrationAction,
         node_id: NodeId,
     ) -> bool {
+        use settings::RemoteShellIntegrationFailure;
         let Some(generation) = self
             .remote_shell_integration
             .begin_maintenance(action, node_id.clone())
@@ -1315,12 +1318,12 @@ impl WorkspaceRuntimeEntity {
                 let resolved = router
                     .resolve_connection(&task_node_id)
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|_| RemoteShellIntegrationFailure::ConnectionUnavailable)?;
                 let remote_env = resolved.handle.remote_env();
                 let sftp = router
                     .acquire_sftp(&task_node_id)
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|_| RemoteShellIntegrationFailure::SftpUnavailable)?;
                 let sftp = sftp.lock().await;
                 match action {
                     settings::RemoteShellIntegrationAction::Inspect => {
@@ -1354,10 +1357,9 @@ impl WorkspaceRuntimeEntity {
                         .await
                     }
                 }
+                .map_err(RemoteShellIntegrationFailure::Integration)
             }
-            .await
-            // Maintenance failures follow the same content-free UI boundary.
-            .map_err(|_| ());
+            .await;
             let _ = result_tx.send(
                 ReconnectWorkerResult::RemoteShellIntegrationMaintenanceFinished {
                     action,
@@ -2478,7 +2480,7 @@ impl WorkspaceRuntimeEntity {
         // Only the runtime entity owns the keepalive timer. Replacing or
         // releasing the entity must cancel the previous async wake.
         self.active_probe_timer_task = Some(cx.spawn(async move |entity, cx| {
-            Timer::after(delay).await;
+            cx.background_executor().timer(delay).await;
             let _ = entity.update(cx, |entity, cx| {
                 if entity.active_probe_timer_generation == generation {
                     entity.active_probe_timer_task = None;
@@ -2767,9 +2769,11 @@ impl WorkspaceRuntimeEntity {
                             notice: None,
                         })
                     }
-                    settings::RemoteShellIntegrationGateOutcome::Failed => {
+                    settings::RemoteShellIntegrationGateOutcome::Failed(failure) => {
                         Some(ReconnectRuntimeEffect::RemoteShellIntegrationGateFinished {
-                            notice: Some(settings::RemoteShellIntegrationNotice::Failed),
+                            notice: Some(settings::RemoteShellIntegrationNotice::CheckFailed(
+                                failure,
+                            )),
                         })
                     }
                     settings::RemoteShellIntegrationGateOutcome::Stale => None,
@@ -3366,8 +3370,11 @@ mod tests {
         let entity = test_runtime_entity(cx);
         let initial_generation = cx.read(|cx| entity.read(cx).active_probe_timer_generation);
 
+        cx.run_until_parked();
+        cx.executor().advance_clock(ACTIVE_PROBE_START_DELAY);
+        cx.run_until_parked();
+
         entity.update(cx, |entity, cx| {
-            entity.start_active_ssh_probe(cx);
             assert!(!entity.ssh_active_probe_in_flight);
             assert!(entity.active_probe_timer_generation > initial_generation);
 
@@ -3699,6 +3706,7 @@ mod tests {
             let first = entity.queue_ssh_terminal_open(
                 PendingSshTerminalOpen {
                     node_id: node_id.clone(),
+                    reconnect_session_id: None,
                     post_connect_command: None,
                     mark_used_connection_id: None,
                     save_after_open: None,
@@ -3712,13 +3720,14 @@ mod tests {
             let second = entity.queue_ssh_terminal_open(
                 PendingSshTerminalOpen {
                     node_id: node_id.clone(),
+                    reconnect_session_id: None,
                     post_connect_command: Some("pwd".to_string()),
                     mark_used_connection_id: Some("saved-a".to_string()),
                     save_after_open: None,
                     cleanup_node_id: None,
                     title: "Ignored duplicate".to_string(),
-                    restore_profile_id: None,
-                    restore_terminal_workspace: false,
+                    restore_profile_id: Some("saved-a".to_string()),
+                    restore_terminal_workspace: true,
                 },
                 cx,
             );
@@ -3734,6 +3743,27 @@ mod tests {
             assert_eq!(pending.post_connect_command.as_deref(), Some("pwd"));
             assert_eq!(pending.mark_used_connection_id.as_deref(), Some("saved-a"));
 
+            let cancelled_session = TerminalSessionId(42);
+            let restored_session = TerminalSessionId(43);
+            for session_id in [cancelled_session, restored_session, restored_session] {
+                entity.register_ssh_terminal_session(session_id, node_id.clone());
+                entity.queue_ssh_terminal_open(
+                    PendingSshTerminalOpen {
+                        node_id: node_id.clone(),
+                        reconnect_session_id: Some(session_id),
+                        post_connect_command: None,
+                        mark_used_connection_id: None,
+                        save_after_open: None,
+                        cleanup_node_id: None,
+                        restore_profile_id: None,
+                        restore_terminal_workspace: false,
+                        title: String::new(),
+                    },
+                    cx,
+                );
+            }
+            entity.unregister_ssh_terminal_session(cancelled_session);
+
             entity.publish_ssh_terminal_opens_for_connected_node(&node_id, cx);
             assert!(entity.pending_ssh_terminal_opens.is_empty());
 
@@ -3744,7 +3774,22 @@ mod tests {
             else {
                 panic!("expected typed SSH terminal open effect");
             };
-            assert_eq!(requests.len(), 1);
+            assert_eq!(
+                requests
+                    .iter()
+                    .map(|request| {
+                        (
+                            request.reconnect_session_id,
+                            request.restore_profile_id.as_deref(),
+                            request.restore_terminal_workspace,
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+                [
+                    (None, Some("saved-a"), true),
+                    (Some(restored_session), None, false),
+                ]
+            );
             assert_eq!(requests[0].node_id, node_id);
             assert_eq!(requests[0].title, "First terminal");
             assert_eq!(requests[0].post_connect_command.as_deref(), Some("pwd"));

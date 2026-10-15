@@ -225,7 +225,9 @@ impl SettingsWorkspaceEntity {
 
         // Delay manifest traffic until session restoration and the first frame settle.
         self.native_update.automatic_check_task = Some(cx.spawn(async move |settings, cx| {
-            Timer::after(AUTOMATIC_NATIVE_UPDATE_DELAY).await;
+            cx.background_executor()
+                .timer(AUTOMATIC_NATIVE_UPDATE_DELAY)
+                .await;
             let _ = settings.update(cx, |settings, cx| {
                 settings.native_update.automatic_check_task = None;
                 if matches!(settings.native_update.state, NativeUpdateUiState::Idle) {
@@ -792,11 +794,19 @@ impl WorkspaceApp {
                 }
                 cx.notify();
             }
-            SettingsWorkspaceEvent::BackgroundBlurCommitReady(value) => {
+            SettingsWorkspaceEvent::BackgroundBlurCommitReady(system_dark, value) => {
                 let value = *value;
-                if self.settings_store.settings().terminal.background_blur != value {
-                    self.edit_settings(|settings| settings.terminal.background_blur = value, cx);
-                }
+                let system_dark = *system_dark;
+                self.edit_settings(
+                    |settings| {
+                        let mut style = settings.terminal.background_for_scheme(system_dark);
+                        style.blur = value;
+                        settings
+                            .terminal
+                            .set_background_for_scheme(system_dark, style);
+                    },
+                    cx,
+                );
             }
             SettingsWorkspaceEvent::BackgroundGalleryOperationReady => {
                 let results = settings.update(cx, |settings, _cx| {
@@ -804,21 +814,66 @@ impl WorkspaceApp {
                 });
                 for result in results {
                     match result {
-                        BackgroundGalleryOperationResult::Updated(active_path) => {
-                            if self.settings_store.settings().terminal.background_image
-                                != active_path
-                            {
-                                self.edit_settings(
-                                    move |settings| {
-                                        settings.terminal.background_image = active_path
-                                    },
-                                    cx,
-                                );
-                            }
+                        BackgroundGalleryOperationResult::Updated(system_dark, active_path) => {
+                            let gallery = settings.read(cx).background_images_snapshot();
+                            let settings_path = self.settings_store.path().to_path_buf();
+                            self.edit_settings(
+                                move |settings| {
+                                    let mut style =
+                                        settings.terminal.background_for_scheme(system_dark);
+                                    style.image = active_path;
+                                    settings
+                                        .terminal
+                                        .set_background_for_scheme(system_dark, style);
+                                    // Gallery deletion removes references in both system modes.
+                                    let keep = |path: &str| {
+                                        !oxideterm_settings::is_managed_background_image(
+                                            &settings_path,
+                                            Path::new(path),
+                                        ) || gallery.iter().any(|image| image == path)
+                                    };
+                                    if settings
+                                        .terminal
+                                        .background_image
+                                        .as_deref()
+                                        .is_some_and(|path| !keep(path))
+                                    {
+                                        settings.terminal.background_image = None;
+                                    }
+                                    for style in [
+                                        &mut settings.terminal.system_backgrounds.light,
+                                        &mut settings.terminal.system_backgrounds.dark,
+                                    ]
+                                    .into_iter()
+                                    .flatten()
+                                    {
+                                        if style.image.as_deref().is_some_and(|path| !keep(path)) {
+                                            style.image = None;
+                                        }
+                                    }
+                                },
+                                cx,
+                            );
                         }
                         BackgroundGalleryOperationResult::Failed => {
                             self.send_settings_notice(
                                 self.i18n.t("settings_view.terminal.bg_operation_failed"),
+                                TerminalNoticeVariant::Error,
+                                cx,
+                            );
+                        }
+                        BackgroundGalleryOperationResult::MediaFailed(failure) => {
+                            let key = match failure {
+                                oxideterm_gpui_background::BackgroundFailure::Unsupported => {
+                                    "bg_unsupported"
+                                }
+                                oxideterm_gpui_background::BackgroundFailure::ResourceExhausted => {
+                                    "bg_resource_exhausted"
+                                }
+                                _ => "bg_decode_failed",
+                            };
+                            self.send_settings_notice(
+                                self.i18n.t(&format!("settings_view.terminal.{key}")),
                                 TerminalNoticeVariant::Error,
                                 cx,
                             );
@@ -834,6 +889,7 @@ impl WorkspaceApp {
                     match result {
                         ThemeImportResult::Imported {
                             target,
+                            system_dark,
                             theme_id,
                             name,
                             value,
@@ -844,7 +900,11 @@ impl WorkspaceApp {
                             self.edit_settings(
                                 move |settings| {
                                     settings.custom_themes.insert(theme_id, value);
-                                    target.apply(settings, selected_theme_id);
+                                    target.apply_for_scheme(
+                                        settings,
+                                        system_dark,
+                                        selected_theme_id,
+                                    );
                                 },
                                 cx,
                             );
@@ -1211,6 +1271,44 @@ mod tests {
             retry_delay_ms: None,
             last_http_status: None,
             can_resume_after_restart: true,
+        }
+    }
+
+    #[gpui::test]
+    fn automatic_update_check_uses_executor_delay_and_stops_with_its_owner(
+        cx: &mut TestAppContext,
+    ) {
+        for (release_owner, expected_checks) in [(false, 1), (true, 0)] {
+            let settings = cx.new(SettingsWorkspaceEntity::new);
+            let checks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let observed = checks.clone();
+            let _subscription = settings.update(cx, |_, cx| {
+                cx.subscribe(&settings, move |_, _, event: &SettingsWorkspaceEvent, _| {
+                    if *event == SettingsWorkspaceEvent::RequestAutomaticNativeUpdateCheck {
+                        observed.fetch_add(1, Ordering::Relaxed);
+                    }
+                })
+            });
+            settings.update(cx, |settings, cx| {
+                settings.schedule_automatic_native_update_check(cx);
+                settings.schedule_automatic_native_update_check(cx);
+            });
+            cx.run_until_parked();
+            if release_owner {
+                drop(settings);
+                cx.update(|_| {});
+            }
+            cx.executor()
+                .advance_clock(AUTOMATIC_NATIVE_UPDATE_DELAY - Duration::from_millis(1));
+            cx.run_until_parked();
+            assert_eq!(checks.load(Ordering::Relaxed), 0);
+            cx.executor().advance_clock(Duration::from_millis(1));
+            cx.run_until_parked();
+            assert_eq!(
+                checks.load(Ordering::Relaxed),
+                expected_checks,
+                "release_owner={release_owner}"
+            );
         }
     }
 

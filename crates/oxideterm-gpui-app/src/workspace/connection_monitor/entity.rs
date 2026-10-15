@@ -1485,6 +1485,9 @@ impl HostToolsEntity {
         if !self.visibility.sidebar_is_visible() || self.sampling_config.is_empty() {
             return;
         }
+        if self.profiler_registry.request_refresh(&connection_id) {
+            return;
+        }
         let Some(runtime) = self.lifecycle_runtime.clone() else {
             return;
         };
@@ -2245,6 +2248,8 @@ mod tests {
     fn visibility_stops_page_samplers_but_keeps_reliable_actions_and_node_owner(
         cx: &mut TestAppContext,
     ) {
+        // Real Tokio samplers wake delivery tasks from outside the GPUI test scheduler.
+        cx.executor().allow_parking();
         let runtime = tokio::runtime::Runtime::new().expect("create test runtime");
         let registry = SshConnectionRegistry::default();
         let node_consumer = ConnectionConsumer::NodeRouter("node-visibility".to_string());

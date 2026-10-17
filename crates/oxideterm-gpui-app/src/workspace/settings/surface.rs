@@ -654,12 +654,14 @@ impl WorkspaceApp {
                             .hash_settings_context_layout(&mut hasher);
                     }
                     (AiSettingsPage::Tools, 2) => {
+                        settings.ai.tool_use.disabled_tools.hash(&mut hasher);
                         self.ai_entity
                             .read(cx)
                             .settings_section_expanded(AiSettingsViewSection::ToolUse)
                             .hash(&mut hasher);
                     }
                     (AiSettingsPage::Tools, 3) => {
+                        settings.ai.tool_use.enabled.hash(&mut hasher);
                         let ai = self.ai_entity.read(cx);
                         ai.agents.settings_model_picker_open.hash(&mut hasher);
                         ai.conversation_state()
@@ -682,13 +684,25 @@ impl WorkspaceApp {
                         }
                     }
                     (AiSettingsPage::Tools, 4) => {
+                        let state = self.settings_workspace.read(cx);
+                        state.skill_search_query.hash(&mut hasher);
+                        format!("{:?}", state.skill_scope_filter).hash(&mut hasher);
+                        state.skill_diagnostics_expanded.hash(&mut hasher);
                         let registry = self.skill_registry.read();
                         for skill in registry.records() {
                             skill.id.hash(&mut hasher);
+                            skill.skill_path.hash(&mut hasher);
+                            state
+                                .expanded_skill_paths
+                                .contains(&skill.skill_path)
+                                .hash(&mut hasher);
                             skill.enabled.hash(&mut hasher);
                             skill.content_hash.hash(&mut hasher);
                         }
-                        registry.diagnostics().len().hash(&mut hasher);
+                        for diagnostic in registry.diagnostics() {
+                            diagnostic.path.hash(&mut hasher);
+                            diagnostic.message.hash(&mut hasher);
+                        }
                     }
                     _ => {}
                 }

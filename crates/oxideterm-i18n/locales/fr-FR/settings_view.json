@@ -407,9 +407,9 @@
       "copy_on_select": "Copier à la sélection",
       "copy_on_select_hint": "Copier automatiquement le texte du terminal dans le presse-papiers système dès que la sélection à la souris se stabilise",
       "middle_click_paste": "Coller au clic central",
-      "middle_click_paste_hint": "Coller le contenu actuel du presse-papiers avec le clic central lorsque le terminal n'est pas en mode de suivi de souris",
+      "middle_click_paste_hint": "Coller le contenu du presse-papiers avec le clic central au lieu de transmettre le clic à l’application en cours",
       "right_click_paste": "Coller au clic droit",
-      "right_click_paste_hint": "Coller d'un clic droit sans modificateur hors du mode de suivi de souris ; Maj+clic droit ouvre le menu contextuel",
+      "right_click_paste_hint": "Coller le contenu du presse-papiers avec le clic droit au lieu de transmettre le clic à l’application en cours ; Maj+clic droit ouvre le menu contextuel",
       "open_links_with_modifier": "Exiger une touche modificatrice pour ouvrir les liens",
       "open_links_with_modifier_hint": "Ouvrir les liens du terminal uniquement avec Ctrl + clic, ou Commande + clic sous macOS ; désactiver pour les ouvrir d’un clic direct",
       "smart_copy": "Copie intelligente avec Ctrl+C",
@@ -424,6 +424,13 @@
       "delete_sequence": "Touche Suppr",
       "delete_sequence_hint": "Valeur par défaut de l’application pour Suppr. Les hôtes enregistrés peuvent la remplacer.",
       "free_type_mode_hint": "Modifiez la commande shell active avec la souris : cliquez pour déplacer le curseur, double-cliquez entre des parenthèses appariées pour sélectionner leur contenu, faites glisser le texte sélectionné pour le déplacer, maintenez Ctrl pour le copier ou Alt pour remplacer la commande. Vim, Neovim et Emacs en plein écran nécessitent le chargement explicite de l’adaptateur OxideTerm ; les autres applications plein écran ou avec suivi de souris gardent le contrôle",
+      "xmodem": {
+        "title": "XMODEM",
+        "block_size": "Taille des blocs d’envoi",
+        "block_size_hint": "Utilisez 128 octets pour la compatibilité, ou 1024 octets si l’appareil accepte des blocs plus grands. S’applique au prochain envoi manuel ou détecté automatiquement.",
+        "bytes_128": "128 octets (par défaut)",
+        "bytes_1024": "1024 octets"
+      },
       "in_band_transfer": {
         "title": "Transfert de fichiers in-band",
         "enabled": "Activer le transfert trzsz",

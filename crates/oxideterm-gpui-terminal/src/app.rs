@@ -522,6 +522,7 @@ pub struct TerminalPane {
     selecting: bool,
     free_type_drag: Option<FreeTypeDragState>,
     last_mouse_report_point: Option<TerminalPoint>,
+    mouse_paste_button: Option<gpui::MouseButton>,
     title: SharedString,
     cwd: Option<String>,
     cwd_source: Option<TerminalWorkingDirectorySource>,
@@ -1265,6 +1266,7 @@ impl TerminalPane {
             selecting: false,
             free_type_drag: None,
             last_mouse_report_point: None,
+            mouse_paste_button: None,
             title: SharedString::from("OxideTerm"),
             cwd: None,
             cwd_source: None,
@@ -4039,6 +4041,7 @@ impl TerminalPane {
         self.focused = focused;
         if !focused {
             self.win32_pressed_keys.clear();
+            self.mouse_paste_button = None;
         }
         if !focused && self.context_menu.take().is_some() {
             // Menu actions refer to this pane's selection and command snapshot. Drop them

@@ -407,9 +407,9 @@
       "copy_on_select": "Beim Auswählen kopieren",
       "copy_on_select_hint": "Terminaltext automatisch in die Systemzwischenablage kopieren, sobald eine Mausauswahl stabil ist",
       "middle_click_paste": "Mittelklick zum Einfügen",
-      "middle_click_paste_hint": "Den aktuellen Inhalt der Zwischenablage mit Mittelklick einfügen, wenn sich das Terminal nicht im Mausverfolgungsmodus befindet",
+      "middle_click_paste_hint": "Mit Mittelklick den Inhalt der Zwischenablage einfügen, statt den Klick an die laufende Anwendung zu senden",
       "right_click_paste": "Rechtsklick zum Einfügen",
-      "right_click_paste_hint": "Außerhalb des Mausverfolgungsmodus mit einem unveränderten Rechtsklick einfügen; Umschalt+Rechtsklick öffnet das Kontextmenü",
+      "right_click_paste_hint": "Mit Rechtsklick den Inhalt der Zwischenablage einfügen, statt den Klick an die laufende Anwendung zu senden; Umschalt+Rechtsklick öffnet das Kontextmenü",
       "open_links_with_modifier": "Modifikatortaste zum Öffnen von Links verlangen",
       "open_links_with_modifier_hint": "Terminal-Links nur mit Strg + Klick öffnen, unter macOS mit Befehl + Klick; deaktivieren, um Links direkt anzuklicken",
       "smart_copy": "Smartes Strg+C-Kopieren",
@@ -424,6 +424,13 @@
       "delete_sequence": "Entfernen-Taste",
       "delete_sequence_hint": "Anwendungsstandard für die Entf-Tastenfolge. Gespeicherte Hosts können ihn überschreiben.",
       "free_type_mode_hint": "Den aktiven Shell-Befehl mit der Maus bearbeiten: klicken, um den Cursor zu bewegen, zwischen passenden Klammern doppelklicken, um den Inhalt auszuwählen, ausgewählten Befehlstext zum Verschieben ziehen, mit Strg ziehen, um ihn zu kopieren, oder mit Alt ziehen, um den Befehl zu ersetzen. Vim, Neovim und Emacs im Vollbild benötigen den ausdrücklich geladenen OxideTerm-Adapter; andere Vollbild- und Mausverfolgungs-Apps behalten die Kontrolle",
+      "xmodem": {
+        "title": "XMODEM",
+        "block_size": "Blockgröße beim Hochladen",
+        "block_size_hint": "128 Byte für bessere Kompatibilität, 1024 Byte für Geräte mit Unterstützung größerer Blöcke. Gilt ab dem nächsten manuellen oder automatisch erkannten Upload.",
+        "bytes_128": "128 Byte (Standard)",
+        "bytes_1024": "1024 Byte"
+      },
       "in_band_transfer": {
         "title": "In-Band-Dateiübertragung",
         "enabled": "trzsz-Übertragung aktivieren",

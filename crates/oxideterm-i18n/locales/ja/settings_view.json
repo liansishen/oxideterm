@@ -407,9 +407,9 @@
       "copy_on_select": "選択時にコピー",
       "copy_on_select_hint": "マウス選択が落ち着いたら、自動的にターミナルテキストをシステムクリップボードにコピーします",
       "middle_click_paste": "中クリック貼り付け",
-      "middle_click_paste_hint": "ターミナルがマウス追跡モードでない場合、中クリックで現在のクリップボード内容を貼り付けます",
+      "middle_click_paste_hint": "中クリックを実行中のアプリに送信せず、クリップボードの内容を貼り付けます",
       "right_click_paste": "右クリック貼り付け",
-      "right_click_paste_hint": "マウス追跡モードでない場合、修飾キーなしの右クリックで貼り付けます。Shift+右クリックでコンテキストメニューを開きます",
+      "right_click_paste_hint": "右クリックを実行中のアプリに送信せず、クリップボードの内容を貼り付けます。Shift+右クリックでコンテキストメニューを開きます",
       "open_links_with_modifier": "修飾キーを押してリンクを開く",
       "open_links_with_modifier_hint": "ターミナルのリンクを Ctrl + クリックでのみ開きます。macOS では Command + クリックを使用します。無効にすると直接クリックで開きます",
       "smart_copy": "スマート Ctrl+C コピー",
@@ -424,6 +424,13 @@
       "delete_sequence": "Delete キー",
       "delete_sequence_hint": "Delete シーケンスのアプリ既定値です。保存済みホストごとに上書きできます。",
       "free_type_mode_hint": "アクティブなシェルコマンドをマウスで編集します。クリックでカーソルを移動し、対応する括弧内をダブルクリックして内容を選択できます。選択したコマンド文字列はドラッグで移動、Ctrl+ドラッグでコピー、Alt+ドラッグで現在のコマンドを置換します。全画面の Vim、Neovim、Emacs では OxideTerm アダプターの明示的な読み込みが必要で、その他の全画面・マウス追跡アプリは入力を引き続き制御します",
+      "xmodem": {
+        "title": "XMODEM",
+        "block_size": "アップロードのブロックサイズ",
+        "block_size_hint": "互換性を優先する場合は 128 バイト、大きなブロックに対応する機器では 1024 バイトを選択します。次回の手動または自動検出によるアップロードから適用されます。",
+        "bytes_128": "128 バイト（既定）",
+        "bytes_1024": "1024 バイト"
+      },
       "in_band_transfer": {
         "title": "インバンドファイル転送",
         "enabled": "trzsz 転送を有効化",

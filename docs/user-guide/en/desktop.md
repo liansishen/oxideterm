@@ -131,9 +131,13 @@ Use Host Tools for read-oriented host inspection. Keep destructive host actions 
 
 ## File Manager and SFTP
 
+In the local File Manager, drag saved favorites to reorder them. System folders and drives stay in place. Drag the favorites sidebar's right edge to resize it, or double-click the edge to restore its default width. Your order and preferred width are saved; narrow windows temporarily reduce the sidebar to leave room for files.
+
 Use the file manager for remote browsing, uploads, downloads, previews, and basic file operations. Treat remote edits as real remote writes: keep backups for critical files, and verify paths before overwriting.
 
 When a connection is unstable, pause large transfers and reconnect before retrying. Saved connection state and transfer state are separate; a failed transfer should not require deleting the connection.
+
+To jump to your terminal's working directory, use **Go to terminal directory** beside the remote SFTP refresh button. The default shortcut is **Command+Shift+G** on macOS or **Ctrl+Shift+G** on Windows and Linux; you can change it in **Settings → Keybindings**. The action uses the active terminal on the same server, or that server's most recently used terminal when the SFTP page is active. It is also available in detached SFTP windows. The button is disabled until a terminal directory is known, and navigating in the terminal does not automatically move the file browser.
 
 ### Transfer files through a terminal
 

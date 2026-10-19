@@ -104,6 +104,7 @@ impl WorkspaceApp {
                     node_id.clone(),
                     tab_id,
                     has_background,
+                    window,
                     cx,
                 ));
                 modals.push(self.render_forward_delete_confirm(
@@ -407,6 +408,16 @@ impl WorkspaceApp {
                 }
             }))
             .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape"
+                    && this.cancel_file_manager_bookmarks_resize(
+                        window.window_handle().window_id(),
+                        cx,
+                    )
+                {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    return;
+                }
                 if event.keystroke.key == "escape" && this.cancel_tab_merge_drag(cx) {
                     window.prevent_default();
                     cx.stop_propagation();
@@ -474,6 +485,9 @@ impl WorkspaceApp {
                 } else if active_ime_target.is_some()
                     && this.handle_active_text_input_transpose(&event.keystroke, cx)
                 {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                } else if this.handle_privilege_credential_picker_key(event, window, cx) {
                     window.prevent_default();
                     cx.stop_propagation();
                 } else if this.handle_terminal_git_branch_picker_key(event, cx) {
@@ -708,6 +722,7 @@ impl WorkspaceApp {
             ))
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
                 this.update_sidebar_resize(event, window, cx);
+                this.update_file_manager_bookmarks_resize(event, window, cx);
                 this.update_knowledge_resize(event, window, cx);
                 this.update_embedded_sftp_sidebar_resize(event, window, cx);
                 this.update_ai_sidebar_resize(event, window, cx);
@@ -1141,8 +1156,10 @@ impl WorkspaceApp {
                 )
             })
             .when(
-                self.browser_pointer_capture_owner(cx)
-                    .is_some_and(browser_behavior::pointer_capture_needs_workspace_overlay),
+                self.file_manager_bookmarks_resize_active(window.window_handle().window_id(), cx)
+                    || self
+                        .browser_pointer_capture_owner(cx)
+                        .is_some_and(browser_behavior::pointer_capture_needs_workspace_overlay),
                 |root| root.child(self.render_workspace_pointer_capture_overlay(cx)),
             )
             .when_some(self.render_session_sort_menu(cx), |root, menu| {
@@ -1223,7 +1240,11 @@ impl WorkspaceApp {
             )
             .when(
                 overlay_confirm_snapshot.as_ref().is_some_and(|snapshot| {
-                    matches!(&snapshot.kind, WorkspaceOverlayConfirmKind::SettingsReset)
+                    matches!(
+                        &snapshot.kind,
+                        WorkspaceOverlayConfirmKind::SettingsReset
+                            | WorkspaceOverlayConfirmKind::CommandHistoryClear { .. }
+                    )
                 }),
                 |root| root.child(self.render_settings_reset_confirm_dialog(cx)),
             )
@@ -1463,6 +1484,7 @@ impl WorkspaceApp {
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
                 this.update_tab_drag(event, window, cx);
                 this.update_sidebar_resize(event, window, cx);
+                this.update_file_manager_bookmarks_resize(event, window, cx);
                 this.update_embedded_sftp_sidebar_resize(event, window, cx);
                 this.update_knowledge_resize(event, window, cx);
                 this.update_ai_sidebar_resize(event, window, cx);
@@ -1490,6 +1512,8 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) {
         let capture_owner = self.browser_pointer_capture_owner(cx);
+        let resized_bookmarks =
+            self.finish_file_manager_bookmarks_resize(window.window_handle().window_id(), cx);
         let was_read_only_dragging = self.read_only_selection_drag_active();
         self.finish_sidebar_resize(cx);
         self.finish_knowledge_resize(cx);
@@ -1514,7 +1538,11 @@ impl WorkspaceApp {
         if cancelled_sftp_drag {
             cx.notify();
         }
-        if capture_owner.is_some() || was_read_only_dragging || cancelled_sftp_drag {
+        if capture_owner.is_some()
+            || was_read_only_dragging
+            || cancelled_sftp_drag
+            || resized_bookmarks
+        {
             cx.stop_propagation();
         }
     }

@@ -83,7 +83,7 @@ const FORWARDS_TYPE_BADGE_H: f32 = 20.0;
 const FORWARDS_PORT_SCAN_INTERVAL: Duration = Duration::from_secs(12);
 const FORWARDS_STATS_REFRESH_INTERVAL: Duration = Duration::from_secs(5);
 const FORWARDS_SAMPLING_TICK_INTERVAL: Duration = Duration::from_secs(1);
-const FORWARDS_BG_ACTIVE_THEME_ALPHA: u32 = 0x66; // Tauri [data-bg-active] theme bg/panel/card 40%
+const FORWARDS_BG_ACTIVE_THEME_ALPHA: u32 = 0x99; // Nested fills share the tab's sidebar-bounded tint budget.
 const FORWARDS_BG_ACTIVE_HOVER_ALPHA: u32 = 0x80; // Tauri [data-bg-active] bg-hover 50%
 const FORWARDS_BG_ACTIVE_SUNKEN_ALPHA: u32 = 0x59; // Tauri [data-bg-active] bg-sunken 35%
 const FORWARDS_BG_ACTIVE_BORDER_ALPHA: u32 = 0xbf; // Tauri [data-bg-active] border 75%
@@ -167,6 +167,8 @@ pub(super) struct ForwardsViewState {
     pub(super) focused_input: Option<ForwardInput>,
     pub(super) error: Option<String>,
     pending: bool,
+    pending_start: Option<(&'static str, bool, ForwardingRuntimeOperation)>,
+    start_after_save: Option<ForwardingRuntimeOperation>,
     detected_ports: Vec<DetectedPort>,
     new_ports: Vec<DetectedPort>,
     has_scanned_ports: bool,
@@ -209,6 +211,8 @@ impl Default for ForwardsViewState {
             focused_input: None,
             error: None,
             pending: false,
+            pending_start: None,
+            start_after_save: None,
             detected_ports: Vec::new(),
             new_ports: Vec::new(),
             has_scanned_ports: false,
@@ -243,7 +247,7 @@ pub(super) enum ForwardingWorkerResult {
         restored: u32,
         detail: String,
         job_id: String,
-        created_forwards: Vec<(String, String)>,
+        created_forwards: Vec<(Arc<ForwardingManager>, String)>,
         bindings: Vec<(String, String, ConnectionConsumer)>,
     },
 }

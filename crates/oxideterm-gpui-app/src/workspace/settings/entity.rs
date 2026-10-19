@@ -415,6 +415,7 @@ pub(in crate::workspace) struct SettingsWorkspaceEntity {
     pub(super) managed_key_dialog_exit_task: Option<Task<()>>,
     pub(super) managed_key_file_picker_task: Option<Task<()>>,
     pub(super) expanded_mcp_client: Option<String>,
+    pub(super) new_mcp_client_mode: oxideterm_public_mcp::ClientApprovalMode,
     pub(super) network_proxy_password: Zeroizing<String>,
     pub(super) network_proxy_password_status: Option<String>,
     pub(super) network_proxy_test_host: String,
@@ -472,6 +473,10 @@ pub(in crate::workspace) struct SettingsWorkspaceEntity {
     settings_search_query: String,
     keybinding_scope_filter: SettingsKeybindingScopeFilter,
     keybinding_search_query: String,
+    pub(super) skill_search_query: String,
+    pub(super) skill_scope_filter: Option<oxideterm_skills::SkillScope>,
+    pub(super) expanded_skill_paths: HashSet<PathBuf>,
+    pub(super) skill_diagnostics_expanded: bool,
     keybinding_recording_action_id: Option<String>,
     keybinding_conflict_action_ids: Vec<String>,
     keybinding_recording_combo: Option<crate::keybindings::KeyCombo>,
@@ -588,6 +593,7 @@ impl SettingsWorkspaceEntity {
             managed_key_dialog_exit_task: None,
             managed_key_file_picker_task: None,
             expanded_mcp_client: None,
+            new_mcp_client_mode: oxideterm_public_mcp::ClientApprovalMode::Standard,
             network_proxy_password: Zeroizing::new(String::new()),
             network_proxy_password_status: None,
             network_proxy_test_host: String::new(),
@@ -645,6 +651,10 @@ impl SettingsWorkspaceEntity {
             settings_search_query: String::new(),
             keybinding_scope_filter: SettingsKeybindingScopeFilter::All,
             keybinding_search_query: String::new(),
+            skill_search_query: String::new(),
+            skill_scope_filter: None,
+            expanded_skill_paths: HashSet::new(),
+            skill_diagnostics_expanded: false,
             keybinding_recording_action_id: None,
             keybinding_conflict_action_ids: Vec::new(),
             keybinding_recording_combo: None,
@@ -2297,6 +2307,7 @@ impl SettingsWorkspaceEntity {
                 .and_then(|editor| editor.ui_colors.get(index))
                 .map(String::as_str),
             SettingsInput::KeybindingSearch => Some(&self.keybinding_search_query),
+            SettingsInput::SkillSearch => Some(&self.skill_search_query),
             SettingsInput::PortableCurrentPassword => Some(&self.portable_current_password),
             SettingsInput::PortableNewPassword => Some(&self.portable_new_password),
             SettingsInput::PortableConfirmPassword => Some(&self.portable_confirm_password),
@@ -2345,6 +2356,7 @@ impl SettingsWorkspaceEntity {
             | SettingsInput::CustomThemeTerminalColor(_)
             | SettingsInput::CustomThemeUiColor(_) => self.theme_editor.is_some(),
             SettingsInput::KeybindingSearch => true,
+            SettingsInput::SkillSearch => true,
             SettingsInput::PortableCurrentPassword
             | SettingsInput::PortableNewPassword
             | SettingsInput::PortableConfirmPassword => portable_open,
@@ -2493,6 +2505,7 @@ impl SettingsWorkspaceEntity {
                 .map(Arc::make_mut)
                 .and_then(|editor| editor.ui_colors.get_mut(index)),
             SettingsInput::KeybindingSearch => Some(&mut self.keybinding_search_query),
+            SettingsInput::SkillSearch => Some(&mut self.skill_search_query),
             SettingsInput::PortableCurrentPassword => Some(&mut self.portable_current_password),
             SettingsInput::PortableNewPassword => Some(&mut self.portable_new_password),
             SettingsInput::PortableConfirmPassword => Some(&mut self.portable_confirm_password),

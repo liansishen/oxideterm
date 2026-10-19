@@ -93,6 +93,7 @@ pub enum TerminalEvent {
     SessionRestarted,
     // Failed startup must remain visible instead of triggering normal exit auto-close.
     StartupFailed,
+    X11ForwardingStatus(oxideterm_ssh::X11ForwardingStatus),
     ProcessingFailed,
     TmuxPaneSelected {
         selected: bool,

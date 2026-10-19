@@ -1161,6 +1161,11 @@ impl WorkspaceApp {
         }
 
         if self.sftp_view().read(cx).focused_input().is_some()
+            || (self.sftp_focused_surface == sftp::SftpSurfaceId::Sidebar
+                && self.focus_handle.is_focused(window)
+                && !self.sidebar_collapsed
+                && self.effective_sidebar_panel_section() == SidebarSection::Sessions
+                && self.embedded_sftp_target(cx).is_some())
             || self
                 .active_content_tab(cx)
                 .is_some_and(|tab| tab.kind == TabKind::Sftp)
@@ -2081,6 +2086,21 @@ impl WorkspaceApp {
         };
         if pane.is_tmux_control_mode() {
             protocol = QuickCommandTargetProtocol::Tmux;
+        }
+        if let Some(node) = self
+            .session_id_for_pane(pane_id, cx)
+            .and_then(|session_id| {
+                self.workspace_runtime
+                    .read(cx)
+                    .ssh_terminal_node_id(session_id)
+            })
+            .and_then(|node_id| self.ssh_nodes.get(&node_id))
+        {
+            // Temporary SSH sessions have endpoint metadata even before the shell reports a cwd.
+            values.host = Some(Zeroizing::new(node.endpoint.host.clone()));
+            values.username = Some(Zeroizing::new(node.endpoint.username.clone()));
+            values.port = Some(node.endpoint.port);
+            values.connection = Some(Zeroizing::new(node.title.clone()));
         }
         if let Some(saved) = entry
             .as_ref()

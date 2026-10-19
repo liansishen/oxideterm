@@ -233,6 +233,9 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) {
         match event {
+            TerminalPaneEvent::X11ForwardingStatus(status) => {
+                self.push_workspace_notice(x11_forwarding_notice(status, &self.i18n), cx);
+            }
             TerminalPaneEvent::InputActivity => {
                 oxideterm_gpui_background::note_input_activity(window_handle.window_id(), cx);
             }
@@ -298,6 +301,16 @@ impl WorkspaceApp {
             TerminalPaneEvent::CurrentDirectoryChanged => {
                 if self.active_pane_id(cx) == Some(pane_id) {
                     self.sync_active_terminal_metadata_context(cx);
+                }
+                if self
+                    .terminal
+                    .read(cx)
+                    .last_ssh_terminal_panes
+                    .values()
+                    .any(|pane| *pane == pane_id)
+                    && (!self.sftp_pages.is_empty() || self.embedded_sftp_node_id.is_some())
+                {
+                    cx.notify();
                 }
             }
             TerminalPaneEvent::RecordingStatusChanged => {
@@ -475,7 +488,10 @@ impl WorkspaceApp {
         }
         self.search.remove(*pane_id);
         self.terminal.update(cx, |terminal, _| {
-            terminal.sync_groups_mut().remove(*pane_id)
+            terminal.sync_groups_mut().remove(*pane_id);
+            terminal
+                .last_ssh_terminal_panes
+                .retain(|_, pane| pane != pane_id);
         });
         self.tab_host
             .update(cx, |tab_host, _cx| tab_host.remove_terminal_pane(*pane_id))
@@ -1211,6 +1227,8 @@ impl WorkspaceApp {
                                     this.sync_active_terminal_metadata_context(cx);
                                     this.sync_active_terminal_recording_elapsed_tick(cx);
                                     this.sync_active_privilege_prompt_inline_hint(cx);
+                                } else {
+                                    this.remember_ssh_terminal_pane(pane_id, cx);
                                 }
                                 if let Some(pane) =
                                     this.tab_host.read(cx).panes().get(&pane_id).cloned()
@@ -1440,9 +1458,79 @@ impl WorkspaceApp {
     }
 }
 
+fn x11_forwarding_notice(
+    status: oxideterm_ssh::X11ForwardingStatus,
+    i18n: &I18n,
+) -> TerminalNotice {
+    use oxideterm_ssh::{X11ForwardingFailure, X11ForwardingStatus};
+    let (title, description, variant) = match status {
+        X11ForwardingStatus::Accepted => (
+            "ssh.x11.accepted",
+            "ssh.x11.accepted_description",
+            TerminalNoticeVariant::Success,
+        ),
+        X11ForwardingStatus::Unavailable(failure) => (
+            "ssh.x11.unavailable",
+            match failure {
+                X11ForwardingFailure::LocalDisplayUnavailable => {
+                    "ssh.x11.local_display_unavailable"
+                }
+                X11ForwardingFailure::LocalAuthorizationUnavailable => {
+                    "ssh.x11.local_authorization_unavailable"
+                }
+                X11ForwardingFailure::ServerRejected => "ssh.x11.server_rejected",
+                X11ForwardingFailure::RequestTimedOut => "ssh.x11.request_timed_out",
+                X11ForwardingFailure::ChannelUnavailable => "ssh.x11.channel_unavailable",
+            },
+            TerminalNoticeVariant::Warning,
+        ),
+    };
+    TerminalNotice {
+        title: i18n.t(title),
+        description: Some(i18n.t(description)),
+        status_text: matches!(status, X11ForwardingStatus::Unavailable(_))
+            .then(|| i18n.t("settings_view.connections.shell_integration.terminal_unaffected")),
+        variant,
+        progress: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn x11_notices_distinguish_acceptance_and_optional_forwarding_failures() {
+        use oxideterm_ssh::{X11ForwardingFailure, X11ForwardingStatus};
+        let i18n = I18n::new(oxideterm_i18n::Locale::En);
+        let accepted = x11_forwarding_notice(X11ForwardingStatus::Accepted, &i18n);
+        assert_eq!(accepted.title, "X11 forwarding accepted");
+        assert_eq!(accepted.variant, TerminalNoticeVariant::Success);
+        assert_eq!(accepted.status_text, None);
+        for (failure, description) in [
+            (
+                X11ForwardingFailure::LocalDisplayUnavailable,
+                "No valid local display address was found. Start a local X server and configure DISPLAY before starting OxideTerm.",
+            ),
+            (
+                X11ForwardingFailure::ServerRejected,
+                "The SSH server rejected X11 forwarding. Check the server forwarding policy and xauth installation.",
+            ),
+            (
+                X11ForwardingFailure::RequestTimedOut,
+                "The SSH server did not respond to the X11 forwarding request in time.",
+            ),
+        ] {
+            let notice = x11_forwarding_notice(X11ForwardingStatus::Unavailable(failure), &i18n);
+            assert_eq!(notice.title, "X11 forwarding unavailable");
+            assert_eq!(notice.description.as_deref(), Some(description));
+            assert_eq!(notice.variant, TerminalNoticeVariant::Warning);
+            assert_eq!(
+                notice.status_text.as_deref(),
+                Some("SSH terminal use is unaffected.")
+            );
+        }
+    }
 
     #[test]
     fn remote_terminal_exit_does_not_request_auto_close() {

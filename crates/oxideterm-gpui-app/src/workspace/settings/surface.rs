@@ -294,18 +294,25 @@ impl WorkspaceApp {
                     settings.ai.enabled,
                 )
             }
-            (AiSettingsPage::Tools, 1) => self.ai_disabled_settings_card(
+            (AiSettingsPage::Tools, 1) => {
+                let settings = self.settings_store.settings();
+                self.ai_disabled_settings_card(
+                    self.ai_web_search_section(settings, cx),
+                    settings.ai.enabled,
+                )
+            }
+            (AiSettingsPage::Tools, 2) => self.ai_disabled_settings_card(
                 self.render_ai_agent_settings(cx),
                 self.settings_store.settings().ai.enabled,
             ),
-            (AiSettingsPage::Tools, 2) => {
+            (AiSettingsPage::Tools, 3) => {
                 let settings = self.settings_store.settings();
                 self.ai_disabled_settings_card(
                     self.ai_skills_section(settings, cx),
                     settings.ai.enabled,
                 )
             }
-            (AiSettingsPage::Tools, 3) => {
+            (AiSettingsPage::Tools, 4) => {
                 let settings = self.settings_store.settings();
                 self.ai_disabled_settings_card(
                     self.ai_mcp_servers_section(settings, cx),
@@ -589,6 +596,11 @@ impl WorkspaceApp {
             }
             SettingsTab::Privilege => {
                 self.connection_store
+                    .list_privilege_credentials(SSH_COMMON_PRIVILEGE_SCOPE_ID)
+                    .map(|credentials| credentials.len())
+                    .unwrap_or(0)
+                    .hash(&mut hasher);
+                self.connection_store
                     .totp_credentials()
                     .len()
                     .hash(&mut hasher);
@@ -638,6 +650,8 @@ impl WorkspaceApp {
                 match (route.ai_page, index) {
                     (AiSettingsPage::Providers, 2) => {
                         settings.ai.providers.len().hash(&mut hasher);
+                        settings.ai.web_search.enabled.hash(&mut hasher);
+                        settings.ai.web_search.provider_id.hash(&mut hasher);
                         self.ai_entity
                             .read(cx)
                             .hash_settings_provider_layout(&mut hasher);
@@ -649,41 +663,54 @@ impl WorkspaceApp {
                             .hash_settings_context_layout(&mut hasher);
                     }
                     (AiSettingsPage::Tools, 2) => {
+                        settings.ai.tool_use.disabled_tools.hash(&mut hasher);
                         self.ai_entity
                             .read(cx)
                             .settings_section_expanded(AiSettingsViewSection::ToolUse)
                             .hash(&mut hasher);
                     }
                     (AiSettingsPage::Tools, 3) => {
+                        settings.ai.web_search.enabled.hash(&mut hasher);
+                        settings.ai.web_search.provider_id.hash(&mut hasher);
+                        settings.ai.providers.len().hash(&mut hasher);
+                    }
+                    (AiSettingsPage::Tools, 4) => {
+                        settings.ai.tool_use.enabled.hash(&mut hasher);
                         let ai = self.ai_entity.read(cx);
                         ai.agents.settings_model_picker_open.hash(&mut hasher);
-                        ai.conversation_state()
-                            .active_conversation_id
+                        let options = self.global_agent_options();
+                        options.enabled.hash(&mut hasher);
+                        options
+                            .default_model
+                            .as_ref()
+                            .map(|model| (&model.provider_id, &model.model))
                             .hash(&mut hasher);
-                        if let Some(conversation) = ai.conversation_state().active_conversation() {
-                            conversation.title.hash(&mut hasher);
-                            let options = ai.agent_options(&conversation.id);
-                            options.enabled.hash(&mut hasher);
-                            options
-                                .default_model
-                                .as_ref()
-                                .map(|model| (&model.provider_id, &model.model))
-                                .hash(&mut hasher);
-                        }
                         for provider in ai_provider_views(settings) {
                             provider.id.hash(&mut hasher);
                             provider.enabled.hash(&mut hasher);
                             provider.models.hash(&mut hasher);
                         }
                     }
-                    (AiSettingsPage::Tools, 4) => {
+                    (AiSettingsPage::Tools, 5) => {
+                        let state = self.settings_workspace.read(cx);
+                        state.skill_search_query.hash(&mut hasher);
+                        format!("{:?}", state.skill_scope_filter).hash(&mut hasher);
+                        state.skill_diagnostics_expanded.hash(&mut hasher);
                         let registry = self.skill_registry.read();
                         for skill in registry.records() {
                             skill.id.hash(&mut hasher);
+                            skill.skill_path.hash(&mut hasher);
+                            state
+                                .expanded_skill_paths
+                                .contains(&skill.skill_path)
+                                .hash(&mut hasher);
                             skill.enabled.hash(&mut hasher);
                             skill.content_hash.hash(&mut hasher);
                         }
-                        registry.diagnostics().len().hash(&mut hasher);
+                        for diagnostic in registry.diagnostics() {
+                            diagnostic.path.hash(&mut hasher);
+                            diagnostic.message.hash(&mut hasher);
+                        }
                     }
                     _ => {}
                 }
@@ -1297,6 +1324,12 @@ impl WorkspaceApp {
         }
         self.i18n
             .set_locale(locale_from_settings(settings.general.language));
+        if previous_settings.terminal.autosuggest != settings.terminal.autosuggest {
+            self.terminal_history_store.configure(
+                settings.terminal.autosuggest.save_history,
+                settings.terminal.autosuggest.history_retention_days,
+            );
+        }
         if previous_settings.general.language != settings.general.language {
             self.refresh_native_plugin_terminal_hooks(cx);
             cx.set_menus(crate::platform::app_menus(settings));

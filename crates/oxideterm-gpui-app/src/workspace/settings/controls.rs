@@ -5,7 +5,6 @@ use oxideterm_terminal_triggers::{
     TerminalTriggerScope,
 };
 
-pub(in crate::workspace) const SETTINGS_ROW_LABEL_MIN_WIDTH: f32 = 180.0; // Keep localized labels readable before controls wrap.
 const KNOWLEDGE_SCOPE_SELECT_MAX_HEIGHT: f32 = 320.0;
 
 enum ThemeSelectEntry {
@@ -1935,6 +1934,40 @@ impl WorkspaceApp {
                 }
                 Some(popup)
             }
+            (SettingsTab::Ai, SettingsSelect::AiWebSearchProvider) => {
+                let current = settings.ai.web_search.provider_id.clone();
+                let mut popup = select_panel_overlay_popup_with_max_height(
+                    &self.tokens,
+                    width.max(AI_PROVIDER_SELECT_W),
+                    320.0,
+                );
+                let options =
+                    std::iter::once((None, self.i18n.t("settings_view.ai.web_provider_none")))
+                        .chain(
+                            ai_provider_views(settings)
+                                .into_iter()
+                                .filter(oxideterm_ai::web::official_deepseek_provider)
+                                .map(|provider| (Some(provider.id), provider.name)),
+                        );
+                for (provider_id, label) in options {
+                    let selected = current == provider_id;
+                    popup = popup.child(select_option_action(
+                        select_option(&self.tokens, label, selected),
+                        false,
+                        false,
+                        cx.listener(move |this, _event, _window, cx| {
+                            let provider_id = provider_id.clone();
+                            this.close_settings_select();
+                            this.edit_settings(
+                                move |settings| settings.ai.web_search.provider_id = provider_id,
+                                cx,
+                            );
+                            cx.stop_propagation();
+                        }),
+                    ));
+                }
+                Some(popup)
+            }
             (SettingsTab::Ai, SettingsSelect::AiMcpTransport) => {
                 let current = self
                     .ai_entity
@@ -2340,53 +2373,23 @@ impl WorkspaceApp {
         control: AnyElement,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let label = self.i18n.t(label_key);
-        let hint = self.i18n.t(hint_key);
-        div()
-            .w_full()
-            .min_w(px(0.0))
-            .flex()
-            .flex_row()
-            .flex_wrap()
-            .items_center()
-            .justify_between()
-            .gap(px(self.tokens.metrics.settings_row_gap))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w(px(SETTINGS_ROW_LABEL_MIN_WIDTH))
-                    .flex_basis(px(SETTINGS_ROW_LABEL_MIN_WIDTH))
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.0))
-                    .child(
-                        div()
-                            .text_size(px(self.tokens.metrics.ui_text_sm))
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .text_color(rgb(self.tokens.ui.text))
-                            .child(self.render_selectable_text_scoped(
-                                "settings-row-label",
-                                label_key,
-                                label,
-                                self.tokens.ui.text,
-                                cx,
-                            )),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(self.tokens.metrics.ui_text_xs))
-                            .text_color(rgb(self.tokens.ui.text_muted))
-                            .child(self.render_selectable_text_scoped(
-                                "settings-row-hint",
-                                hint_key,
-                                hint,
-                                self.tokens.ui.text_muted,
-                                cx,
-                            )),
-                    ),
+        let label = self.render_selectable_text_scoped(
+            "settings-row-label",
+            label_key,
+            self.i18n.t(label_key),
+            self.tokens.ui.text,
+            cx,
+        );
+        let hint = (!hint_key.is_empty()).then(|| {
+            self.render_selectable_text_scoped(
+                "settings-row-hint",
+                hint_key,
+                self.i18n.t(hint_key),
+                self.tokens.ui.text_muted,
+                cx,
             )
-            .child(control)
-            .into_any_element()
+        });
+        settings_row(&self.tokens, label, hint, control)
     }
 }
 

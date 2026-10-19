@@ -265,6 +265,9 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
                 "settings_view.terminal.command_bar_current_directory_awareness",
                 "settings_view.terminal.autosuggest_local_history",
                 "settings_view.terminal.autosuggest_local_history_hint",
+                "terminal.history.save",
+                "terminal.history.save_hint",
+                "terminal.history.retention",
             ],
         ),
         terminal_search_entry(
@@ -667,7 +670,7 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
             &[
                 "settings_view.ai.tool_use_enabled",
                 "settings_view.ai.tool_use_max_rounds",
-                "ai.agents.concurrency",
+                "settings_view.ai.tool_auto_approval_title",
             ],
         ),
         ai_search_entry(
@@ -678,6 +681,7 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
                 "settings_view.ai.conversation_agents_hint",
                 "ai.agents.allow",
                 "ai.agents.model",
+                "ai.agents.concurrency",
             ],
         ),
         ai_search_entry(

@@ -81,8 +81,9 @@ impl WorkspaceApp {
         let documents = self.terminal_command_sender.read(cx).document_snapshots();
         let targets = self.terminal_command_sender_target_entries(cx);
         let sender_is_resizing = self.terminal_command_sender.read(cx).is_resizing();
+        let has_background = self.window_background_preferences().is_some();
 
-        div()
+        let panel = div()
             .relative()
             .flex_none()
             .h(px(panel_height))
@@ -91,7 +92,16 @@ impl WorkspaceApp {
             .flex_col()
             .border_t_1()
             .border_color(self.workspace_chrome_divider())
-            .bg(rgb(theme.bg))
+            .bg(if has_background {
+                rgba(
+                    (theme.bg << 8)
+                        | oxideterm_gpui_ui::surface::theme_glass_card_background_alpha(
+                            &self.tokens,
+                        ),
+                )
+            } else {
+                rgb(theme.bg)
+            })
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
                 this.update_terminal_command_sender_resize(event, window, cx);
             }))
@@ -146,7 +156,12 @@ impl WorkspaceApp {
                     .child(active.editor.clone()),
             )
             .child(self.render_terminal_command_sender_controls(&active, &targets, cx))
-            .into_any_element()
+            .into_any_element();
+        if has_background {
+            oxideterm_gpui_ui::surface::tab_surface(&self.tokens, panel)
+        } else {
+            panel
+        }
     }
 
     fn render_compact_terminal_command_sender(
@@ -262,7 +277,7 @@ impl WorkspaceApp {
                     | TERMINAL_SENDER_COMPACT_BORDER_ALPHA,
             ))
             .bg(background)
-            .when(!suggestions.is_empty(), |row| {
+            .when(focused && suggestions_open, |row| {
                 row.child(self.render_terminal_command_sender_suggestions(
                     &suggestions,
                     suggestion_highlighted,
@@ -542,7 +557,9 @@ impl WorkspaceApp {
             .gap(px(8.0))
             .border_b_1()
             .border_color(self.workspace_chrome_divider())
-            .bg(rgb(self.tokens.ui.bg))
+            .when(self.window_background_preferences().is_none(), |strip| {
+                strip.bg(rgb(self.tokens.ui.bg))
+            })
             .child(tab_list)
             .child(task_actions)
             .into_any_element()
@@ -713,7 +730,9 @@ impl WorkspaceApp {
             .flex_none()
             .border_t_1()
             .border_color(self.workspace_chrome_divider())
-            .bg(rgb(self.tokens.ui.bg))
+            .when(self.window_background_preferences().is_none(), |controls| {
+                controls.bg(rgb(self.tokens.ui.bg))
+            })
             .when(snapshot.total_units > 0, |panel| {
                 panel.child(
                     div()
@@ -1404,18 +1423,17 @@ impl WorkspaceApp {
                 true
             }
             "enter" if !modifiers.platform && !modifiers.shift && !modifiers.alt => {
-                let sender_id = if suggestions_open {
+                if suggestions_open {
                     let suggestions =
                         self.terminal_command_sender_compact_history_suggestions(&document, cx);
-                    suggestion_highlighted
-                        .and_then(|index| suggestions.get(index))
-                        .map(|suggestion| {
-                            self.accept_terminal_command_sender_suggestion(suggestion, cx)
-                        })
-                        .unwrap_or(document.id)
-                } else {
-                    document.id
-                };
+                    if let Some(suggestion) =
+                        suggestion_highlighted.and_then(|index| suggestions.get(index))
+                    {
+                        self.accept_terminal_command_sender_suggestion(suggestion, cx);
+                        return true;
+                    }
+                }
+                let sender_id = document.id;
                 if self.start_terminal_command_sender(sender_id, cx) {
                     self.terminal_command_sender.update(cx, |sender, cx| {
                         sender.clear_compact_text(sender_id, cx);
@@ -1575,16 +1593,14 @@ impl WorkspaceApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let target_fields = self.terminal_command_context(cx).target_fields();
-        let protocol = self
+        let target = self
             .active_pane_id(cx)
-            .and_then(|pane_id| self.quick_command_context_for_pane(pane_id, cx))
-            .map(|context| context.protocol);
+            .and_then(|pane_id| self.quick_command_context_for_pane(pane_id, cx));
         let (categories, commands) = self
             .terminal
             .read(cx)
             .quick_commands
-            .quick_bar_snapshot(&target_fields, protocol);
+            .quick_bar_snapshot(target.as_ref());
         if commands.is_empty() {
             return div().into_any_element();
         }

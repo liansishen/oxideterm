@@ -65,6 +65,7 @@ mod sftp;
 mod sidebar;
 mod standalone_connections;
 mod tabs;
+mod terminal_archive;
 mod terminal_cast;
 mod terminal_command_bar;
 mod terminal_command_sender;
@@ -983,6 +984,7 @@ pub(crate) struct WorkspaceApp {
     local_shells: Vec<ShellInfo>,
     local_shell_launcher_open: bool,
     local_shell_launcher_selected_id: Option<String>,
+    archive_command: Option<terminal_archive::ArchiveCommandPreview>,
     terminal: Entity<WorkspaceTerminalEntity>,
     _terminal_subscription: Subscription,
     overlay: Entity<WorkspaceOverlayEntity>,
@@ -993,6 +995,7 @@ pub(crate) struct WorkspaceApp {
 
 impl Drop for WorkspaceApp {
     fn drop(&mut self) {
+        self.archive_command = None;
         // App Lock and Cloud Sync move the focused secret into this window IME
         // adapter, so window destruction must zeroize it even without a blur event.
         zeroize::Zeroize::zeroize(&mut self.settings_input_draft);

@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use gpui::{
     Font, FontFallbacks, FontFeatures, FontStyle, FontWeight, Pixels, SharedString, TextRun,
-    Window, px, rgb,
+    TextSystem, Window, px, rgb,
 };
 use oxideterm_render_policy::EffectiveRenderPolicy;
 use oxideterm_settings::{
@@ -36,7 +36,6 @@ pub(crate) const TERMINAL_LINE_HEIGHT_RATIO: f32 = 1.2;
 // User padding is applied outside the element; these coordinates are grid-local.
 pub(crate) const TERMINAL_CONTENT_PADDING: f32 = 0.0;
 // Command marks do not reserve additional space before column zero.
-pub(crate) const TERMINAL_COMMAND_MARK_GUTTER_WIDTH: f32 = 0.0;
 const NESTED_SEMANTIC_COLOR_COUNT: u8 = 6;
 const TERMINAL_SEMANTIC_ERROR_LINE_BAND_OPACITY: f32 = 0.11;
 const TERMINAL_SEMANTIC_WARNING_LINE_BAND_OPACITY: f32 = 0.08;
@@ -105,6 +104,7 @@ pub struct TerminalUiPreferences {
     pub bidi_enabled: bool,
     pub current_directory_awareness_enabled: bool,
     pub command_marks_enabled: bool,
+    pub command_folding_enabled: bool,
     pub command_marks_user_input_observed: bool,
     pub command_marks_heuristic_detection: bool,
     pub command_marks_show_hover_actions: bool,
@@ -118,6 +118,8 @@ pub struct TerminalUiPreferences {
     pub processing_failed_message: String,
     pub reconnect_label: String,
     pub reconnect_hint: String,
+    pub archive_link_hint: String,
+    pub archive_link_modifier_hint: String,
     pub reconnecting_label: String,
     pub paste_labels: TerminalPasteLabels,
     pub kitty_file_transmission_labels: TerminalKittyFileTransmissionLabels,
@@ -233,6 +235,7 @@ impl Default for TerminalUiPreferences {
             bidi_enabled: TERMINAL_BIDI_ENABLED,
             current_directory_awareness_enabled: false,
             command_marks_enabled: TERMINAL_COMMAND_MARKS_ENABLED,
+            command_folding_enabled: false,
             command_marks_user_input_observed: false,
             command_marks_heuristic_detection: false,
             command_marks_show_hover_actions: TERMINAL_COMMAND_MARKS_SHOW_HOVER_ACTIONS,
@@ -247,6 +250,8 @@ impl Default for TerminalUiPreferences {
                 "Terminal processing stopped. Reconnect this session to continue.".into(),
             reconnect_label: String::new(),
             reconnect_hint: String::new(),
+            archive_link_hint: String::new(),
+            archive_link_modifier_hint: String::new(),
             reconnecting_label: String::new(),
             paste_labels: TerminalPasteLabels::default(),
             kitty_file_transmission_labels: TerminalKittyFileTransmissionLabels::default(),
@@ -417,6 +422,10 @@ pub struct TerminalCommandSelectionLabels {
     pub find: String,
     pub manage_triggers: String,
     pub select_command: String,
+    pub collapse_output: String,
+    pub expand_output: String,
+    pub folded_output: String,
+    pub folded_exit_code: String,
     pub previous_command: String,
     pub next_command: String,
     pub clear_screen: String,
@@ -437,6 +446,10 @@ impl Default for TerminalCommandSelectionLabels {
             find: "Find...".to_string(),
             manage_triggers: "Manage triggers...".to_string(),
             select_command: "Select command".to_string(),
+            collapse_output: "Collapse output".to_string(),
+            expand_output: "Expand output".to_string(),
+            folded_output: "{{count}} output lines collapsed".to_string(),
+            folded_exit_code: "Exit code {{code}}".to_string(),
             previous_command: "Previous command".to_string(),
             next_command: "Next command".to_string(),
             clear_screen: "Clear screen".to_string(),
@@ -1060,12 +1073,14 @@ impl TerminalMetrics {
     ) -> Self {
         let font_size = px(preferences.font_size);
         let line_height = px(preferences.font_size * preferences.line_height);
-        let font = terminal_font_with_family_and_cjk(
+        let font = resolve_terminal_font(
+            window.text_system(),
             &preferences.font_family,
             preferences.cjk_font_family.as_deref(),
             preferences.font_ligatures,
             preferences.font_weight,
-        );
+        )
+        .font;
         let font_id = window.text_system().resolve_font(&font);
         let measured_width = window
             .text_system()
@@ -1120,6 +1135,60 @@ pub(crate) fn fallback_cell_width(window: &mut Window, font: &Font, font_size: P
         .text_system()
         .shape_line(sample, font_size, &[run], None)
         .width
+}
+
+pub struct ResolvedTerminalFont {
+    pub font: Font,
+    pub unavailable_families: Vec<String>,
+}
+
+/// Resolves the primary family before either measuring or shaping terminal cells.
+pub fn resolve_terminal_font(
+    text_system: &TextSystem,
+    family: &str,
+    cjk_family: Option<&str>,
+    font_ligatures: bool,
+    font_weight: f32,
+) -> ResolvedTerminalFont {
+    let mut font =
+        terminal_font_with_family_and_cjk(family, cjk_family, font_ligatures, font_weight);
+    let configured = oxideterm_gpui_ui::css_font_family_stack(family);
+    let available = |family: &str| {
+        // A glyph fallback must not disguise an unavailable configured family.
+        text_system
+            .font_id(&Font {
+                family: terminal_font_family_name(family),
+                fallbacks: None,
+                ..font.clone()
+            })
+            .is_ok()
+    };
+    let mut unavailable_families = Vec::new();
+    for name in configured.iter().map(|name| name.as_ref()) {
+        let name = name.trim();
+        if !name.is_empty() && !available(name) {
+            push_font_fallback(&mut unavailable_families, name);
+        }
+    }
+    let primary = configured
+        .iter()
+        .find(|family| available(family))
+        .map(|family| terminal_font_family_name(family))
+        .unwrap_or_else(|| TERMINAL_FONT.into());
+    // Keep glyph fallbacks intact: CJK and symbol-only fonts need not be usable as a primary.
+    font.family = primary;
+    ResolvedTerminalFont {
+        font,
+        unavailable_families,
+    }
+}
+
+fn terminal_font_family_name(family: &str) -> SharedString {
+    if family.eq_ignore_ascii_case("monospace") || family.eq_ignore_ascii_case("ui-monospace") {
+        TERMINAL_FONT.into()
+    } else {
+        oxideterm_gpui_ui::gpui_font_family_name(family)
+    }
 }
 
 pub(crate) fn terminal_font_with_family_and_cjk(

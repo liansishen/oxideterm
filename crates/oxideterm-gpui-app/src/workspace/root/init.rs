@@ -283,6 +283,7 @@ impl WorkspaceApp {
             runtime.configure_remote_shell_integration(
                 settings.terminal.remote_shell_integration_mode,
                 settings.terminal.command_bar.current_directory_awareness,
+                settings.terminal.remote_shell_integration_deferred.clone(),
             );
         });
         let ssh_consumer_prompt_handler = workspace_runtime.read(cx).native_ssh_prompt_handler();
@@ -600,6 +601,8 @@ impl WorkspaceApp {
             search: actions::TerminalSearchState::default(),
             terminal_recording_menu_open: false,
             privilege_credential_picker: None,
+            pending_privilege_totp: None,
+            privilege_prompt_sync_task: None,
             terminal_highlight_popover_open: false,
             terminal_trigger_settings_pane: None,
             terminal_trigger_shell_confirmation_pending: false,
@@ -893,6 +896,7 @@ impl WorkspaceApp {
             local_shell_launcher_open: false,
             local_shell_launcher_selected_id: None,
             archive_command: None,
+            ssh_tunnels: ssh_tunnels::SshTunnels::default(),
             terminal,
             _terminal_subscription: terminal_subscription,
             overlay,
@@ -925,6 +929,7 @@ impl WorkspaceApp {
         workspace.start_audit_delivery(cx);
         workspace.restore_session_tree_snapshot();
         workspace.restore_terminal_workspace(window, cx);
+        workspace.start_startup_ssh_tunnels(window, cx);
         workspace.standalone_connections =
             standalone_connections::StandaloneConnectionRegistry::restore(
                 default_session_tree_path().with_file_name("standalone_sessions.json"),
@@ -1204,6 +1209,8 @@ impl WorkspaceApp {
             processing_failed_message: self.i18n.t("terminal.processing_failed"),
             reconnect_label: self.i18n.t("sessions.actions.reconnect"),
             reconnect_hint: self.i18n.t("terminal.reconnect_hint"),
+            archive_link_hint: self.i18n.t("terminal.archive.open_hint"),
+            archive_link_modifier_hint: self.i18n.t("terminal.archive.open_modifier_hint"),
             reconnecting_label: self.i18n.t("connections.monitor.reconnecting"),
             font_family: terminal
                 .font_family
@@ -1248,6 +1255,7 @@ impl WorkspaceApp {
             bidi_enabled: terminal.unicode.bidi_enabled,
             current_directory_awareness_enabled: terminal.command_bar.current_directory_awareness,
             command_marks_enabled: terminal.command_marks.enabled,
+            command_folding_enabled: terminal.command_marks.folding_enabled,
             command_marks_user_input_observed: terminal.command_marks.user_input_observed,
             command_marks_heuristic_detection: terminal.command_marks.heuristic_detection,
             command_marks_show_hover_actions: terminal.command_marks.show_hover_actions,
@@ -1318,6 +1326,10 @@ impl WorkspaceApp {
                 find: self.i18n.t("terminal.command_selection.find"),
                 manage_triggers: self.i18n.t("terminal.command_selection.manage_triggers"),
                 select_command: self.i18n.t("terminal.command_selection.select_command"),
+                collapse_output: self.i18n.t("terminal.command_selection.collapse_output"),
+                expand_output: self.i18n.t("terminal.command_selection.expand_output"),
+                folded_output: self.i18n.t("terminal.command_selection.folded_output"),
+                folded_exit_code: self.i18n.t("terminal.command_selection.folded_exit_code"),
                 previous_command: self.i18n.t("terminal.command_selection.previous_command"),
                 next_command: self.i18n.t("terminal.command_selection.next_command"),
                 clear_screen: self.i18n.t("terminal.command_selection.clear_screen"),

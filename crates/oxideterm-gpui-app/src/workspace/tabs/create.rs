@@ -1262,6 +1262,7 @@ impl WorkspaceApp {
     ) -> Result<()> {
         let title = launch.title();
         let config = TelnetSessionConfig {
+            line_endings: Default::default(),
             host: launch.host,
             port: launch.port,
         };

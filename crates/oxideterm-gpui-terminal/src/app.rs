@@ -55,6 +55,7 @@ use oxideterm_terminal_recording::{
     TerminalRecordingTheme,
 };
 
+mod command_folding;
 mod image_cache;
 mod ime;
 mod interactions;
@@ -62,8 +63,9 @@ mod paste;
 mod render;
 mod scrollbar;
 mod timestamp_hover;
+mod trigger_interaction;
 
-use timestamp_hover::TerminalTimestampHover;
+use timestamp_hover::TerminalTextHover;
 
 use crate::modem_worker::{
     ModemPromptSelection, ModemWorkerEvent, ModemWorkerJob, ModemWorkerProgress,
@@ -178,14 +180,19 @@ pub enum TerminalPaneEvent {
     ContextActionRequested,
     // Match payloads remain pane-owned; Workspace drains them using the source pane identity.
     TriggerMatchesAvailable,
+    TriggerInteractionRequested,
     // Notification text stays pane-owned; Workspace drains it using the source pane identity.
     TerminalNotificationAvailable,
     // Search completion is asynchronous; Workspace reads the latest pane-owned status.
     SearchStatusChanged,
     // The pane retains the hovered value; Workspace owns tooltip timing and placement.
-    TimestampHoverChanged,
+    HoverTooltipChanged,
     // Persistence stays workspace-owned because panes do not own saved connection profiles.
     SerialLineEndingsChanged {
+        input: Option<SerialLineEnding>,
+        output: Option<SerialLineEnding>,
+    },
+    TelnetLineEndingsChanged {
         input: Option<SerialLineEnding>,
         output: Option<SerialLineEnding>,
     },
@@ -524,8 +531,15 @@ pub struct TerminalPane {
     selected_search_match: Option<usize>,
     pending_search_reveal: bool,
     hovered_link: Option<TerminalLinkRange>,
-    timestamp_hover: Option<TerminalTimestampHover>,
+    timestamp_hover: Option<TerminalTextHover>,
+    archive_hover: Option<TerminalTextHover>,
+    interactive_trigger_rules: Option<Arc<oxideterm_terminal_triggers::CompiledTriggerSet>>,
+    interactive_trigger_hover: Option<trigger_interaction::TriggerHover>,
+    trigger_interaction_requested:
+        Option<(oxideterm_terminal_triggers::TriggerMatched, Option<usize>)>,
     hovered_command_mark_id: Option<String>,
+    command_folding: command_folding::CommandFolding,
+    command_reflow_pending: bool,
     selecting: bool,
     free_type_drag: Option<FreeTypeDragState>,
     last_mouse_report_point: Option<TerminalPoint>,
@@ -632,6 +646,7 @@ pub(crate) struct TerminalContextMenu {
     pub x: f32,
     pub y: f32,
     pub serial_transfer_menu: bool,
+    pub trigger: Option<trigger_interaction::TriggerMenu>,
     pub target: TerminalPoint,
     pub has_selection: bool,
     pub reference_line: usize,
@@ -1272,7 +1287,13 @@ impl TerminalPane {
             pending_search_reveal: false,
             hovered_link: None,
             timestamp_hover: None,
+            archive_hover: None,
+            interactive_trigger_rules: None,
+            interactive_trigger_hover: None,
+            trigger_interaction_requested: None,
             hovered_command_mark_id: None,
+            command_folding: command_folding::CommandFolding::default(),
+            command_reflow_pending: false,
             selecting: false,
             free_type_drag: None,
             last_mouse_report_point: None,
@@ -1976,7 +1997,7 @@ impl TerminalPane {
     }
 
     pub fn set_preferences(&mut self, preferences: TerminalUiPreferences, cx: &mut Context<Self>) {
-        self.clear_timestamp_hover(cx);
+        self.clear_terminal_hover(cx);
         let mut preferences = preferences;
         self.preference_overrides.apply_to(&mut preferences);
         if self.preferences.autosuggest_enabled != preferences.autosuggest_enabled {
@@ -2019,11 +2040,18 @@ impl TerminalPane {
             || self.preferences.font_weight.to_bits() != preferences.font_weight.to_bits()
             || self.preferences.line_height.to_bits() != preferences.line_height.to_bits();
         let next_settings = TerminalUiSettings::from_preferences(&preferences);
+        if self.preferences.command_folding_enabled != preferences.command_folding_enabled {
+            // Remove the visual mapping before resizing the grid for the gutter.
+            // The underlying output remains available when folding is disabled.
+            self.command_folding = command_folding::CommandFolding::default();
+            self.clear_smooth_scroll_remainder();
+            self.clear_terminal_interactions(cx);
+            self.set_selection(None);
+            self.snapshot_dirty = true;
+        }
         if !next_settings.command_marks_enabled {
-            // Hiding marks must not discard the completion facts or aliases of a running command.
+            // This preference controls decoration, not command actions or folding.
             self.command_marks_render_cache_dirty = true;
-            self.selected_command_mark_id = None;
-            self.hovered_command_mark_id = None;
         }
         if !next_settings.current_directory_awareness_enabled {
             self.pending_cwd = None;
@@ -2491,6 +2519,42 @@ impl TerminalPane {
         self.set_serial_runtime_options(options, cx);
     }
 
+    fn cycle_telnet_line_ending(&mut self, output: bool, cx: &mut Context<Self>) {
+        let mut terminal = self.terminal.lock();
+        let Some(mut options) = terminal.telnet_line_endings() else {
+            return;
+        };
+        let value = if output {
+            &mut options.output
+        } else {
+            &mut options.input
+        };
+        *value = match *value {
+            SerialLineEnding::None => SerialLineEnding::Lf,
+            SerialLineEnding::Lf => SerialLineEnding::CrLf,
+            SerialLineEnding::CrLf => SerialLineEnding::Cr,
+            SerialLineEnding::Cr => SerialLineEnding::None,
+        };
+        if let Err(error) = terminal.set_telnet_line_endings(options) {
+            if let Some(sink) = &self.preferences.notice_sink {
+                sink(TerminalNotice {
+                    title: self.preferences.serial_control_labels.line_ending.clone(),
+                    description: Some(error.to_string()),
+                    status_text: None,
+                    progress: None,
+                    variant: TerminalNoticeVariant::Error,
+                });
+            }
+            return;
+        }
+        drop(terminal);
+        cx.emit(TerminalPaneEvent::TelnetLineEndingsChanged {
+            input: (!output).then_some(options.input),
+            output: output.then_some(options.output),
+        });
+        cx.notify();
+    }
+
     fn cycle_serial_output_line_ending(&mut self, cx: &mut Context<Self>) {
         let Some(mut options) = self.terminal.lock().serial_runtime_options() else {
             return;
@@ -2564,7 +2628,7 @@ impl TerminalPane {
     }
 
     fn mark_terminal_content_changed(&mut self, cx: &mut Context<Self>) {
-        self.clear_timestamp_hover(cx);
+        self.clear_terminal_interactions(cx);
         self.selection_highlight_cache = None;
         self.terminal_content_revision = self.terminal_content_revision.wrapping_add(1).max(1);
         self.search_cache = None;
@@ -2829,9 +2893,14 @@ impl TerminalPane {
     pub fn set_trigger_rules(
         &mut self,
         rules: Option<Arc<oxideterm_terminal_triggers::CompiledTriggerSet>>,
+        cx: &mut Context<Self>,
     ) {
+        self.clear_terminal_interactions(cx);
+        self.interactive_trigger_rules = rules.clone().filter(|rules| rules.has_interactions());
         self.pending_trigger_matches.clear();
-        self.terminal.lock().set_trigger_rules(rules);
+        self.terminal
+            .lock()
+            .set_trigger_rules(rules.filter(|rules| rules.has_output_triggers()));
     }
 
     pub fn take_trigger_matches(&mut self) -> Vec<oxideterm_terminal_triggers::TriggerMatched> {
@@ -3512,7 +3581,7 @@ impl TerminalPane {
 
     fn clear_command_mark_selection_for_tui_mode(&mut self, mode: TermMode) -> bool {
         if self.selected_command_mark_id.is_none() && self.hovered_command_mark_id.is_none()
-            || command_mark_ui_available(self.settings.command_marks_enabled, mode)
+            || command_mark_ui_available(true, mode)
         {
             return false;
         }
@@ -3526,20 +3595,20 @@ impl TerminalPane {
 
     fn smooth_scroll_display_offset(&self) -> f32 {
         if !self.settings.smooth_scroll {
-            return self.snapshot.display_offset as f32;
+            return self.visible_scroll_offset() as f32;
         }
 
         let line_height = self.metrics.line_height_f32();
         if line_height <= f32::EPSILON {
-            return self.snapshot.display_offset as f32;
+            return self.visible_scroll_offset() as f32;
         }
 
         // The terminal state still scrolls in whole rows. The paint layer keeps
         // the remaining wheel distance in pixels, so the scrollbar must use the
         // same fractional row offset to move with smooth-scrolling content.
-        let display_offset = self.snapshot.display_offset as f32
+        let display_offset = self.visible_scroll_offset() as f32
             + f32::from(self.smooth_scroll_offset_px) / line_height;
-        display_offset.clamp(0.0, self.snapshot.scrollback_lines as f32)
+        display_offset.clamp(0.0, self.visible_scroll_history() as f32)
     }
 
     fn next_drain_budget(&self) -> TerminalDrainBudget {
@@ -3968,7 +4037,7 @@ impl TerminalPane {
                     }
                     TerminalCommandMarkEvent::Closed(mut mark) => {
                         if let Some(frontend_command_id) =
-                            self.command_mark_id_aliases.remove(&mark.command_id)
+                            self.command_mark_id_aliases.get(&mark.command_id).cloned()
                         {
                             mark.command_id = frontend_command_id;
                         }
@@ -3991,6 +4060,9 @@ impl TerminalPane {
                             .retain_mut(|mark| mark.trim_history(lines));
                         self.command_fact_ledger.trim_history(lines);
                     }
+                    TerminalCommandMarkEvent::Reflowed { cols, rows, marks } => {
+                        self.apply_reflowed_command_marks(cols, rows, marks);
+                    }
                 }
                 if let Some(selected_id) = &self.selected_command_mark_id
                     && !self
@@ -4009,6 +4081,7 @@ impl TerminalPane {
                     self.hovered_command_mark_id = None;
                 }
                 self.command_marks_render_cache_dirty = true;
+                self.prune_command_mark_aliases();
                 TerminalEventEffect::notify()
             }
             TerminalEvent::CwdChanged { cwd, host } => {
@@ -4073,11 +4146,29 @@ impl TerminalPane {
     }
 
     fn send_protocol_bytes(&mut self, bytes: &[u8], cx: &mut Context<Self>) -> bool {
+        self.send_terminal_bytes(bytes, false, cx)
+    }
+
+    fn send_terminal_bytes(
+        &mut self,
+        bytes: &[u8],
+        user_input: bool,
+        cx: &mut Context<Self>,
+    ) -> bool {
         if !self.terminal_accepts_input() {
             return false;
         }
 
-        if self.terminal.lock().write_protocol_bytes(bytes).is_ok() {
+        let result = {
+            let mut terminal = self.terminal.lock();
+            // Telnet's user newline policy must not rewrite mouse reports or protocol replies.
+            if user_input && terminal.kind() == TerminalSessionKind::Telnet {
+                terminal.write_input(bytes)
+            } else {
+                terminal.write_protocol_bytes(bytes)
+            }
+        };
+        if result.is_ok() {
             if let Some(recorder) = self.recorder.as_mut() {
                 recorder.record_input(&String::from_utf8_lossy(bytes));
             }
@@ -4125,7 +4216,7 @@ impl TerminalPane {
         } else {
             &bytes
         };
-        if self.send_protocol_bytes(wire_bytes, cx) {
+        if self.send_terminal_bytes(wire_bytes, true, cx) {
             if bytes.as_slice() == semantic_bytes
                 && let Some((key, _)) = encoded_key
             {
@@ -4378,7 +4469,7 @@ impl TerminalPane {
         let bytes = Zeroizing::new(bytes);
         let mode = self.terminal.lock().mode();
         self.delete_free_type_selection_if_active(mode, cx);
-        if self.send_protocol_bytes(&bytes, cx) {
+        if self.send_terminal_bytes(&bytes, true, cx) {
             self.observe_user_input("text", &bytes, cx);
             self.restore_live_output_after_user_input();
             return true;
@@ -4458,7 +4549,7 @@ impl TerminalPane {
         cx: &mut Context<Self>,
     ) {
         if self.bounds != Some(bounds) {
-            self.clear_timestamp_hover(cx);
+            self.clear_terminal_interactions(cx);
         }
         self.bounds = Some(bounds);
         self.viewport_scale_factor_bits = Some(scale_factor.to_bits());
@@ -4534,7 +4625,12 @@ impl TerminalPane {
         if self.last_pty_resize == Some(resize) {
             return;
         }
-        let grid_changed = self.snapshot.cols != cols || self.snapshot.rows != rows;
+        // The displayed snapshot can lag an accepted resize. A cell-metric-only
+        // update must not wait for a second reflow event that the backend won't emit.
+        let grid_changed = self.last_pty_resize.map_or(
+            self.snapshot.cols != cols || self.snapshot.rows != rows,
+            |(previous_cols, previous_rows, _, _)| (previous_cols, previous_rows) != (cols, rows),
+        );
 
         let next_snapshot = {
             let mut terminal = self.terminal.lock();
@@ -4552,9 +4648,8 @@ impl TerminalPane {
             self.snapshot = self.stamp_snapshot(snapshot);
             self.mark_terminal_content_changed(cx);
             if grid_changed {
-                // The backend also resets its shell-integration state. Clear
-                // immediately so stale hit regions cannot survive one UI frame.
-                self.reset_command_marks_while_awaiting_backend_reset();
+                // Keep collapse identities while the parser publishes rebased boundaries.
+                self.command_reflow_pending = true;
             }
             cx.notify();
         }
@@ -4585,8 +4680,9 @@ impl TerminalPane {
     }
 
     fn command_mark_gutter_width(&self) -> f32 {
-        if self.settings.command_marks_enabled {
-            TERMINAL_COMMAND_MARK_GUTTER_WIDTH
+        // Only changing the preference resizes the grid, not hover or TUI state.
+        if self.preferences.command_folding_enabled {
+            self.metrics.cell_width_f32()
         } else {
             0.0
         }
@@ -4594,7 +4690,8 @@ impl TerminalPane {
 
     pub fn cursor_anchor(&self) -> Option<TerminalCursorAnchor> {
         let bounds = self.bounds?;
-        let cursor_bounds = ime_cursor_bounds_for_snapshot(&self.snapshot, &self.metrics)?;
+        let cursor_bounds =
+            ime_cursor_bounds_for_snapshot(self.displayed_snapshot(), &self.metrics)?;
         // The app layer owns overlays such as inline AI chat, but only the
         // terminal pane knows the bidi-aware cursor visual column and measured
         // cell metrics. Expose pane-local facts rather than making workspace
@@ -5192,7 +5289,10 @@ mod tests {
             TerminalPane::new_recording_playback(
                 DEFAULT_COLS,
                 DEFAULT_ROWS,
-                TerminalUiPreferences::default(),
+                TerminalUiPreferences {
+                    command_folding_enabled: true,
+                    ..Default::default()
+                },
                 window,
                 cx,
             )
@@ -5235,7 +5335,8 @@ mod tests {
                 let line_height = pane.metrics.line_height_f32();
                 // Font advances may round just below an integer cell count.
                 // The resized grid must fit, with less than one cell left over.
-                let available_width = 640.0 - horizontal * 2.0 - SCROLLBAR_RESERVED_WIDTH * 2.0;
+                let available_width =
+                    640.0 - horizontal * 2.0 - cell_width - SCROLLBAR_RESERVED_WIDTH * 2.0;
                 let available_height = 320.0 - vertical * 2.0;
                 let remaining_width = available_width - pane.snapshot.cols as f32 * cell_width;
                 let remaining_height = available_height - pane.snapshot.rows as f32 * line_height;
@@ -5243,13 +5344,19 @@ mod tests {
                 assert!(remaining_height >= -0.001 && remaining_height < line_height - 0.001);
 
                 let position =
-                    bounds.origin + gpui::point(px(cell_width * 3.5), px(line_height * 2.5));
+                    bounds.origin + gpui::point(px(cell_width * 4.5), px(line_height * 2.5));
                 assert_eq!(
                     pane.terminal_point_for_position(position),
                     TerminalPoint { row: 2, col: 3 }
                 );
-                // Selection beginning in the left padding must include column zero.
-                let padding_position = gpui::point(px(0.0), position.y);
+                // Outer padding clamps to column zero; at zero padding the edge is
+                // the command gutter, which must not begin a text selection.
+                let edge_x = if horizontal == 0.0 {
+                    bounds.origin.x
+                } else {
+                    px(0.0)
+                };
+                let padding_position = gpui::point(edge_x, position.y);
                 pane.handle_mouse_down(
                     &gpui::MouseDownEvent {
                         position: padding_position,
@@ -5263,16 +5370,20 @@ mod tests {
                     },
                     cx,
                 );
-                assert_eq!(
-                    pane.selection.expect("padding starts selection").anchor.col,
-                    0
-                );
+                if horizontal == 0.0 {
+                    assert!(pane.selection.is_none());
+                } else {
+                    assert_eq!(
+                        pane.selection.expect("padding starts selection").anchor.col,
+                        0
+                    );
+                }
                 let anchor = pane.cursor_anchor().expect("cursor anchor");
                 assert_eq!(
                     anchor.x,
                     horizontal
                         + SCROLLBAR_RESERVED_WIDTH
-                        + pane.snapshot.cursor_col as f32 * cell_width
+                        + (pane.snapshot.cursor_col + 1) as f32 * cell_width
                 );
                 assert_eq!(
                     anchor.y,

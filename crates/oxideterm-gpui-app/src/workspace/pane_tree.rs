@@ -237,14 +237,21 @@ impl WorkspaceApp {
                 self.push_workspace_notice(x11_forwarding_notice(status, &self.i18n), cx);
             }
             TerminalPaneEvent::InputActivity => {
+                if self.active_pane_id(cx) == Some(pane_id) {
+                    self.cancel_pending_privilege_totp();
+                }
                 oxideterm_gpui_background::note_input_activity(window_handle.window_id(), cx);
             }
             TerminalPaneEvent::Exited { .. } => {
                 self.queue_auto_close_terminal_session(session_id, cx);
             }
             // TabHost consumes this signal before ordinary pane delivery.
-            TerminalPaneEvent::OutputActivity => {}
-            TerminalPaneEvent::TimestampHoverChanged => {
+            TerminalPaneEvent::OutputActivity => {
+                if self.active_pane_id(cx) == Some(pane_id) {
+                    self.schedule_privilege_prompt_sync(cx);
+                }
+            }
+            TerminalPaneEvent::HoverTooltipChanged => {
                 let id = format!("terminal-timestamp-{}", pane_id.0);
                 let tooltip = self
                     .tab_host
@@ -253,7 +260,7 @@ impl WorkspaceApp {
                     .get(&pane_id)
                     .and_then(|pane| {
                         pane.read(cx)
-                            .timestamp_hover_tooltip()
+                            .hover_tooltip()
                             .map(|(label, position)| (label.to_string(), position))
                     });
                 // Discard pending text before replacing the target; IDs isolate split panes.
@@ -265,6 +272,19 @@ impl WorkspaceApp {
                         f32::from(position.x) + 12.0,
                         f32::from(position.y) + 16.0,
                         cx,
+                    );
+                }
+            }
+            TerminalPaneEvent::TriggerInteractionRequested => {
+                let Some(pane) = self.tab_host.read(cx).panes().get(&pane_id).cloned() else {
+                    return;
+                };
+                let owner = pane.downgrade();
+                if let Some((matched, item)) =
+                    pane.update(cx, |pane, _| pane.take_trigger_interaction())
+                {
+                    self.handle_terminal_trigger_interaction(
+                        pane_id, session_id, owner, matched, item, cx,
                     );
                 }
             }
@@ -359,6 +379,9 @@ impl WorkspaceApp {
             TerminalPaneEvent::SerialLineEndingsChanged { input, output } => {
                 self.persist_serial_line_endings(session_id, input, output, cx);
             }
+            TerminalPaneEvent::TelnetLineEndingsChanged { input, output } => {
+                self.persist_telnet_line_endings(session_id, input, output, cx);
+            }
             TerminalPaneEvent::PrivilegePromptStateChanged => {
                 if self.active_pane_id(cx) == Some(pane_id)
                     && self.sync_active_privilege_prompt_inline_hint(cx)
@@ -379,6 +402,36 @@ impl WorkspaceApp {
                 TerminalPaneInteraction::ContextAction,
                 cx,
             ),
+        }
+    }
+
+    fn persist_telnet_line_endings(
+        &mut self,
+        session_id: TerminalSessionId,
+        input: Option<oxideterm_terminal::SerialLineEnding>,
+        output: Option<oxideterm_terminal::SerialLineEnding>,
+        cx: &mut Context<Self>,
+    ) {
+        self.standalone_connections
+            .set_telnet_line_endings(session_id, input, output);
+        let Some(saved) = self
+            .terminal_saved_connection_refs
+            .get(&session_id)
+            .filter(|saved| saved.kind == SavedConnectionKind::Telnet)
+        else {
+            return;
+        };
+        let profile_id = saved.id.clone();
+        match self.connection_store.set_telnet_profile_line_endings(
+            &profile_id,
+            input.map(serial_profile_line_ending),
+            output.map(serial_profile_line_ending),
+        ) {
+            Ok(true) => self.queue_cloud_sync_dirty_refresh(cx),
+            Ok(false) => {}
+            Err(error) => {
+                tracing::warn!(%profile_id, %error, "failed to persist Telnet line endings")
+            }
         }
     }
 

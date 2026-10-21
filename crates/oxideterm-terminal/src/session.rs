@@ -80,6 +80,27 @@ fn command_output_text_from_term<T: EventListener>(
     term: &Term<T>,
     mark: &TerminalCommandMark,
 ) -> String {
+    if mark.stale {
+        return String::new();
+    }
+    if let Some(start) = mark.output_start {
+        if mark.is_closed && mark.output_end.is_none() {
+            return String::new();
+        }
+        let end = mark
+            .output_end
+            .unwrap_or_else(|| crate::shell_integration::cursor_position(term));
+        return crate::shell_integration::text_between_positions(
+            term,
+            start,
+            end,
+            MAX_COMMAND_OUTPUT_LINES,
+            MAX_COMMAND_OUTPUT_CHARS,
+        );
+    }
+    if mark.detection_source == crate::TerminalCommandMarkDetectionSource::ShellIntegration {
+        return String::new();
+    }
     let start = mark.output_start_line();
     let end = mark.end_line.unwrap_or_else(|| {
         let scrollback = term.total_lines().saturating_sub(term.screen_lines());
@@ -144,6 +165,7 @@ fn apply_terminal_output_processor<'a>(
 // facade, local PTY adapter, and SSH PTY owner keep their existing API and
 // private access while avoiding another thousand-line implementation file.
 include!("session/types.rs");
+include!("session/line_endings.rs");
 include!("session/facade.rs");
 include!("session/playback.rs");
 include!("session/local_backend.rs");
@@ -178,6 +200,7 @@ mod tests {
         let (worker_tx, events) = crate::backpressure::byte_bounded_channel(1024);
         let worker = run_telnet_worker(
             TelnetSessionConfig {
+                line_endings: Default::default(),
                 host: "telnet.invalid".into(),
                 port: 2323,
             },

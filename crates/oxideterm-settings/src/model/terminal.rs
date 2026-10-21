@@ -252,6 +252,8 @@ fn default_command_bar_show_current_directory() -> bool {
 #[serde(rename_all = "camelCase")]
 pub struct TerminalCommandMarksSettings {
     pub enabled: bool,
+    #[serde(default)]
+    pub folding_enabled: bool,
     pub user_input_observed: bool,
     pub heuristic_detection: bool,
     pub show_hover_actions: bool,
@@ -263,6 +265,7 @@ impl Default for TerminalCommandMarksSettings {
     fn default() -> Self {
         Self {
             enabled: true,
+            folding_enabled: false,
             user_input_observed: false,
             heuristic_detection: false,
             show_hover_actions: true,
@@ -537,6 +540,8 @@ pub struct TerminalSettings {
     pub triggers: TerminalTriggerSettings,
     #[serde(default)]
     pub remote_shell_integration_mode: RemoteShellIntegrationMode,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub remote_shell_integration_deferred: std::collections::BTreeMap<String, u32>,
     pub command_marks: TerminalCommandMarksSettings,
     pub background_enabled: bool,
     pub background_image: Option<String>,
@@ -703,6 +708,7 @@ impl Default for TerminalSettings {
             session_log: TerminalSessionLogSettings::default(),
             triggers: TerminalTriggerSettings::default(),
             remote_shell_integration_mode: RemoteShellIntegrationMode::Ask,
+            remote_shell_integration_deferred: Default::default(),
             command_marks: TerminalCommandMarksSettings::default(),
             background_enabled: true,
             background_image: None,

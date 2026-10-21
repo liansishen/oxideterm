@@ -106,6 +106,7 @@ pub enum SelectAnchorId {
     SettingsXmodemBlockSize,
     SettingsTerminalTriggerMatchMode,
     SettingsTerminalTriggerAction,
+    SettingsTerminalTriggerClickAction,
     SettingsTerminalTriggerProcessMode,
     SettingsTerminalTriggerQuickCommand,
     SettingsTerminalTriggerTiming,
@@ -113,7 +114,9 @@ pub enum SelectAnchorId {
     SettingsIdeAgentMode,
     SettingsLocalShell,
     SettingsLocalShellSemanticScheme(usize),
-    SettingsLocalPrivilegeKind,
+    SettingsLocalPrivilegePromptType,
+    SettingsLocalPrivilegeResponseMode,
+    SettingsLocalPrivilegeTotpCredential,
     SettingsConnectionIdleTimeout,
     SettingsReconnectMaxAttempts,
     SettingsReconnectBaseDelay,
@@ -176,6 +179,8 @@ pub enum SelectAnchorId {
     NewConnectionTerminalEncoding,
     NewConnectionTerminalBackspaceSequence,
     NewConnectionTerminalDeleteSequence,
+    NewConnectionTelnetInputLineEnding,
+    NewConnectionTelnetOutputLineEnding,
     NewConnectionTerminalSemanticScheme,
     NewConnectionTerminalHighlightRuleSet,
     NewConnectionTerminalSessionLogPolicy,
@@ -236,6 +241,7 @@ impl SelectAnchorId {
                 | Self::SettingsXmodemBlockSize
                 | Self::SettingsTerminalTriggerMatchMode
                 | Self::SettingsTerminalTriggerAction
+                | Self::SettingsTerminalTriggerClickAction
                 | Self::SettingsTerminalTriggerProcessMode
                 | Self::SettingsTerminalTriggerQuickCommand
                 | Self::SettingsTerminalTriggerTiming
@@ -243,7 +249,8 @@ impl SelectAnchorId {
                 | Self::SettingsIdeAgentMode
                 | Self::SettingsLocalShell
                 | Self::SettingsLocalShellSemanticScheme(_)
-                | Self::SettingsLocalPrivilegeKind
+                | Self::SettingsLocalPrivilegePromptType
+                | Self::SettingsLocalPrivilegeResponseMode
                 | Self::SettingsConnectionIdleTimeout
                 | Self::SettingsReconnectMaxAttempts
                 | Self::SettingsReconnectBaseDelay
@@ -307,6 +314,8 @@ impl SelectAnchorId {
                 | Self::NewConnectionTerminalEncoding
                 | Self::NewConnectionTerminalBackspaceSequence
                 | Self::NewConnectionTerminalDeleteSequence
+                | Self::NewConnectionTelnetInputLineEnding
+                | Self::NewConnectionTelnetOutputLineEnding
                 | Self::NewConnectionTerminalSemanticScheme
                 | Self::NewConnectionTerminalHighlightRuleSet
         )

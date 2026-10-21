@@ -111,6 +111,7 @@ pub enum SettingsSelect {
     XmodemBlockSize,
     TerminalTriggerMatchMode,
     TerminalTriggerAction,
+    TerminalTriggerClickAction,
     TerminalTriggerProcessMode,
     TerminalTriggerQuickCommand,
     TerminalTriggerTiming,
@@ -118,7 +119,9 @@ pub enum SettingsSelect {
     IdeAgentMode,
     LocalShell,
     LocalShellSemanticScheme(usize),
-    LocalPrivilegeKind,
+    LocalPrivilegePromptType,
+    LocalPrivilegeResponseMode,
+    LocalPrivilegeTotpCredential,
     ConnectionIdleTimeout,
     ReconnectMaxAttempts,
     ReconnectBaseDelay,
@@ -217,6 +220,9 @@ pub enum SettingsInput {
     TotpPattern,
     TotpPeriod,
     LocalPrivilegePromptPatterns,
+    LocalPrivilegeHostPatterns,
+    LocalPrivilegeSecondFactorPatterns,
+    LocalPrivilegeSecondFactorUserHint,
     ConnectionDefaultUsername,
     ConnectionDefaultPort,
     ConnectionImportTargetGroup,
@@ -249,6 +255,8 @@ pub enum SettingsInput {
     TerminalTriggerDescription,
     TerminalTriggerPattern,
     TerminalTriggerActionValue,
+    TerminalTriggerMenuLabel,
+    TerminalTriggerTooltipText,
     TerminalTriggerExecutable,
     TerminalTriggerArguments,
     TerminalTriggerWorkingDirectory,
@@ -588,12 +596,15 @@ impl SettingsInput {
             Self::TerminalCommandBarFocusHandoff
                 | Self::TerminalCommandSpecsJson
                 | Self::TerminalTriggerArguments
+                | Self::TerminalTriggerTooltipText
                 | Self::AiSystemPrompt
                 | Self::AiMemoryContent
                 | Self::AiAcpAgentArgs(_)
                 | Self::AiAcpAgentEnv(_)
                 | Self::AiMcpArgs
                 | Self::LocalPrivilegePromptPatterns
+                | Self::LocalPrivilegeHostPatterns
+                | Self::LocalPrivilegeSecondFactorPatterns
                 | Self::ManagedKeyPastePrivateKey
         )
     }
@@ -609,6 +620,8 @@ impl SettingsInput {
             | Self::AiAcpAgentEnv(_)
             | Self::AiMcpArgs
             | Self::LocalPrivilegePromptPatterns
+            | Self::LocalPrivilegeHostPatterns
+            | Self::LocalPrivilegeSecondFactorPatterns
             | Self::ManagedKeyPastePrivateKey => 20.0,
             _ => DEFAULT_SETTINGS_TEXTAREA_LINE_HEIGHT,
         }
@@ -648,6 +661,9 @@ impl SettingsInput {
             Self::TotpPattern => 31_012,
             Self::TotpPeriod => 31_013,
             Self::LocalPrivilegePromptPatterns => 31_003,
+            Self::LocalPrivilegeHostPatterns => 31_004,
+            Self::LocalPrivilegeSecondFactorPatterns => 31_005,
+            Self::LocalPrivilegeSecondFactorUserHint => 31_006,
             Self::ConnectionDefaultUsername => 9,
             Self::ConnectionDefaultPort => 10,
             Self::ConnectionImportTargetGroup => 20,
@@ -680,6 +696,8 @@ impl SettingsInput {
             Self::TerminalTriggerDescription => 33_101,
             Self::TerminalTriggerPattern => 33_102,
             Self::TerminalTriggerActionValue => 33_103,
+            Self::TerminalTriggerMenuLabel => 33_110,
+            Self::TerminalTriggerTooltipText => 33_111,
             Self::TerminalTriggerExecutable => 33_104,
             Self::TerminalTriggerArguments => 33_105,
             Self::TerminalTriggerWorkingDirectory => 33_106,

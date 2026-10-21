@@ -97,6 +97,7 @@ pub(in crate::workspace) fn default_auth_tab_for_family(family: SshAuthFamily) -
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::workspace) enum SavedConnectionPromptAction {
     Connect,
+    Tunnel,
     Test,
 }
 
@@ -176,6 +177,8 @@ pub(in crate::workspace) enum NewConnectionSelect {
     TerminalEncoding,
     TerminalBackspaceSequence,
     TerminalDeleteSequence,
+    TelnetInputLineEnding,
+    TelnetOutputLineEnding,
     TerminalSemanticScheme,
     TerminalHighlightRuleSet,
     TerminalSessionLogPolicy,
@@ -801,6 +804,8 @@ pub(in crate::workspace) struct NewConnectionForm {
     pub(in crate::workspace) serial_profile_id: Option<String>,
     /// Identifies an existing Telnet asset without changing a live Telnet session.
     pub(in crate::workspace) telnet_profile_id: Option<String>,
+    pub(in crate::workspace) telnet_input_line_ending: oxideterm_connections::SerialLineEnding,
+    pub(in crate::workspace) telnet_output_line_ending: oxideterm_connections::SerialLineEnding,
     pub(in crate::workspace) ftp_profile_id: Option<String>,
     pub(in crate::workspace) ftp_tls: bool,
     pub(in crate::workspace) ftp_attempt: Option<(uuid::Uuid, tokio_util::sync::CancellationToken)>,
@@ -1114,6 +1119,8 @@ impl Default for NewConnectionForm {
             mosh_profile_id: None,
             serial_profile_id: None,
             telnet_profile_id: None,
+            telnet_input_line_ending: Default::default(),
+            telnet_output_line_ending: Default::default(),
             ftp_profile_id: None,
             ftp_tls: true,
             ftp_attempt: None,
@@ -1393,7 +1400,7 @@ pub(in crate::workspace) fn terminal_serial_runtime_options_from_profile(
     }
 }
 
-fn terminal_serial_line_ending_from_profile(
+pub(super) fn terminal_serial_line_ending_from_profile(
     line_ending: oxideterm_connections::SerialLineEnding,
 ) -> oxideterm_terminal::SerialLineEnding {
     match line_ending {
@@ -1473,6 +1480,8 @@ pub(in crate::workspace) fn form_from_telnet_profile(
     let mut form = NewConnectionForm::default();
     form.transport = NewConnectionTransport::Telnet;
     form.telnet_profile_id = Some(profile.id.clone());
+    form.telnet_input_line_ending = profile.input_line_ending;
+    form.telnet_output_line_ending = profile.output_line_ending;
     apply_saved_upstream_proxy_to_form(&mut form, &profile.upstream_proxy);
     form.telnet_profile_name = profile.name.clone();
     form.group = profile.group.clone().unwrap_or(ungrouped_label);
@@ -1485,6 +1494,15 @@ pub(in crate::workspace) fn form_from_telnet_profile(
     form.terminal = profile.terminal.clone();
     form.focused_field = NewConnectionField::TelnetProfileName;
     form
+}
+
+pub(in crate::workspace) fn terminal_telnet_line_endings_from_profile(
+    profile: &TelnetProfile,
+) -> oxideterm_terminal::TelnetLineEndings {
+    oxideterm_terminal::TelnetLineEndings {
+        input: terminal_serial_line_ending_from_profile(profile.input_line_ending),
+        output: terminal_serial_line_ending_from_profile(profile.output_line_ending),
+    }
 }
 
 /// Returns the presentation-only visibility state for primary credential fields.

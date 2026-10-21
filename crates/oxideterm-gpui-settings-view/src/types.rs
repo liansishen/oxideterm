@@ -87,6 +87,7 @@ impl SettingsSelectAnchorExt for SettingsSelect {
             Self::XmodemBlockSize => SelectAnchorId::SettingsXmodemBlockSize,
             Self::TerminalTriggerMatchMode => SelectAnchorId::SettingsTerminalTriggerMatchMode,
             Self::TerminalTriggerAction => SelectAnchorId::SettingsTerminalTriggerAction,
+            Self::TerminalTriggerClickAction => SelectAnchorId::SettingsTerminalTriggerClickAction,
             Self::TerminalTriggerProcessMode => SelectAnchorId::SettingsTerminalTriggerProcessMode,
             Self::TerminalTriggerQuickCommand => {
                 SelectAnchorId::SettingsTerminalTriggerQuickCommand
@@ -98,7 +99,11 @@ impl SettingsSelectAnchorExt for SettingsSelect {
             Self::LocalShellSemanticScheme(index) => {
                 SelectAnchorId::SettingsLocalShellSemanticScheme(index)
             }
-            Self::LocalPrivilegeKind => SelectAnchorId::SettingsLocalPrivilegeKind,
+            Self::LocalPrivilegePromptType => SelectAnchorId::SettingsLocalPrivilegePromptType,
+            Self::LocalPrivilegeResponseMode => SelectAnchorId::SettingsLocalPrivilegeResponseMode,
+            Self::LocalPrivilegeTotpCredential => {
+                SelectAnchorId::SettingsLocalPrivilegeTotpCredential
+            }
             Self::ConnectionIdleTimeout => SelectAnchorId::SettingsConnectionIdleTimeout,
             Self::ReconnectMaxAttempts => SelectAnchorId::SettingsReconnectMaxAttempts,
             Self::ReconnectBaseDelay => SelectAnchorId::SettingsReconnectBaseDelay,

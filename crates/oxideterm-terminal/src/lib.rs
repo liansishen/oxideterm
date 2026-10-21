@@ -98,7 +98,7 @@ pub use session::{
     MoshConnectionStatus, MoshPredictionDisplay, MoshTerminalConfig, SerialControlLine,
     SerialControlState, SerialDisplayMode, SerialError, SerialErrorCode, SerialFlowControl,
     SerialLineEnding, SerialParity, SerialPortInfo, SerialRuntimeOptions, SerialSendMode,
-    SerialSessionConfig, SshPtySession, SshSessionConfig, TelnetControlCommand,
+    SerialSessionConfig, SshPtySession, SshSessionConfig, TelnetControlCommand, TelnetLineEndings,
     TelnetLoginCredentials, TelnetSessionConfig, TerminalDrainBudget, TerminalDrainReport,
     TerminalMagicKind, TerminalOutputProcessor, TerminalResize, TerminalSession,
     TerminalSessionBackend, TerminalSessionKind, TerminalSessionStatus, serial_list_ports,
@@ -112,7 +112,7 @@ pub use shell_integration::{
     ShellIntegrationEvent, ShellIntegrationEventKind, ShellIntegrationLifecycleState,
     ShellIntegrationSource, ShellIntegrationStatus, TerminalCommandMark,
     TerminalCommandMarkClosedBy, TerminalCommandMarkConfidence, TerminalCommandMarkDetectionSource,
-    TerminalCommandMarkEvent,
+    TerminalCommandMarkEvent, TerminalCommandPosition,
 };
 
 pub use color::TerminalPalette;

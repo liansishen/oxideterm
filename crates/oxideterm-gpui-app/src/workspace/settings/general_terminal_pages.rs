@@ -864,7 +864,7 @@ impl WorkspaceApp {
                         settings.terminal.font_weight.to_string(),
                         cx,
                     ),
-                    self.terminal_preview(settings),
+                    self.terminal_preview(settings, cx),
                     self.card_separator(),
                     self.checkbox_row(
                         "settings_view.terminal.font_ligatures",
@@ -959,6 +959,14 @@ impl WorkspaceApp {
                         "settings_view.terminal.command_marks_hint",
                         settings.terminal.command_marks.enabled,
                         set_command_marks_enabled,
+                        cx,
+                    ),
+                    self.card_separator(),
+                    self.bool_row(
+                        "settings_view.terminal.command_folding",
+                        "settings_view.terminal.command_folding_hint",
+                        settings.terminal.command_marks.folding_enabled,
+                        set_command_folding_enabled,
                         cx,
                     ),
                     self.card_separator(),

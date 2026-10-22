@@ -151,15 +151,11 @@ impl WorkspaceApp {
                 )
             })
         });
-        let outside_main_tabs = self.tab_host.read(cx).outside_main_tab_ids();
         let tabs_with_unread_terminal_output =
             self.tab_host.read(cx).unread_terminal_output_tab_ids();
         let active_tab_id = self.active_tab_id(cx);
         let mut live_tabs = self
-            .tabs(cx)
-            .iter()
-            .enumerate()
-            .filter(|(_, tab)| !outside_main_tabs.contains(&tab.id))
+            .main_tabs(cx)
             .map(|(tab_index, tab)| {
                 let tab_id = tab.id;
                 let tab_width = self.tab_visual_width(tab);
@@ -1060,9 +1056,7 @@ impl WorkspaceApp {
             if !self.sidebar_collapsed {
                 available_width -= self.sidebar_panel_width();
             }
-            if self.context_sidebar_visible() {
-                available_width -= self.ai_entity.read(cx).chat_ui().sidebar_width;
-            }
+            available_width -= self.context_sidebar_occupied_width(cx);
         }
         available_width.max(self.tokens.metrics.min_main_width)
     }

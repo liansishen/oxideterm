@@ -239,6 +239,8 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
             &[
                 "settings_view.local_terminal.default_shell",
                 "settings_view.local_terminal.default_cwd",
+                "settings_view.local_terminal.shell_path",
+                "settings_view.local_terminal.shell_scheme",
             ],
         ),
         terminal_search_entry(
@@ -252,12 +254,6 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
             3,
             "settings_view.local_terminal.privilege_credentials",
             &["settings_view.local_terminal.privilege_credentials_hint"],
-        ),
-        terminal_search_entry(
-            TerminalSettingsPage::Local,
-            4,
-            "settings_view.local_terminal.available_shells",
-            &["settings_view.local_terminal.select_shell"],
         ),
         terminal_search_entry(
             TerminalSettingsPage::CommandBar,
@@ -604,11 +600,17 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
                 "settings_view.ide.line_height",
             ],
         ),
+        ai_search_entry(
+            AiSettingsPage::Tools,
+            1,
+            "settings_view.ide.agent_mode_label",
+            &["settings_view.ide.agent_mode_hint"],
+        ),
         settings_search_entry(
             SettingsTab::Ide,
             2,
             "settings_view.ide.agent_title",
-            &["settings_view.ide.agent_mode_label"],
+            &["settings_view.ide.agent_description"],
         ),
         settings_search_entry(
             SettingsTab::Ide,
@@ -840,10 +842,7 @@ fn settings_search_specs() -> Vec<SettingsSearchEntrySpec> {
         TerminalSettingsPage::Local,
         1,
         "settings_view.local_terminal.shell",
-        &[
-            "settings_view.local_terminal.git_bash_path",
-            "settings_view.local_terminal.oh_my_posh",
-        ],
+        &["settings_view.local_terminal.oh_my_posh"],
     ));
     specs.push(settings_search_entry(
         SettingsTab::Appearance,
@@ -1094,8 +1093,8 @@ impl WorkspaceApp {
             .child(
                 self.text_input_with_workspace_ime(
                     target,
-                    text_input(
-                        &self.tokens,
+                    self.workspace_text_input(
+                        target,
                         TextInputView {
                             value: query,
                             placeholder: self.i18n.t("settings_view.search.placeholder"),

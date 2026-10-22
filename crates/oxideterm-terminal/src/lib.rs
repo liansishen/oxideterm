@@ -45,7 +45,9 @@ mod remote_shell_integration;
 mod search;
 mod selection;
 mod session;
+mod shell_channel;
 mod shell_completion;
+pub use shell_channel::{ShellChannel, ShellChannelAcquisition};
 mod shell_integration;
 mod terminal_notification;
 mod tmux;
@@ -71,7 +73,7 @@ pub use editor_integration::{
     TerminalEditorClipboardEvent, TerminalEditorClipboardOperation, TerminalEditorIntegrationEvent,
     TerminalEditorMode, TerminalEditorSelection, VIM_FREE_TYPE_INTEGRATION_SOURCE,
 };
-pub use local_shell::{LocalPtyConfig, ShellInfo, default_shell, scan_shells};
+pub use local_shell::{LocalPtyConfig, ShellInfo, default_shell, is_shell_executable, scan_shells};
 pub use local_shell_integration::TerminalCwdIntegrationLaunchState;
 pub use oxideterm_modem_transfer::{
     DetectedModemProtocol, ModemTransferDirection,

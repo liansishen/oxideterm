@@ -25,6 +25,26 @@ impl WorkspaceApp {
             }
         }
 
+        let surface = self.tab_by_id(tab_id, cx).and_then(|tab| {
+            tab.active_pane_id
+                .and_then(|pane| {
+                    self.ide_workspace
+                        .read(cx)
+                        .shell_surface_for_pane(pane)
+                        .map(|(_, surface)| surface)
+                })
+                .or_else(|| {
+                    (*tab_kind == TabKind::Ide)
+                        .then(|| self.ide_workspace.read(cx).surface(tab_id))
+                        .flatten()
+                })
+        });
+        if let Some(modal) =
+            surface.and_then(|surface| self.ide_workspace.read(cx).modal_for_surface(&surface))
+        {
+            modals.push(modal.into_any_element());
+        }
+
         let window_id = window.window_handle().window_id();
         let document_dialog_owned_by_window = self
             .ai_entity
@@ -217,9 +237,15 @@ impl WorkspaceApp {
         {
             self.needs_active_pane_focus = false;
             self.clear_ai_sidebar_keyboard_focus(cx);
-            window.on_next_frame(move |window, cx| {
-                pane.update(cx, |pane, cx| pane.focus(window, cx));
-            });
+            if let Some(surface) = self.active_ide_surface(cx) {
+                window.on_next_frame(move |window, cx| {
+                    window.focus(&surface.read(cx).focus_handle(cx), cx);
+                });
+            } else {
+                window.on_next_frame(move |window, cx| {
+                    pane.update(cx, |pane, cx| pane.focus(window, cx));
+                });
+            }
         }
 
         self.split_drop_regions.borrow_mut().clear();
@@ -338,6 +364,13 @@ impl WorkspaceApp {
         let read_only_selection_workspace = cx.entity();
         self.update_main_window_tabbar_drop_bounds(window, zen_mode, cx);
 
+        let mut key_context = gpui::KeyContext::new_with_defaults();
+        key_context.add("Workspace");
+        if self.active_window_modal_owner(cx).is_some() && !self.ide_modal_owns_input(cx) {
+            // IDE dialogs register this context on their independently observed window layer.
+            key_context.add(oxideterm_gpui_ui::modal::MODAL_KEY_CONTEXT);
+        }
+
         div()
             .id("workspace-root")
             .size_full()
@@ -360,7 +393,7 @@ impl WorkspaceApp {
                 root.cursor(CursorStyle::ResizeRow)
             })
             .track_focus(&self.focus_handle)
-            .key_context("Workspace")
+            .key_context(key_context)
             // Host Tools actions bubble here from both sidebar pages and portaled dialogs.
             .on_action(
                 cx.listener(|this, request: &HostToolsWindowRequest, window, cx| {
@@ -441,11 +474,14 @@ impl WorkspaceApp {
                     cx.stop_propagation();
                     return;
                 }
-                if this.active_sftp_editor_owns_key(event.keystroke.key.as_str(), cx)
-                    || this
-                        .plugin_ui_state(cx)
-                        .focused_text_area_context(window, cx)
-                        .is_some()
+                if this.active_window_modal_owner(cx).is_some() {
+                    // Yield only to the modal's own input or editor, never background routing.
+                    return;
+                }
+                if this
+                    .plugin_ui_state(cx)
+                    .focused_text_area_context(window, cx)
+                    .is_some()
                     || this.quick_command_text_editor_focused(window, cx)
                     || this
                         .tab_host
@@ -738,7 +774,6 @@ impl WorkspaceApp {
                 this.update_settings_slider_drag(event, cx);
                 this.update_terminal_cast_seek_drag(event, cx);
                 // Continue scrollbar dragging after the pointer leaves its thin hit target.
-                this.update_host_tools_tab_scrollbar_drag(event, cx);
                 this.update_tabbar_scrollbar_drag(event, window, cx);
                 if this.read_only_selection_drag_active() && !event.dragging() {
                     // A platform capture loss can omit the matching mouse-up. The
@@ -891,7 +926,10 @@ impl WorkspaceApp {
             .on_action(cx.listener(|this, _: &SplitNavRight, window, cx| {
                 this.focus_adjacent_pane(true, window, cx);
             }))
-            .on_action(cx.listener(|this, _: &Copy, _window, cx| {
+            .on_action(cx.listener(|this, _: &Copy, window, cx| {
+                if this.handle_ide_modal_edit_action("c", window, cx) {
+                    return;
+                }
                 if this.copy_active_text_input(cx) {
                     return;
                 }
@@ -902,7 +940,10 @@ impl WorkspaceApp {
                     this.copy(cx);
                 }
             }))
-            .on_action(cx.listener(|this, _: &Cut, _window, cx| {
+            .on_action(cx.listener(|this, _: &Cut, window, cx| {
+                if this.handle_ide_modal_edit_action("x", window, cx) {
+                    return;
+                }
                 if this.cut_active_text_input(cx) {
                     return;
                 }
@@ -913,7 +954,10 @@ impl WorkspaceApp {
                     let _ = this.cut(cx);
                 }
             }))
-            .on_action(cx.listener(|this, _: &Paste, _window, cx| {
+            .on_action(cx.listener(|this, _: &Paste, window, cx| {
+                if this.handle_ide_modal_edit_action("v", window, cx) {
+                    return;
+                }
                 if this.paste_active_text_input(cx) {
                     return;
                 }
@@ -1118,6 +1162,9 @@ impl WorkspaceApp {
                         // the gutter and content here makes resize hit-testing
                         // easy to regress on scroll-heavy Host Tools pages.
                         layout.child(self.render_animated_context_sidebar_frame(cx))
+                    })
+                    .when(!zen_mode, |layout| {
+                        layout.child(self.render_context_activity_bar(window, cx))
                     }),
             )
             .when(!zen_mode && !self.sidebar_collapsed, |root| {
@@ -1169,8 +1216,15 @@ impl WorkspaceApp {
             .when_some(self.render_session_sort_menu(cx), |root, menu| {
                 root.child(menu)
             })
-            .when(self.connection_form_state(cx).form.is_some(), |root| {
-                root.child(self.render_new_connection_modal(window, cx))
+            .when_some(self.render_context_tools_menu(window, cx), |root, menu| {
+                root.child(menu)
+            })
+            .when(
+                self.connection_form_state(cx).form.is_some() && self.ssh_tunnels.form.is_none(),
+                |root| root.child(self.render_new_connection_modal(window, cx)),
+            )
+            .when_some(self.render_ssh_tunnel_form(window, cx), |root, dialog| {
+                root.child(dialog)
             })
             .when_some(
                 self.render_plugin_connection_form(window, cx),
@@ -1325,9 +1379,6 @@ impl WorkspaceApp {
             .when_some(self.render_archive_command(window, cx), |root, dialog| {
                 root.child(dialog)
             })
-            .when_some(self.render_ssh_tunnel_form(window, cx), |root, dialog| {
-                root.child(dialog)
-            })
             // Tab-owned dialogs are portaled here so their backdrops cover all window chrome.
             .children(active_tab_window_modals)
             .when_some(settings_select_overlay, |root, overlay| root.child(overlay))
@@ -1471,10 +1522,7 @@ impl WorkspaceApp {
             return self.render_tab_drag_capture(None, cx);
         }
         let cursor = match self.browser_pointer_capture_owner(cx) {
-            Some(
-                browser_behavior::BrowserPointerCaptureOwner::HostToolsTabScrollbar
-                | browser_behavior::BrowserPointerCaptureOwner::TabDrag,
-            ) => CursorStyle::ClosedHand,
+            Some(browser_behavior::BrowserPointerCaptureOwner::TabDrag) => CursorStyle::ClosedHand,
             Some(
                 browser_behavior::BrowserPointerCaptureOwner::EmbeddedSftpSidebarResize
                 | browser_behavior::BrowserPointerCaptureOwner::SftpQueueResize
@@ -1506,7 +1554,6 @@ impl WorkspaceApp {
                 this.update_sftp_queue_resize(event, window, cx);
                 this.update_terminal_command_sender_resize(event, window, cx);
                 this.update_terminal_quick_commands_resize(event, cx);
-                this.update_host_tools_tab_scrollbar_drag(event, cx);
                 cx.stop_propagation();
             }))
             .on_mouse_up(
@@ -1540,7 +1587,6 @@ impl WorkspaceApp {
         self.finish_split_drag(cx);
         self.finish_settings_slider_drag(cx);
         self.finish_terminal_cast_seek_drag(cx);
-        self.finish_host_tools_tab_scrollbar_drag(cx);
         self.finish_tabbar_scrollbar_drag(cx);
         self.finish_ime_selection_drag(cx);
         self.stop_selectable_text_autoscroll();

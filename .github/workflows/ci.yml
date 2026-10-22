@@ -70,6 +70,8 @@ jobs:
         run: cargo fmt --check
 
       - name: cargo test
+        env:
+          OXIDETERM_AGENT_DIR: ${{ github.workspace }}/crates/oxideterm-gpui-app/resources/agents
         run: cargo test --workspace
 
   i18n:

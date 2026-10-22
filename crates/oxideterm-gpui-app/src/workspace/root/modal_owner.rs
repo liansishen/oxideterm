@@ -5,6 +5,7 @@ use super::super::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::workspace) enum ActiveTabWindowModalKind {
+    Ide,
     SettingsNavigationEditor,
     AiMcpServer,
     KnowledgeLeaveConfirmation,
@@ -175,7 +176,7 @@ impl ActiveWindowModalOwner {
             Self::NativePluginConfirm { .. } => 28,
             Self::TabRename => 29,
             Self::ArchiveCommand => 30,
-            Self::SshTunnel => 30,
+            Self::SshTunnel => 1,
             Self::ActiveTabWindowModal { .. } => 31,
             Self::TerminalCastPlayer => 32,
             Self::ThemeEditor { .. } => 33,
@@ -282,16 +283,14 @@ impl ActiveWindowModalOwner {
     fn key_route(self, key: &str) -> ActiveWindowModalKeyRoute {
         let visible = self.phase() == oxideterm_gpui_ui::motion::ExitPhase::Visible;
         let focused_child_owns_key = visible
-            && (matches!(
-                self,
-                Self::AiTextEditor | Self::ArchiveCommand | Self::SshTunnel
-            ) || matches!(
-                self,
-                Self::ActiveTabWindowModal {
-                    kind: ActiveTabWindowModalKind::SftpEditor,
-                    ..
-                }
-            ))
+            && (matches!(self, Self::AiTextEditor | Self::ArchiveCommand)
+                || matches!(
+                    self,
+                    Self::ActiveTabWindowModal {
+                        kind: ActiveTabWindowModalKind::SftpEditor,
+                        ..
+                    }
+                ))
             && key != "escape";
         ActiveWindowModalKeyRoute {
             // Document editors must receive navigation and mutation keys at
@@ -585,20 +584,14 @@ impl ActiveWindowModalProjection {
 }
 
 impl WorkspaceApp {
-    pub(in crate::workspace) fn active_sftp_editor_owns_key(&self, key: &str, cx: &App) -> bool {
-        // This mirrors the modal route so later pane-level capture cannot
-        // reclaim document keys after the SFTP editor has been selected.
-        self.active_window_modal_owner(cx)
-            .filter(|owner| {
-                matches!(
-                    owner,
-                    ActiveWindowModalOwner::ActiveTabWindowModal {
-                        kind: ActiveTabWindowModalKind::SftpEditor,
-                        ..
-                    }
-                )
+    pub(in crate::workspace) fn ide_modal_owns_input(&self, cx: &App) -> bool {
+        matches!(
+            self.active_window_modal_owner(cx),
+            Some(ActiveWindowModalOwner::ActiveTabWindowModal {
+                kind: ActiveTabWindowModalKind::Ide,
+                ..
             })
-            .is_some_and(|owner| !owner.key_route(key).consumes_key())
+        )
     }
 
     pub(in crate::workspace) fn active_window_modal_owner(
@@ -752,15 +745,24 @@ impl WorkspaceApp {
             && self.effective_sidebar_panel_section() == SidebarSection::Sessions
             && self.embedded_sftp_node_id.is_some()
             && self.sftp_view.read(cx).current_surface_id == Some(sftp::SftpSurfaceId::Sidebar)
-            && let Some(dialog) = self.sftp_view.read(cx).dialog()
+            && self.sftp_view.read(cx).dialog_is_open()
         {
             return Some(ActiveTabWindowModalSnapshot {
-                kind: if matches!(dialog, crate::workspace::sftp::SftpDialog::Editor { .. }) {
+                kind: if self.sftp_view.read(cx).preview_text_editor_visible() {
                     ActiveTabWindowModalKind::SftpEditor
                 } else {
                     ActiveTabWindowModalKind::SftpDialog
                 },
                 phase: self.sftp_view.read(cx).dialog_phase(),
+            });
+        }
+        if self
+            .active_ide_surface(cx)
+            .is_some_and(|surface| surface.read(cx).has_modal())
+        {
+            return Some(ActiveTabWindowModalSnapshot {
+                kind: ActiveTabWindowModalKind::Ide,
+                phase: visible,
             });
         }
         let active_tab = self.active_content_tab(cx)?;
@@ -893,10 +895,7 @@ impl WorkspaceApp {
                 let _scope = self.enter_sftp_surface(sftp::SftpSurfaceId::Tab(active_tab.id));
                 let sftp = self.sftp_view().read(cx);
                 sftp.dialog_is_open().then(|| ActiveTabWindowModalSnapshot {
-                    kind: if matches!(
-                        sftp.dialog(),
-                        Some(crate::workspace::sftp::SftpDialog::Editor { .. })
-                    ) {
+                    kind: if sftp.preview_text_editor_visible() {
                         ActiveTabWindowModalKind::SftpEditor
                     } else {
                         ActiveTabWindowModalKind::SftpDialog
@@ -925,6 +924,30 @@ impl WorkspaceApp {
         let Some(owner) = self.active_window_modal_owner(cx) else {
             return false;
         };
+        if matches!(
+            owner,
+            ActiveWindowModalOwner::ActiveTabWindowModal {
+                kind: ActiveTabWindowModalKind::SftpEditor,
+                ..
+            }
+        ) && owner.phase() == oxideterm_gpui_ui::motion::ExitPhase::Visible
+            && self.handle_sftp_editor_search_key(event, window, cx)
+        {
+            return true;
+        }
+        if matches!(
+            owner,
+            ActiveWindowModalOwner::ActiveTabWindowModal {
+                kind: ActiveTabWindowModalKind::Ide,
+                ..
+            }
+        ) {
+            return self.active_ide_surface(cx).is_some_and(|surface| {
+                surface.update(cx, |surface, cx| {
+                    surface.handle_modal_key(event, window, cx)
+                })
+            });
+        }
         // Exiting search dialogs still own input until their backdrop is removed.
         // Route only their reopen shortcut; do not start a new IME composition.
         if owner == ActiveWindowModalOwner::CommandPalette
@@ -959,8 +982,8 @@ impl WorkspaceApp {
         let route = owner.key_route(event.keystroke.key.as_str());
         if route.dispatch_owner.is_some() && owner.allows_modal_ime() {
             if self.defer_active_ime_key(&event.keystroke, window, cx) {
-                // The root capture handler immediately repeats this check and
-                // yields to the platform pipeline for the top modal input.
+                // The root keeps background routing blocked while the top modal
+                // receives committed text through the platform input pipeline.
                 return false;
             }
             if self.handle_active_text_input_edit_shortcut(&event.keystroke, cx)
@@ -1029,9 +1052,7 @@ impl WorkspaceApp {
                 }
             }
             ActiveWindowModalOwner::SshTunnel => {
-                if event.keystroke.key.as_str() == "escape" {
-                    self.close_ssh_tunnel_form(window, cx);
-                }
+                let _ = self.handle_new_connection_key(event, window, cx);
             }
             ActiveWindowModalOwner::TerminalTriggerQuickCommand => {
                 let _ = self.handle_terminal_trigger_quick_command_key(event, cx);
@@ -1217,6 +1238,11 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) -> bool {
         match kind {
+            ActiveTabWindowModalKind::Ide => self.active_ide_surface(cx).is_some_and(|surface| {
+                surface.update(cx, |surface, cx| {
+                    surface.handle_modal_key(event, window, cx)
+                })
+            }),
             ActiveTabWindowModalKind::KnowledgeRename => {
                 self.handle_knowledge_input_key(event, window, cx)
             }

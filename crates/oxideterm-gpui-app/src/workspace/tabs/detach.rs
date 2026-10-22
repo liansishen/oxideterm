@@ -145,11 +145,7 @@ impl WorkspaceApp {
         } else {
             self.sidebar_width
         };
-        let right_offset = if self.context_sidebar_visible() {
-            self.ai_entity.read(cx).chat_ui().sidebar_width
-        } else {
-            0.0
-        };
+        let right_offset = self.context_sidebar_occupied_width(cx);
         let width = (f32::from(window_bounds.size.width) - left_offset - right_offset).max(0.0);
         self.main_window_tabbar_drop_bounds = Some(Bounds::new(
             gpui::point(
@@ -410,20 +406,21 @@ impl WorkspaceApp {
         let dialog = self.tab_rename_dialog.as_ref()?;
         let target = WorkspaceImeTarget::TabRename;
         let submit_disabled = dialog.draft.trim().is_empty();
-        let input = text_input(
-            &self.tokens,
-            TextInputView {
-                value: dialog.draft.as_str(),
-                placeholder: self.i18n.t("tabbar.rename_tab_placeholder"),
-                focused: true,
-                caret_visible: self.input_caret.visible(),
-                secret: false,
-                selected_all: false,
-                selected_range: self.ime_selected_range_for_target(target, cx),
-                marked_text: self.marked_text_for_target(target, cx),
-            },
-        )
-        .h(px(34.0));
+        let input = self
+            .workspace_text_input(
+                target,
+                TextInputView {
+                    value: dialog.draft.as_str(),
+                    placeholder: self.i18n.t("tabbar.rename_tab_placeholder"),
+                    focused: true,
+                    caret_visible: self.input_caret.visible(),
+                    secret: false,
+                    selected_all: false,
+                    selected_range: self.ime_selected_range_for_target(target, cx),
+                    marked_text: self.marked_text_for_target(target, cx),
+                },
+            )
+            .h(px(34.0));
         let input = self.text_input_with_workspace_ime(
             target,
             input,
@@ -838,12 +835,9 @@ impl WorkspaceApp {
         let scroll_x = f32::from(-self.main_window_tabs.scroll_handle.offset().x).max(0.0);
         let pointer_x = screen_x - f32::from(drop_bounds.origin.x) + scroll_x
             - self.tokens.metrics.tabbar_leading_offset;
-        let outside_main_tabs = self.tab_host.read(cx).outside_main_tab_ids();
         let visible_widths = self
-            .tabs(cx)
-            .iter()
-            .filter(|tab| !outside_main_tabs.contains(&tab.id))
-            .map(|tab| self.tab_visual_width(tab))
+            .main_tabs(cx)
+            .map(|(_, tab)| self.tab_visual_width(tab))
             .collect::<Vec<_>>();
         Some(tab_return_visible_insertion_index(
             pointer_x,
@@ -1070,13 +1064,10 @@ impl WorkspaceApp {
             width: handoff.origin.width,
             height: handoff.origin.height,
         };
-        let outside_main_tabs = self.tab_host.read(cx).outside_main_tab_ids();
         let preceding_width = self
-            .tabs(cx)
-            .iter()
-            .take(tab_index)
-            .filter(|candidate| !outside_main_tabs.contains(&candidate.id))
-            .map(|candidate| self.tab_visual_width(candidate))
+            .main_tabs(cx)
+            .take_while(|(i, _)| *i < tab_index)
+            .map(|(_, candidate)| self.tab_visual_width(candidate))
             .sum::<f32>();
         let (band_top, band_height) = self.tabbar_band(window);
         let target = TabWindowHandoffRect {
@@ -1307,10 +1298,9 @@ impl WorkspaceApp {
         let can_split_into_active =
             active_tab_id.is_some_and(|target| self.can_combine_tabs(menu.tab_id, target, cx));
         let merge_targets = if active_tab_id == Some(menu.tab_id) {
-            self.tabs(cx)
-                .iter()
-                .filter(|tab| self.can_combine_tabs(menu.tab_id, tab.id, cx))
-                .map(|tab| (tab.id, self.tab_display_title(tab)))
+            self.main_tabs(cx)
+                .filter(|(_, tab)| self.can_combine_tabs(menu.tab_id, tab.id, cx))
+                .map(|(_, tab)| (tab.id, self.tab_display_title(tab)))
                 .collect::<Vec<_>>()
         } else {
             Vec::new()

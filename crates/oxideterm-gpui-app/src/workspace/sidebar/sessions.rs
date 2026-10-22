@@ -901,10 +901,6 @@ impl WorkspaceApp {
                     .text_color(rgb(theme.text_muted))
                     .child(label),
             )
-            .when(
-                self.settings_store.settings().sidebar_ui.show_app_lock_icon,
-                |footer| footer.child(self.render_app_lock_button(24.0, cx)),
-            )
             .into_any_element()
     }
 
@@ -2073,11 +2069,8 @@ impl WorkspaceApp {
                 ));
                 let listener = cx.listener({
                     let node_id = node_id.clone();
-                    move |this, _event, _window, cx| {
-                        // Mirrors Tauri's node-first IDE route: opening IDE creates
-                        // an IDE owner surface and remote folder chooser for the
-                        // node, not a terminal pane or implicit "/" project.
-                        this.open_ide_folder_picker_tab(node_id.clone(), cx);
+                    move |this, _event, window, cx| {
+                        this.open_ide_folder_picker_tab(node_id.clone(), window, cx);
                         cx.stop_propagation();
                     }
                 });

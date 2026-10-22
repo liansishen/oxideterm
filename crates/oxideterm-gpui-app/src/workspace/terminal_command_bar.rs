@@ -22,7 +22,7 @@ use oxideterm_gpui_ui::context_menu::{
     ContextMenuActionableStyle, context_menu_event_boundary, context_menu_pointer_event_boundary,
 };
 use oxideterm_gpui_ui::text_input::{
-    TextInputView, text_input, text_input_anchor_probe, text_input_with_viewport_and_ghost_text,
+    TextInputView, text_input_anchor_probe, text_input_with_viewport_and_ghost_text,
 };
 use oxideterm_gpui_ui::{
     ActionChipOptions, ActionChipTextTone, CommandPanelOptions, ContextChipOptions,
@@ -719,7 +719,7 @@ mod privilege_prompt_helper_tests {
         let scope = PrivilegeCredentialScope {
             connection_id: Some("conn-1".into()),
             host: "hktkosl1102".into(),
-            exact: vec![exact.clone()],
+            exact: vec![exact],
             common: vec![group.clone(), other_group.clone(), generic.clone()],
         };
         let (scope_id, selected) = select_privilege_candidates(&scope, &prompt);
@@ -746,7 +746,7 @@ mod privilege_prompt_helper_tests {
             connection_id: Some("conn-1".into()),
             host: "unknown-host".into(),
             exact: Vec::new(),
-            common: vec![group, other_group, generic.clone()],
+            common: vec![group, other_group, generic],
         };
         let (scope_id, selected) = select_privilege_candidates(&scope, &prompt);
         assert_eq!(scope_id, SSH_COMMON_PRIVILEGE_SCOPE_ID);

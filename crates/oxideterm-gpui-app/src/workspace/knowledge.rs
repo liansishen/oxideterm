@@ -62,11 +62,12 @@ fn knowledge_workspace_available_width(
         } else {
             sidebar_panel_width
         };
-    let right_width = if context_sidebar_visible {
-        context_sidebar_width
-    } else {
-        0.0
-    };
+    let right_width = activity_bar_width
+        + if context_sidebar_visible {
+            context_sidebar_width
+        } else {
+            0.0
+        };
     (viewport_width - left_width - right_width).max(0.0)
 }
 
@@ -1470,27 +1471,28 @@ impl WorkspaceApp {
     fn knowledge_navigator_search(&self, cx: &mut Context<Self>) -> AnyElement {
         let target = ime::WorkspaceImeTarget::KnowledgeSearch;
         let query = self.knowledge_workspace.read(cx).navigator_query.clone();
-        let input = oxideterm_gpui_ui::text_input::text_input(
-            &self.tokens,
-            oxideterm_gpui_ui::text_input::TextInputView {
-                value: &query,
-                placeholder: self
-                    .i18n
-                    .t("settings_view.knowledge.navigator_search_placeholder"),
-                focused: self.active_ime_target(cx) == Some(target),
-                caret_visible: self.input_caret.visible(),
-                secret: false,
-                selected_all: false,
-                selected_range: self.ime_selected_range_for_target(target, cx),
-                marked_text: self.marked_text_for_target(target, cx),
-            },
-        )
-        .flex_1()
-        .min_w_0()
-        .px_0()
-        .border_0()
-        .rounded_none()
-        .bg(gpui::transparent_black());
+        let input = self
+            .workspace_text_input(
+                target,
+                oxideterm_gpui_ui::text_input::TextInputView {
+                    value: &query,
+                    placeholder: self
+                        .i18n
+                        .t("settings_view.knowledge.navigator_search_placeholder"),
+                    focused: self.active_ime_target(cx) == Some(target),
+                    caret_visible: self.input_caret.visible(),
+                    secret: false,
+                    selected_all: false,
+                    selected_range: self.ime_selected_range_for_target(target, cx),
+                    marked_text: self.marked_text_for_target(target, cx),
+                },
+            )
+            .flex_1()
+            .min_w_0()
+            .px_0()
+            .border_0()
+            .rounded_none()
+            .bg(gpui::transparent_black());
         let input = self.text_input_with_workspace_ime(
             target,
             input,
@@ -2644,7 +2646,11 @@ mod tests {
     fn responsive_width_uses_center_workspace_after_sidebars() {
         let available =
             knowledge_workspace_available_width(1_200.0, false, 48.0, false, 260.0, true, 320.0);
-        assert_eq!(available, 572.0);
+        assert_eq!(available, 524.0);
+
+        let collapsed_context =
+            knowledge_workspace_available_width(1_200.0, false, 48.0, false, 260.0, false, 320.0);
+        assert_eq!(collapsed_context, 844.0);
 
         let zen_available =
             knowledge_workspace_available_width(1_200.0, true, 48.0, false, 260.0, true, 320.0);

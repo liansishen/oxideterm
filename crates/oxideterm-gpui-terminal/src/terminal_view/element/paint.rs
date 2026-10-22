@@ -184,8 +184,9 @@ pub(super) fn paint_command_gutter(
     window: &mut Window,
 ) {
     let line_height = metrics.line_height_f32();
-    let stroke = 1.0;
-    let box_size = (width - 2.0 * stroke).max(2.0).min(line_height * 0.55);
+    let box_size = (width - 2.0).max(2.0).min(line_height * 0.55);
+    // Thicken inside the existing cell while keeping the start box hollow at small sizes.
+    let stroke = (box_size / 4.0).clamp(1.0, 2.0);
     let center_x = -width / 2.0;
     let center_y = (overlay.start_row as f32 + 0.5) * line_height;
     let left = center_x - box_size / 2.0;
@@ -198,9 +199,9 @@ pub(super) fn paint_command_gutter(
     } else if overlay.hovered || overlay.selected {
         rgba((theme.tokens.ui.accent << 8) | 0xe6)
     } else {
-        rgba((theme.foreground << 8) | 0x70)
+        rgba((theme.foreground << 8) | 0xb0)
     };
-    // Snap every edge in window coordinates so the thin outline stays crisp
+    // Snap every edge in window coordinates so the outline stays crisp
     // at fractional font sizes and display scale factors.
     let mut rect = |x: f32, y: f32, w: f32, h: f32| {
         if w <= 0.0 || h <= 0.0 {
@@ -218,31 +219,17 @@ pub(super) fn paint_command_gutter(
 
     // Avoid overlapping translucent strokes, which would darken corners and joins.
     if overlay.has_top {
-        rect(left, top, box_size, stroke);
-        rect(left, bottom - stroke, box_size, stroke);
-        rect(left, top + stroke, stroke, box_size - 2.0 * stroke);
-        rect(
-            right - stroke,
-            top + stroke,
-            stroke,
-            box_size - 2.0 * stroke,
-        );
-        if overlay.collapsed && box_size >= 5.0 {
-            let arm = (box_size * 0.5)
-                .max(3.0 * stroke)
-                .min(box_size - 2.0 * stroke);
-            rect(center_x - arm / 2.0, center_y - stroke / 2.0, arm, stroke);
+        if overlay.collapsed {
+            rect(left, top, box_size, box_size);
+        } else {
+            rect(left, top, box_size, stroke);
+            rect(left, bottom - stroke, box_size, stroke);
+            rect(left, top + stroke, stroke, box_size - 2.0 * stroke);
             rect(
-                center_x - stroke / 2.0,
-                center_y - arm / 2.0,
+                right - stroke,
+                top + stroke,
                 stroke,
-                (arm - stroke) / 2.0,
-            );
-            rect(
-                center_x - stroke / 2.0,
-                center_y + stroke / 2.0,
-                stroke,
-                (arm - stroke) / 2.0,
+                box_size - 2.0 * stroke,
             );
         }
     }

@@ -8,6 +8,7 @@ struct PooledSshConnection {
     x11_dispatcher: X11ForwardDispatcher,
     auth_banners: AuthBannerSink,
     agent_forwarding_accepted: Arc<AtomicBool>,
+    agent_forwarding_request: tokio::sync::Mutex<()>,
 }
 
 fn append_limited_command_output(
@@ -52,6 +53,7 @@ impl PooledSshConnection {
             x11_dispatcher,
             auth_banners,
             agent_forwarding_accepted,
+            agent_forwarding_request: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -75,6 +77,7 @@ impl PooledSshConnection {
             x11_dispatcher,
             auth_banners,
             agent_forwarding_accepted,
+            agent_forwarding_request: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -558,17 +561,17 @@ impl SshConnectionHandle {
         })
     }
 
-    pub(crate) async fn open_session_channel(
+    pub async fn open_session_channel(
         &self,
     ) -> Result<russh::Channel<client::Msg>, SshTransportError> {
         let Some(pooled) = self.physical::<PooledSshConnection>() else {
             return Err(SshTransportError::ConnectionFailed(
-                "no active SSH connection is available for SFTP".to_string(),
+                "no active SSH connection is available for a session channel".to_string(),
             ));
         };
         if pooled.is_closed().await {
             return Err(SshTransportError::ConnectionFailed(
-                "SSH connection is closed and cannot open an SFTP channel".to_string(),
+                "SSH connection is closed and cannot open a session channel".to_string(),
             ));
         }
 

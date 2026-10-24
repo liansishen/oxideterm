@@ -6,6 +6,7 @@ use oxideterm_gpui_ide::{
     IdeAiContextSnapshot, IdeLabels, IdeModalLayer, IdePluginSnapshot, IdeRuntimeSettings,
     IdeSurface, IdeSurfaceEvent, IdeSurfaceMount, NodeAgentMode,
 };
+use oxideterm_gpui_ui::choice_dialog::{ChoiceDialog, choice_dialog};
 use oxideterm_ide_fs::NodeAgentIdeFileSystem;
 use oxideterm_settings::{IdeAgentMode, PersistedSettings};
 use oxideterm_ssh::{NodeId, PhaseResult, ReconnectIdeSnapshot};
@@ -570,10 +571,13 @@ impl WorkspaceApp {
             find_previous: self.i18n.t("ide.find_previous"),
             match_case: self.i18n.t("ide.match_case"),
             toggle_replace: self.i18n.t("ide.toggle_replace"),
+            insert_newline: self.i18n.t("ide.insert_newline"),
             close_search: self.i18n.t("ide.close_search"),
             replace_btn: self.i18n.t("ide.replace_btn"),
             replace_all_btn: self.i18n.t("ide.replace_all_btn"),
-            insert_newline: self.i18n.t("ide.insert_newline"),
+            use_regex: self.i18n.t("ide.use_regex"),
+            invalid_regex: self.i18n.t("search.invalid_regex"),
+            no_results: self.i18n.t("search.no_results"),
         }
     }
     pub(in crate::workspace) fn sync_ide_surface_mount(&mut self, tab_id: TabId, cx: &mut App) {
@@ -633,40 +637,47 @@ impl WorkspaceApp {
             return;
         }
         let labels = self.ide_labels();
-        let prompt = window.prompt(
-            gpui::PromptLevel::Info,
-            &labels.access_title,
-            None,
-            &[
-                labels.access_modes[0].as_str(),
-                labels.access_modes[1].as_str(),
-                labels.cancel.as_str(),
-            ],
+        let prompt = choice_dialog(
+            self.tokens,
+            ChoiceDialog {
+                title: labels.access_title.clone(),
+                description: None,
+                choices: labels.access_modes.clone(),
+                cancel: labels.cancel.clone(),
+                confirm: labels.confirm.clone(),
+            },
+            window,
             cx,
         );
         let window_handle = window.window_handle();
         cx.spawn(async move |weak, cx| {
             let access = match prompt.await {
-                Ok(0) => oxideterm_ide_fs::RemoteAccess::Sftp,
-                Ok(1) => {
+                Some(0) => oxideterm_ide_fs::RemoteAccess::Sftp,
+                Some(1) => {
                     let Ok(prompt) = window_handle.update(cx, |_, window, cx| {
-                        window.prompt(
-                            gpui::PromptLevel::Info,
-                            &labels.access_modes[1],
-                            Some(&labels.agent_choice_hint),
-                            &[
-                                labels.agent_choices[0].as_str(),
-                                labels.agent_choices[1].as_str(),
-                                labels.cancel.as_str(),
-                            ],
-                            cx,
-                        )
+                        weak.update(cx, |this, cx| {
+                            choice_dialog(
+                                this.tokens,
+                                ChoiceDialog {
+                                    title: labels.access_modes[1].clone(),
+                                    description: Some(labels.agent_choice_hint.clone()),
+                                    choices: labels.agent_choices.clone(),
+                                    cancel: labels.cancel.clone(),
+                                    confirm: labels.confirm.clone(),
+                                },
+                                window,
+                                cx,
+                            )
+                        })
                     }) else {
                         return;
                     };
+                    let Ok(prompt) = prompt else {
+                        return;
+                    };
                     match prompt.await {
-                        Ok(0) => oxideterm_ide_fs::RemoteAccess::Commands,
-                        Ok(1) => oxideterm_ide_fs::RemoteAccess::Agent,
+                        Some(0) => oxideterm_ide_fs::RemoteAccess::Commands,
+                        Some(1) => oxideterm_ide_fs::RemoteAccess::Agent,
                         _ => return,
                     }
                 }
@@ -1127,6 +1138,7 @@ impl WorkspaceApp {
             save: self.i18n.t("ide.save"),
             discard: self.i18n.t("ide.discard"),
             cancel: self.i18n.t("ide.cancel"),
+            confirm: self.i18n.t("common.actions.confirm"),
             editor_search: self.editor_search_labels(),
             editor_copy: self.i18n.t("menu.copy"),
             editor_cut: self.i18n.t("fileManager.cut"),

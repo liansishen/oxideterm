@@ -23,8 +23,8 @@ struct UploadGate {
 }
 
 struct Peer {
+    home: PathBuf,
     upload_gate: Option<Arc<UploadGate>>,
-    directory: tempfile::TempDir,
     exec: bool,
     channels: HashMap<ChannelId, tokio::task::JoinHandle<()>>,
     processes: HashMap<ChannelId, Process>,
@@ -34,7 +34,7 @@ impl Peer {
     fn start(&mut self, channel: ChannelId, session: &mut server::Session) {
         let mut command = if cfg!(target_os = "linux") {
             let mut command = tokio::process::Command::new("/bin/sh");
-            command.env("HOME", self.directory.path());
+            command.env("HOME", &self.home).current_dir(&self.home);
             command
         } else {
             let mut command = tokio::process::Command::new("docker");
@@ -45,9 +45,11 @@ impl Peer {
                 "none",
                 "-i",
                 "--volume",
-                &format!("{}:/fixture", self.directory.path().display()),
+                &format!("{}:/fixture", self.home.display()),
                 "--env",
                 "HOME=/fixture",
+                "--workdir",
+                "/fixture",
                 "python:3.6",
                 "/bin/sh",
             ]);
@@ -210,12 +212,12 @@ impl server::Handler for Peer {
 async fn ssh_file_backends_work_without_sftp_through_exec_and_shell() {
     for exec in [true, false] {
         for access in [RemoteAccess::Commands, RemoteAccess::Agent] {
-            // Each transport case owns its files and agent installation, including failed uploads.
-            let directory = tempfile::tempdir().unwrap();
-            let root = if cfg!(target_os = "linux") {
-                directory.path().to_str().unwrap().to_owned()
+            // Each peer needs a fresh install and file namespace, including on repeated runs.
+            let home = tempfile::tempdir().unwrap();
+            let remote_root = if cfg!(target_os = "linux") {
+                home.path().to_str().unwrap()
             } else {
-                "/fixture".to_owned()
+                "/fixture"
             };
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let port = listener.local_addr().unwrap().port();
@@ -232,8 +234,8 @@ async fn ssh_file_backends_work_without_sftp_through_exec_and_shell() {
             let upload_gate =
                 (exec && access == RemoteAccess::Agent).then(|| Arc::new(UploadGate::default()));
             let peer = Peer {
+                home: home.path().to_path_buf(),
                 upload_gate: upload_gate.clone(),
-                directory,
                 exec,
                 channels: HashMap::new(),
                 sftp: sftp.clone(),
@@ -283,7 +285,7 @@ async fn ssh_file_backends_work_without_sftp_through_exec_and_shell() {
             if let Some(gate) = upload_gate.as_ref() {
                 tokio::select! {
                     _ = gate.received.notified() => {},
-                    result = &mut startup => panic!("startup completed before upload acknowledgment: {}", result.is_ok()),
+                    result = &mut startup => panic!("startup completed before upload acknowledgment: {:?}", result.map(|result| result.map(|_| ()))),
                 }
                 assert!(matches!(
                     *progress_rx.borrow(),
@@ -335,7 +337,8 @@ async fn ssh_file_backends_work_without_sftp_through_exec_and_shell() {
             }
             assert_eq!(fs.uses_ssh_shell(), !exec);
             assert!(!fs.supports_watching());
-            let location = IdeLocation::remote(node.0.clone(), format!("{root}/ide-file-contract"));
+            let location =
+                IdeLocation::remote(node.0.clone(), format!("{remote_root}/ide-file-contract"));
             let version = fs
                 .write_file(
                     &location,
@@ -363,7 +366,8 @@ async fn ssh_file_backends_work_without_sftp_through_exec_and_shell() {
                 &*fs.read_file(&location, None).await.unwrap().text,
                 "saved\n"
             );
-            let binary = IdeLocation::remote(node.0.clone(), format!("{root}/ide-binary-contract"));
+            let binary_path = format!("{remote_root}/ide-binary-contract");
+            let binary = IdeLocation::remote(node.0.clone(), &binary_path);
             fs.write_file(
                 &binary,
                 "\0binary",
@@ -377,11 +381,11 @@ async fn ssh_file_backends_work_without_sftp_through_exec_and_shell() {
                 fs.read_file(&binary, None).await.unwrap_err().kind,
                 IdeFileErrorKind::Binary
             );
-            fs.delete_item(node.0.clone(), format!("{root}/ide-binary-contract"), false)
+            fs.delete_item(node.0.clone(), &binary_path, false)
                 .await
                 .unwrap();
-            let unicode =
-                IdeLocation::remote(node.0.clone(), format!("{root}/ide-unicode-contract"));
+            let unicode_path = format!("{remote_root}/ide-unicode-contract");
+            let unicode = IdeLocation::remote(node.0.clone(), &unicode_path);
             let format = oxideterm_ide_core::TextFileFormat {
                 encoding: "UTF-16LE".into(),
                 has_bom: false,
@@ -398,13 +402,9 @@ async fn ssh_file_backends_work_without_sftp_through_exec_and_shell() {
                     .as_str(),
                 "你好"
             );
-            fs.delete_item(
-                node.0.clone(),
-                format!("{root}/ide-unicode-contract"),
-                false,
-            )
-            .await
-            .unwrap();
+            fs.delete_item(node.0.clone(), &unicode_path, false)
+                .await
+                .unwrap();
             if exec && access == RemoteAccess::Commands {
                 let ide_consumers = || {
                     handle

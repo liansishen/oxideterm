@@ -1149,10 +1149,12 @@ fn ide_access_prompt_defers_tab_creation_until_selection(cx: &mut TestAppContext
     else {
         return;
     };
+    // Confirming access starts a Tokio backend task that can wake GPUI from another thread.
+    cx.executor().allow_parking();
     let (workspace, cx) = workspace_with_console_profiles(cx, &fixture_dir);
     let window_handle = cx.windows()[0];
     let node_id = NodeId::new("ide-choice-host");
-    let (cancel, ssh) = workspace.update(cx, |workspace, _cx| {
+    workspace.update(cx, |workspace, _cx| {
         workspace.ssh_nodes.insert(
             node_id.clone(),
             super::super::WorkspaceSshNode::new(
@@ -1163,10 +1165,6 @@ fn ide_access_prompt_defers_tab_creation_until_selection(cx: &mut TestAppContext
                 oxideterm_ssh::NodeReadiness::Ready,
             ),
         );
-        (
-            workspace.i18n.t("ide.cancel"),
-            workspace.i18n.t("terminal.shell_ide.ssh"),
-        )
     });
     let tab_ids = |cx: &TestAppContext| {
         workspace.read_with(cx, |workspace, cx| {
@@ -1178,6 +1176,15 @@ fn ide_access_prompt_defers_tab_creation_until_selection(cx: &mut TestAppContext
         })
     };
     let original_tabs = tab_ids(cx);
+    let prompt_open = |cx: &mut TestAppContext| {
+        window_handle
+            .update(cx, |_, window, cx| {
+                // Keyboard routing uses the rendered custom prompt's focus tree.
+                window.draw(cx).clear(cx);
+                window.has_active_prompt()
+            })
+            .unwrap()
+    };
     for choose_ssh in [false, true] {
         window_handle
             .update(cx, |_, window, cx| {
@@ -1186,16 +1193,17 @@ fn ide_access_prompt_defers_tab_creation_until_selection(cx: &mut TestAppContext
                 });
             })
             .unwrap();
-        assert!(cx.has_pending_prompt());
+        assert!(prompt_open(cx));
         assert_eq!(tab_ids(cx), original_tabs);
         if choose_ssh {
-            cx.simulate_prompt_answer(&ssh);
-            cx.run_until_parked();
-            assert!(cx.has_pending_prompt());
+            cx.simulate_keystrokes(window_handle, "down");
+            assert_eq!(tab_ids(cx), original_tabs);
+            cx.simulate_keystrokes(window_handle, "enter");
+            assert!(prompt_open(cx));
             assert_eq!(tab_ids(cx), original_tabs);
         }
-        cx.simulate_prompt_answer(&cancel);
-        cx.run_until_parked();
+        cx.simulate_keystrokes(window_handle, "escape");
+        assert!(!prompt_open(cx));
         assert_eq!(tab_ids(cx), original_tabs);
     }
     window_handle
@@ -1205,8 +1213,9 @@ fn ide_access_prompt_defers_tab_creation_until_selection(cx: &mut TestAppContext
             });
         })
         .unwrap();
-    cx.simulate_prompt_answer("SFTP");
-    cx.run_until_parked();
+    assert!(prompt_open(cx));
+    cx.simulate_keystrokes(window_handle, "enter");
+    assert!(!prompt_open(cx));
     workspace.read_with(cx, |workspace, cx| {
         let ide_tabs: Vec<_> = workspace
             .tabs(cx)
@@ -1217,4 +1226,68 @@ fn ide_access_prompt_defers_tab_creation_until_selection(cx: &mut TestAppContext
         assert_eq!(ide_tabs[0].title, "IDE · Choice Host");
         assert_eq!(workspace.active_tab_id(cx), Some(ide_tabs[0].id));
     });
+}
+
+#[gpui::test]
+fn titlebar_scope_and_theme_controls_work_in_both_chrome_layouts(cx: &mut TestAppContext) {
+    let Some(fixture_dir) = isolated_workspace_fixture(cx, "OXIDETERM_TITLEBAR_CONTROLS_TEST_DIR")
+    else {
+        return;
+    };
+    cx.executor().allow_parking();
+    let (workspace, cx) = workspace_with_console_profiles(cx, &fixture_dir);
+    let mut cx = gpui::VisualTestContext::from_window(cx.windows()[0], cx);
+    for (merged, width) in [(true, 800.0), (false, 1280.0)] {
+        workspace.update(&mut cx, |workspace, cx| {
+            workspace
+                .tab_host
+                .update(cx, |host, _| host.prepare_scope(tabs::TabScope::All));
+            workspace.edit_settings(
+                |settings| {
+                    settings.appearance.merge_tab_bar_into_titlebar = merged;
+                    settings.appearance.animation_speed = oxideterm_settings::AnimationSpeed::Off;
+                    settings.appearance.follow_system_appearance = false;
+                    settings.appearance.manual_scheme =
+                        Some(oxideterm_settings::AppearanceScheme::Light);
+                    settings.appearance.system_themes.light = "code-light".into();
+                    settings.appearance.system_themes.dark = "dracula".into();
+                    settings.terminal.system_themes.light = "solarized-light".into();
+                    settings.terminal.system_themes.dark = "tokyo-night".into();
+                },
+                cx,
+            );
+        });
+        cx.simulate_resize(gpui::size(px(width), px(700.0)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let scope = cx
+            .debug_bounds("tab-scope-trigger")
+            .expect("tab scope trigger");
+        let theme = cx
+            .debug_bounds("titlebar-theme-button")
+            .expect("theme toggle");
+        assert!(
+            scope.left() >= px(0.0) && theme.right() <= px(width),
+            "merged={merged}"
+        );
+        assert!(scope.right() <= theme.left(), "merged={merged}");
+        cx.simulate_click(scope.center(), gpui::Modifiers::default());
+        cx.simulate_keystrokes("down enter");
+        workspace.read_with(&cx, |workspace, cx| {
+            assert_eq!(
+                workspace.tab_host.read(cx).scope(),
+                &tabs::TabScope::Affinity(tabs::TabAffinity::Global),
+            );
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_click(theme.center(), gpui::Modifiers::default());
+        workspace.read_with(&cx, |workspace, _| {
+            let settings = workspace.settings_store.settings();
+            assert_eq!(
+                settings.appearance.manual_scheme,
+                Some(oxideterm_settings::AppearanceScheme::Dark)
+            );
+            assert_eq!(settings.appearance.theme, "dracula");
+            assert_eq!(settings.terminal.theme, "tokyo-night");
+        });
+    }
 }

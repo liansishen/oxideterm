@@ -179,6 +179,12 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let window_id = window.window_handle().window_id();
+        let previous_tab = self.active_tab_id(cx);
+        self.sync_tab_scope(cx);
+        if previous_tab != self.active_tab_id(cx) {
+            self.sync_active_tab_surface(cx);
+            self.needs_active_pane_focus = true;
+        }
         let active_ime_target = self.active_ime_target_for_window(window_id, cx);
         self.workspace_input.update(cx, |input, cx| {
             input.sync_active_target(active_ime_target, cx);
@@ -213,6 +219,7 @@ impl WorkspaceApp {
         // just like Tauri's linuxBackdropBlurClass compatibility gate.
         set_tauri_backdrop_blur_allowed(self.render_policy.allow_background_blur);
         if self.needs_active_pane_focus
+            && !window.has_active_prompt()
             && active_tab_projection.as_ref().is_some_and(|(_, kind, _)| {
                 !matches!(
                     kind,
@@ -239,11 +246,15 @@ impl WorkspaceApp {
             self.clear_ai_sidebar_keyboard_focus(cx);
             if let Some(surface) = self.active_ide_surface(cx) {
                 window.on_next_frame(move |window, cx| {
-                    window.focus(&surface.read(cx).focus_handle(cx), cx);
+                    if !window.has_active_prompt() {
+                        window.focus(&surface.read(cx).focus_handle(cx), cx);
+                    }
                 });
             } else {
                 window.on_next_frame(move |window, cx| {
-                    pane.update(cx, |pane, cx| pane.focus(window, cx));
+                    if !window.has_active_prompt() {
+                        pane.update(cx, |pane, cx| pane.focus(window, cx));
+                    }
                 });
             }
         }
@@ -290,6 +301,8 @@ impl WorkspaceApp {
                     self.render_empty_workspace(available_width, cx)
                 }
             }
+        } else if *self.tab_host.read(cx).scope() != tabs::TabScope::All {
+            self.render_empty_tab_scope(cx)
         } else {
             let available_width = self.welcome_main_content_width(window, cx);
             self.render_empty_workspace(available_width, cx)
@@ -476,6 +489,13 @@ impl WorkspaceApp {
                 }
                 if this.active_window_modal_owner(cx).is_some() {
                     // Yield only to the modal's own input or editor, never background routing.
+                    return;
+                }
+                if this.search_editor_focused(window, cx) {
+                    if this.handle_search_editor_key(event, window, cx) {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    }
                     return;
                 }
                 if this
